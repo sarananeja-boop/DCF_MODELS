@@ -116,10 +116,10 @@ def run_monte_carlo(
     correlated_draws = L @ independent_draws
 
     # Means and standard deviations (exact values from the refined notebook)
-    mean_rev_growth = metrics["avg_rev_growth"]
+    mean_rev_growth = base_growth if base_growth is not None else metrics["avg_rev_growth"]
     std_rev_growth_mc = max(metrics["std_rev_growth"], 0.02)
 
-    mean_ebit_margin = metrics["avg_ebit_margin"]
+    mean_ebit_margin = base_margin if base_margin is not None else metrics["avg_ebit_margin"]
     std_ebit_margin_mc = max(metrics["std_ebit_margin"], 0.015)
 
     mean_rf = risk_free_rate
@@ -161,6 +161,10 @@ def run_monte_carlo(
     sim_coe = sim_rf + (sim_beta * sim_erp)
     sim_at_cod = sim_cod * (1 - tax_rate)
     sim_wacc = (sim_we * sim_coe) + (sim_wd * sim_at_cod)
+
+    # If a WACC override was provided, shift the distribution to match the overridden mean
+    if base_wacc is not None:
+        sim_wacc = sim_wacc - np.mean(sim_wacc) + base_wacc
 
     # ------------------------------------------------------------------
     # 5C – Reject-and-resample

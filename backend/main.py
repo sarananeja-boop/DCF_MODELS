@@ -265,6 +265,9 @@ def analyze(req: AnalyzeRequest):
             terminal_growth=terminal_growth,
             projection_years=projection_years,
             iterations=req.monte_carlo_iterations,
+            base_growth=start_growth,
+            base_margin=ebit_margin,
+            base_wacc=discount_rate
         )
 
         # 9. Sensitivity grids
