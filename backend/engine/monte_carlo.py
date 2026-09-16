@@ -160,7 +160,6 @@ def run_monte_carlo(
     # ------------------------------------------------------------------
     valid_mask = (
         (sim_wacc > terminal_growth + 0.005)
-        & (sim_margin > 0)
         & (sim_cod > 0)
         & (sim_rf > 0)
         & (sim_erp > 0)
@@ -199,6 +198,7 @@ def run_monte_carlo(
 
     simulated_prices = np.empty(actual_n)
     simulated_evs = np.empty(actual_n)
+    simulated_raw_equity = np.empty(actual_n)
 
     for i in range(actual_n):
         result = run_dcf(
@@ -213,23 +213,62 @@ def run_monte_carlo(
         )
         simulated_prices[i] = result["implied_price"]
         simulated_evs[i] = result["enterprise_value"]
+        simulated_raw_equity[i] = result["equity_value"]
 
     # ------------------------------------------------------------------
     # 5E – Statistics
     # ------------------------------------------------------------------
-    stats = {
-        "mean": float(np.mean(simulated_prices)),
-        "median": float(np.median(simulated_prices)),
-        "p5": float(np.percentile(simulated_prices, 5)),
-        "p25": float(np.percentile(simulated_prices, 25)),
-        "p75": float(np.percentile(simulated_prices, 75)),
-        "p95": float(np.percentile(simulated_prices, 95)),
+    valid_prices_mask = np.isfinite(simulated_prices) & np.isfinite(simulated_raw_equity)
+    final_prices = simulated_prices[valid_prices_mask]
+    final_evs = simulated_evs[valid_prices_mask]
+    final_raw_equity = simulated_raw_equity[valid_prices_mask]
+    
+    math_invalid_count = actual_n - len(final_prices)
+
+    zero_price_sims = int(np.sum(final_prices == 0.0))
+    neg_equity_sims = int(np.sum(final_raw_equity < 0.0))
+    valid_n = len(final_prices)
+    shares_out = stock_data.get("shares_outstanding", 1.0)
+
+    if valid_n > 0:
+        stats = {
+            "mean": float(np.mean(final_prices)),
+            "median": float(np.median(final_prices)),
+            "std_dev": float(np.std(final_prices, ddof=1)) if valid_n > 1 else 0.0,
+            "p5": float(np.percentile(final_prices, 5)),
+            "p25": float(np.percentile(final_prices, 25)),
+            "p75": float(np.percentile(final_prices, 75)),
+            "p95": float(np.percentile(final_prices, 95)),
+            
+            # Advanced Diagnostics
+            "zero_price_simulations": zero_price_sims,
+            "negative_equity_simulations": neg_equity_sims,
+            "positive_price_simulations": int(np.sum(final_prices > 0.0)),
+            "zero_price_pct": float(zero_price_sims / valid_n) if valid_n > 0 else 0.0,
+            "min_raw_equity_value": float(np.min(final_raw_equity)),
+            "min_raw_share_price": float(np.min(final_raw_equity) / shares_out) if shares_out > 0 else 0.0,
+            "max_share_price": float(np.max(final_prices)),
+        }
+    else:
+        stats = {}
+        
+    invalid_simulation_reasons = {
+        "wacc_too_low": int(np.sum(samples[6, :] * (samples[2, :] + samples[3, :] * samples[4, :]) + (1 - samples[6, :]) * samples[5, :] * (1 - tax_rate) <= terminal_growth + 0.005)),
+        "negative_cod": int(np.sum(samples[5, :] <= 0)),
+        "negative_rf": int(np.sum(samples[2, :] <= 0)),
+        "negative_erp": int(np.sum(samples[4, :] <= 0)),
+        "nan_inf_result": int(math_invalid_count)
     }
 
     return {
-        "simulated_prices": simulated_prices.tolist(),
-        "simulated_evs": simulated_evs.tolist(),
-        "actual_iterations": actual_n,
+        "simulated_prices": final_prices.tolist(),
+        "simulated_evs": final_evs.tolist(),
+        "simulated_raw_equity": final_raw_equity.tolist(),
+        "total_simulations": oversample,
+        "valid_simulations": valid_n,
+        "invalid_simulations": oversample - valid_n,
+        "invalid_simulation_reasons": invalid_simulation_reasons,
+        "actual_iterations": valid_n,
         "stats": stats,
         "hist_corr_gm": hist_corr_gm,
         "sim_growth": sim_growth.tolist(),

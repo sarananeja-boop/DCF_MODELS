@@ -5,15 +5,17 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   if (!data) return null;
 
   const defaultGrowth = data.historicals.revenue_cagr || data.historicals.avg_rev_growth || 0.10;
-  const defaultMargin = data.historicals.avg_ebit_margin || 0.20;
+  
+  const currentMargin = data.diagnostics?.current_ebit_margin ?? data.historicals.avg_ebit_margin;
+  const isNegativeMargin = currentMargin < 0;
+  const defaultMargin = data.diagnostics?.target_ebit_margin ?? (data.historicals.avg_ebit_margin || 0.20);
+  
   const defaultWacc = data.wacc.wacc;
 
   const [growth, setGrowth] = useState(defaultGrowth * 100);
   const [margin, setMargin] = useState(defaultMargin * 100);
   const [wacc, setWacc] = useState(defaultWacc * 100);
   const [tgr, setTgr] = useState(2.5);
-  
-  const [isModified, setIsModified] = useState(false);
 
   useEffect(() => {
     // Reset when data changes natively (new ticker)
@@ -21,10 +23,10 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
     setMargin(defaultMargin * 100);
     setWacc(defaultWacc * 100);
     setTgr(2.5);
-    setIsModified(false);
   }, [data.company.ticker]);
 
-  const handleApply = () => {
+  useEffect(() => {
+    // Sync to parent on every change without triggering API
     onOverride({
       revenue_growth: growth / 100,
       ebit_margin: margin / 100,
@@ -32,32 +34,16 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
       terminal_growth: tgr / 100,
       projection_years: 5
     });
-    setIsModified(false);
-  };
-
-  const handleReset = () => {
-    setGrowth(defaultGrowth * 100);
-    setMargin(defaultMargin * 100);
-    setWacc(defaultWacc * 100);
-    setTgr(2.5);
-    setIsModified(true); // show the re-run button
-  };
+  }, [growth, margin, wacc, tgr]);
 
   const wrapChange = (setter) => (e) => {
     setter(parseFloat(e.target.value));
-    setIsModified(true);
   };
 
   return (
     <div className="bg-zinc-900/40 rounded-xl p-6 border border-zinc-800/80 mb-6 shadow-xl backdrop-blur-sm">
       <div className="flex justify-between items-center mb-8 border-b border-zinc-800/50 pb-4">
         <h3 className="font-semibold text-zinc-100 text-lg tracking-tight">Assumptions</h3>
-        <button 
-          onClick={handleReset}
-          className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors uppercase tracking-wider font-medium"
-        >
-          Reset
-        </button>
       </div>
 
       <div className="space-y-8">
@@ -86,7 +72,9 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
         {/* EBIT Margin */}
         <div className="group">
           <div className="flex justify-between items-center text-sm mb-3">
-            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">EBIT Margin</label>
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">
+              {isNegativeMargin ? 'Target EBIT Margin' : 'EBIT Margin'}
+            </label>
             <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
               <input 
                 type="number" 
@@ -98,11 +86,14 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
             </div>
           </div>
           <input 
-            type="range" min="0" max="60" step="0.5" 
+            type="range" min="-60" max="60" step="0.5" 
             value={margin} onChange={wrapChange(setMargin)}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
-          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Default: {(defaultMargin*100).toFixed(1)}%</div>
+          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono flex justify-between">
+            <span>{isNegativeMargin ? `Current EBIT Margin: ${(currentMargin*100).toFixed(1)}%` : ''}</span>
+            <span>Default: {(defaultMargin*100).toFixed(1)}%</span>
+          </div>
         </div>
 
         {/* WACC */}
@@ -148,16 +139,16 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           />
         </div>
 
-        {isModified && (
-          <button 
-            onClick={handleApply}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 mt-8 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-semibold rounded-lg transition shadow-lg shadow-zinc-100/10"
-          >
-            <FiRefreshCw className={loading ? 'animate-spin' : ''} />
-            Re-run Analysis
-          </button>
+        {/* NWC Ratio Display */}
+        {data.diagnostics?.normalized_nwc_to_revenue !== undefined && (
+          <div className="flex justify-between items-center text-sm pt-4 border-t border-zinc-800/50">
+            <span className="text-zinc-500 font-medium">Normalized NWC / Revenue</span>
+            <span className="text-zinc-300 font-mono">
+              {(data.diagnostics.normalized_nwc_to_revenue * 100).toFixed(1)}%
+            </span>
+          </div>
         )}
+
       </div>
     </div>
   );

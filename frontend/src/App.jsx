@@ -8,7 +8,8 @@ import {
   FiActivity, 
   FiCpu, 
   FiRefreshCw, 
-  FiMessageSquare 
+  FiMessageSquare,
+  FiRotateCcw
 } from 'react-icons/fi';
 
 import TickerInput from './components/TickerInput';
@@ -40,6 +41,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
   const [monteCarloIterations, setMonteCarloIterations] = useState(10000);
+  const [resetKey, setResetKey] = useState(0);
 
   // Sync state to sessionStorage
   useEffect(() => {
@@ -53,21 +55,54 @@ export default function App() {
   useEffect(() => sessionStorage.setItem('vl_market', market), [market]);
   useEffect(() => sessionStorage.setItem('vl_overrides', JSON.stringify(overrides)), [overrides]);
 
+  // Auto-refresh on page reload (Cmd+R)
+  useEffect(() => {
+    const savedTicker = sessionStorage.getItem('vl_ticker');
+    if (savedTicker) {
+      const savedMarket = sessionStorage.getItem('vl_market') || 'auto';
+      const savedOverrides = sessionStorage.getItem('vl_overrides') ? JSON.parse(sessionStorage.getItem('vl_overrides')) : {};
+      
+      setLoading(true);
+      axios.post('/api/analyze', {
+        ticker: savedTicker,
+        market: savedMarket,
+        overrides: savedOverrides,
+        monte_carlo_iterations: 10000
+      }).then(response => {
+        setAnalysisData(response.data);
+      }).catch(err => {
+        console.error("Auto-refresh failed:", err);
+      }).finally(() => {
+        setLoading(false);
+      });
+    }
+  }, []);
+
   const handleAnalyze = async (overrideParams = null) => {
     if (!ticker) {
       toast.error('Please enter a ticker symbol');
       return;
     }
-    
     setLoading(true);
     setError(null);
-    setAiSummary(''); // Clear AI summary on new run
     
+    // Clear AI summary ONLY if we are analyzing a different company/market
+    if (!analysisData || 
+        analysisData.company.ticker.toUpperCase() !== ticker.toUpperCase() ||
+        analysisData.company.market !== market) {
+      setAiSummary('');
+    }
+    
+    // Prevent React event objects from being serialized as overrideParams
+    const safeOverrides = (overrideParams && !overrideParams.nativeEvent && !(overrideParams instanceof Event))
+      ? overrideParams 
+      : overrides;
+
     try {
       const response = await axios.post('/api/analyze', {
         ticker,
         market,
-        overrides: overrideParams || overrides,
+        overrides: safeOverrides,
         monte_carlo_iterations: monteCarloIterations
       });
       
@@ -234,7 +269,7 @@ export default function App() {
         {analysisData && (
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
             {/* Left Sidebar */}
-            <div className="w-full md:w-80 flex-shrink-0 bg-zinc-900 border-r border-zinc-800/80 flex flex-col overflow-y-auto h-full p-4 space-y-6">
+            <div className="w-full md:w-80 flex-shrink-0 bg-zinc-900 border-r border-zinc-800/80 flex flex-col overflow-y-auto h-full p-4 space-y-4">
               
               <TickerInput 
                 vertical={true}
@@ -246,22 +281,34 @@ export default function App() {
                 loading={loading}
               />
 
-              <div className="flex space-x-2">
+              <div className="flex flex-col space-y-2">
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => handleAnalyze()}
+                    className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 py-2 px-4 rounded font-medium flex items-center justify-center transition-colors"
+                  >
+                    <FiRefreshCw className="mr-2" /> Re-run Analysis
+                  </button>
+                  <ExcelDownloadButton data={analysisData} />
+                </div>
                 <button 
-                  onClick={handleAnalyze}
-                  className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 py-2 px-4 rounded font-medium flex items-center justify-center transition-colors"
+                  onClick={() => {
+                    setOverrides({});
+                    setResetKey(k => k + 1);
+                    handleAnalyze({});
+                  }}
+                  className="w-full bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center border border-zinc-700/50"
                 >
-                  <FiRefreshCw className="mr-2" /> Re-run Model
+                  <FiRotateCcw className="mr-2" /> Restore Defaults
                 </button>
-                <ExcelDownloadButton data={analysisData} />
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <AssumptionSliders 
+                  key={`sliders-${resetKey}`}
                   data={analysisData}
                   onOverride={(newOverrides) => {
                     setOverrides(newOverrides);
-                    handleAnalyze(newOverrides);
                   }}
                   loading={loading}
                 />

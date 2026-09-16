@@ -79,7 +79,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
   };
 
   return (
-    <div className={`bg-zinc-900/40 rounded-xl border border-zinc-800/80 shadow-xl backdrop-blur-sm ${vertical ? 'p-4 mb-6' : 'p-6'}`}>
+    <div className={`bg-zinc-900/40 rounded-xl border border-zinc-800/80 shadow-xl backdrop-blur-sm ${vertical ? 'p-4' : 'p-6'}`}>
       <form onSubmit={handleSubmit} className={`flex ${vertical ? 'flex-col gap-4' : 'flex-col sm:flex-row gap-4 items-end'}`}>
         <div className="flex-1 relative w-full" ref={dropdownRef}>
           <label className="block text-sm font-medium text-zinc-400 mb-1.5">Company or Ticker Symbol</label>

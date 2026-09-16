@@ -88,13 +88,78 @@ const DCFModelTab = ({ data }) => {
                   </td>
                 ))}
               </tr>
+              {/* Margin */}
+              {dcf_result.margin_schedule && (
+                <tr className="bg-zinc-900/30 hover:bg-zinc-800/80 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-900/30 z-10 border-r border-zinc-800/30">
+                    EBIT Margin
+                  </td>
+                  {dcf_result.margin_schedule.map((val, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
+                      {formatPct(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* NOPAT */}
+              {dcf_result.projected_nopat && (
+                <tr className="bg-zinc-800/40 hover:bg-zinc-800/80 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-800/40 z-10 border-r border-zinc-800/30">
+                    NOPAT
+                  </td>
+                  {dcf_result.projected_nopat.map((val, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
+                      {formatNum(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* D&A */}
+              {dcf_result.projected_dna && (
+                <tr className="bg-zinc-900/30 hover:bg-zinc-800/80 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-900/30 z-10 border-r border-zinc-800/30">
+                    (+) D&A
+                  </td>
+                  {dcf_result.projected_dna.map((val, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
+                      {formatNum(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* CapEx */}
+              {dcf_result.projected_capex && (
+                <tr className="bg-zinc-800/40 hover:bg-zinc-800/80 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-800/40 z-10 border-r border-zinc-800/30">
+                    (-) CapEx
+                  </td>
+                  {dcf_result.projected_capex.map((val, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
+                      {formatNum(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* ΔNWC */}
+              {dcf_result.projected_dnwc && (
+                <tr className="bg-zinc-900/30 hover:bg-zinc-800/80 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-900/30 z-10 border-r border-zinc-800/30">
+                    (-) ΔNWC
+                  </td>
+                  {dcf_result.projected_dnwc.map((val, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-400">
+                      {formatNum(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
               {/* UFCF */}
               <tr className="bg-zinc-800/80 hover:bg-zinc-800/50 transition-colors">
                 <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-800/80 z-10 border-r border-zinc-800/30">
                   UFCF
                 </td>
                 {dcf_result.projected_ufcf?.map((val, i) => (
-                  <td key={i} className="px-4 py-3 text-right font-mono tabular-nums text-slate-300">
+                  <td key={i} className="px-4 py-3 text-right font-bold font-mono tabular-nums text-slate-100">
                     {formatNum(val)}
                   </td>
                 ))}
@@ -107,12 +172,23 @@ const DCFModelTab = ({ data }) => {
       {/* Terminal Value Section */}
       <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 mt-4">
         <h2 className="text-xl font-semibold text-slate-100 mb-4">Terminal Value</h2>
+        
+        {!data.diagnostics?.terminal_value_valid && data.diagnostics?.terminal_value_note && (
+          <div className="mb-4 bg-amber-900/20 border border-amber-500/30 p-3 rounded-lg text-amber-200/90 text-sm">
+            {data.diagnostics.terminal_value_note}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
             <p className="text-slate-400 text-sm mb-1">Terminal Value</p>
-            <p className="text-xl font-semibold text-slate-100 font-mono tabular-nums">
-              {formatNum(dcf_result.terminal_value)}
-            </p>
+            {dcf_result.terminal_value === null || !data.diagnostics?.terminal_value_valid ? (
+              <p className="text-xl font-semibold text-zinc-500 font-mono tabular-nums">N/A</p>
+            ) : (
+              <p className="text-xl font-semibold text-slate-100 font-mono tabular-nums">
+                {formatNum(dcf_result.terminal_value)}
+              </p>
+            )}
           </div>
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
             <p className="text-slate-400 text-sm mb-1">Enterprise Value</p>

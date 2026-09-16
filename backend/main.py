@@ -215,11 +215,18 @@ def analyze(req: AnalyzeRequest):
             if overrides.revenue_growth is not None
             else metrics.get("avg_rev_growth", 0.10)
         )
-        ebit_margin = (
-            overrides.ebit_margin
-            if overrides.ebit_margin is not None
-            else metrics.get("avg_ebit_margin", 0.15)
-        )
+        
+        avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
+        if avg_ebit_margin < 0 and overrides.ebit_margin is None:
+            target_margin = 0.0
+            current_margin = avg_ebit_margin
+        elif avg_ebit_margin < 0 and overrides.ebit_margin is not None:
+            target_margin = overrides.ebit_margin
+            current_margin = avg_ebit_margin
+        else:
+            target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else avg_ebit_margin
+            current_margin = None
+
         discount_rate = (
             overrides.wacc
             if overrides.wacc is not None
@@ -239,13 +246,14 @@ def analyze(req: AnalyzeRequest):
         # 7. Base-case DCF
         dcf_result = run_dcf(
             start_growth=start_growth,
-            ebit_margin=ebit_margin,
+            ebit_margin=target_margin,
             discount_rate=discount_rate,
             metrics=metrics,
             wacc_data=wacc_data,
             stock_data=stock_data,
             terminal_growth=terminal_growth,
             projection_years=projection_years,
+            current_margin=current_margin
         )
 
         # 8. Monte Carlo
@@ -267,6 +275,8 @@ def analyze(req: AnalyzeRequest):
             market_profile=market_profile,
             terminal_growth=terminal_growth,
             projection_years=projection_years,
+            target_margin=target_margin,
+            current_margin=current_margin
         )
         sens_margin_wacc = generate_margin_sensitivity_grid(
             metrics=metrics,
@@ -275,6 +285,8 @@ def analyze(req: AnalyzeRequest):
             market_profile=market_profile,
             terminal_growth=terminal_growth,
             projection_years=projection_years,
+            target_margin=target_margin,
+            current_margin=current_margin
         )
 
         # 10. Validation (EV/EBITDA cross-check)
@@ -282,7 +294,11 @@ def analyze(req: AnalyzeRequest):
 
         # 11. Verdict
         current_price = stock_data.get("current_price", 0)
-        verdict = generate_verdict(current_price, mc_result.get("stats", {}))
+        
+        terminal_value_valid = dcf_result.get("terminal_value_valid", True)
+        mc_valid = mc_result.get("actual_iterations", 0) > 0
+        
+        verdict = generate_verdict(current_price, mc_result.get("stats", {}), terminal_value_valid=terminal_value_valid, mc_valid=mc_valid)
 
         # 12. Trends
         trends = compute_trends(stock_data, metrics)
@@ -334,6 +350,7 @@ def analyze(req: AnalyzeRequest):
                 "avg_dna_pct": metrics.get("avg_dna_pct"),
                 "avg_dnwc_pct": metrics.get("avg_dnwc_pct"),
                 "n_years": metrics.get("n_years"),
+                "cash_and_equivalents": metrics.get("cash_and_equivalents"),
             },
             "wacc": {
                 "cost_of_equity": wacc_data.get("cost_of_equity"),
@@ -342,11 +359,23 @@ def analyze(req: AnalyzeRequest):
                 "weight_debt": wacc_data.get("weight_debt"),
                 "wacc": wacc_data.get("wacc"),
                 "total_debt": wacc_data.get("total_debt"),
+                "total_cash": metrics.get("cash_and_equivalents"),
             },
             "dcf_result": dcf_result,
             "monte_carlo": {
-                "stats": mc_result.get("stats"),
+                "stats": mc_result.get("stats", {}),
                 "actual_iterations": mc_result.get("actual_iterations"),
+                "total_simulations": mc_result.get("total_simulations", 0),
+                "valid_simulations": mc_result.get("valid_simulations", 0),
+                "invalid_simulations": mc_result.get("invalid_simulations", 0),
+                "invalid_simulation_reasons": mc_result.get("invalid_simulation_reasons", {}),
+                "zero_price_simulations": mc_result.get("stats", {}).get("zero_price_simulations", 0),
+                "negative_equity_simulations": mc_result.get("stats", {}).get("negative_equity_simulations", 0),
+                "positive_price_simulations": mc_result.get("stats", {}).get("positive_price_simulations", 0),
+                "zero_price_pct": mc_result.get("stats", {}).get("zero_price_pct", 0.0),
+                "min_raw_equity_value": mc_result.get("stats", {}).get("min_raw_equity_value", 0.0),
+                "min_raw_share_price": mc_result.get("stats", {}).get("min_raw_share_price", 0.0),
+                "max_share_price": mc_result.get("stats", {}).get("max_share_price", 0.0),
                 "histogram": mc_histogram,
                 "scatter": mc_scatter,
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
@@ -358,6 +387,18 @@ def analyze(req: AnalyzeRequest):
             "trends": trends,
             "validation": validation,
             "verdict": verdict,
+            "diagnostics": {
+                "historical_fcf_negative": False, # Not directly calculated, could be omitted, but let's pass None if unknown
+                "terminal_ufcf_positive": bool(dcf_result.get("terminal_value_valid", True)),
+                "terminal_value_valid": dcf_result.get("terminal_value_valid", True),
+                "terminal_value_note": dcf_result.get("terminal_value_note"),
+                "negative_ebitda": validation.get("trailing_ebitda", 1.0) <= 0,
+                "metric_used": validation.get("metric_used", "none"),
+                "margin_normalization_used": current_margin is not None,
+                "current_ebit_margin": float(current_margin) if current_margin is not None else float(avg_ebit_margin),
+                "target_ebit_margin": float(target_margin),
+                "normalized_nwc_to_revenue": float(metrics.get("normalized_nwc_to_revenue", 0.0)),
+            },
             "overrides_applied": {
                 "revenue_growth": overrides.revenue_growth,
                 "ebit_margin": overrides.ebit_margin,

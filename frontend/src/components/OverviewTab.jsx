@@ -80,8 +80,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
     validationColors = "bg-red-500/20 text-red-400";
   }
 
-  const upside = (verdict?.upside_pct || 0) / 100;
-  const isPositive = upside >= 0;
+  const impliedPrice = dcf_result?.implied_price || 0;
+  const currentPrice = market_data?.current_price || 1;
+  const dcfUpside = (impliedPrice / currentPrice) - 1.0;
+  const isPositive = dcfUpside >= 0;
 
   return (
     <div className="space-y-4 text-slate-200">
@@ -103,7 +105,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           </div>
           <div className={`mt-2 flex items-center text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
             {isPositive ? <FiTrendingUp className="mr-1" /> : <FiTrendingDown className="mr-1" />}
-            {isPositive ? '▲' : '▼'} {formatPercent(upside)} Upside
+            {isPositive ? '▲' : '▼'} {Math.abs(dcfUpside * 100).toFixed(1)}% {isPositive ? 'Upside' : 'Downside'}
           </div>
         </div>
 
@@ -114,7 +116,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             {symbol}{formatNumber(monte_carlo?.stats?.median)}
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            90% CI: {symbol}{formatNumber(monte_carlo?.stats?.p05)} – {symbol}{formatNumber(monte_carlo?.stats?.p95)}
+            90% CI: {symbol}{formatNumber(monte_carlo?.stats?.p5)} – {symbol}{formatNumber(monte_carlo?.stats?.p95)}
           </div>
         </div>
 
@@ -186,7 +188,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
             <div>
               <div className="text-xs text-slate-400">Cost of Debt (after tax)</div>
-              <div className="font-medium">{formatPercent(wacc_details?.cost_of_debt_after_tax)}</div>
+              <div className="font-medium">{formatPercent(wacc_details?.cost_of_debt)}</div>
             </div>
             <div>
               <div className="text-xs text-slate-400">WACC</div>
@@ -210,17 +212,30 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <div className="text-sm text-slate-400">Market EV/EBITDA</div>
-              <div className="font-medium">{formatNumber(validation?.market_ev_ebitda)}x</div>
+              <div className="text-sm text-slate-400">
+                {validation?.metric_used === 'ev_revenue' ? 'Market EV/Revenue' : 'Market EV/EBITDA'}
+              </div>
+              <div className="font-medium">
+                {validation?.market_multiple !== null && validation?.market_multiple !== undefined ? `${formatNumber(validation.market_multiple)}x` : 'N/A'}
+              </div>
             </div>
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <div className="text-sm text-slate-400">Model EV/EBITDA</div>
-              <div className="font-medium">{formatNumber(validation?.model_ev_ebitda)}x</div>
+              <div className="text-sm text-slate-400">
+                {validation?.metric_used === 'ev_revenue' ? 'Model EV/Revenue' : 'Model EV/EBITDA'}
+              </div>
+              <div className="font-medium">
+                {validation?.model_multiple !== null && validation?.model_multiple !== undefined ? `${formatNumber(validation.model_multiple)}x` : 'N/A'}
+              </div>
             </div>
             <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div className="text-sm text-slate-400">Gap</div>
               <div className="font-medium">{formatPercent(validation?.multiple_gap_pct)}</div>
             </div>
+            {validation?.metric_used === 'ev_revenue' && (
+              <div className="text-xs text-blue-400 bg-blue-500/10 p-3 rounded-lg flex items-start mt-2">
+                <span>Negative EBITDA detected. Falling back to EV/Revenue validation.</span>
+              </div>
+            )}
             {validation?.warning && (
               <div className="text-xs text-amber-400 bg-amber-500/10 p-3 rounded-lg flex items-start mt-2">
                 <FiAlertTriangle className="mr-2 mt-0.5 flex-shrink-0" />

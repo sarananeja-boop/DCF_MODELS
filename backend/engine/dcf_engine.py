@@ -99,6 +99,7 @@ def run_dcf(
     stock_data: dict,
     terminal_growth: float = 0.025,
     projection_years: int = 5,
+    current_margin: Optional[float] = None,
 ) -> dict:
     """Run a single multi-stage DCF valuation with linear growth fade.
 
@@ -120,6 +121,7 @@ def run_dcf(
         stock_data:       Dict from ``fetch_stock_data``.
         terminal_growth:  Long-run growth (default 2.5 %).
         projection_years: Number of projected years (default 5).
+        current_margin:   Optional starting margin for interpolation (for loss-making companies).
 
     Returns:
         Dict with: ``implied_price``, ``enterprise_value``,
@@ -129,39 +131,50 @@ def run_dcf(
     """
     avg_dna_pct: float = metrics["avg_dna_pct"]
     avg_capex_pct: float = metrics["avg_capex_pct"]
-    avg_dnwc_pct: float = metrics["avg_dnwc_pct"]
+    # Fallback for backward compatibility if normalized_nwc_to_revenue isn't present
+    normalized_nwc_to_revenue: float = metrics.get("normalized_nwc_to_revenue", metrics.get("avg_dnwc_pct", 0.0))
     last_revenue: float = metrics["last_revenue"]
     total_debt: float = wacc_data["total_debt"]
     cash_equiv: float = metrics["cash_and_equivalents"]
     shares_out: float = stock_data["shares_outstanding"]
     tax_rate: float = stock_data.get("_tax_rate", 0.21)
 
-    # Allow callers (e.g. Monte Carlo) to pass tax_rate explicitly via stock_data
-    # but fall back to market_profile if available, else default 21 %.
-    # The notebook uses the global TAX_RATE constant (0.21).
-    # For flexibility we look for a private key first.
-
     proj_ufcf: List[float] = []
     proj_rev: List[float] = []
+    proj_nopat: List[float] = []
+    proj_dna: List[float] = []
+    proj_capex: List[float] = []
+    proj_dnwc: List[float] = []
     last_rev = last_revenue
 
     # Linear fade from start_growth → terminal_growth
     growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
+    
+    # Margin schedule
+    if current_margin is not None:
+        margin_schedule = np.linspace(current_margin, ebit_margin, projection_years)
+    else:
+        margin_schedule = np.array([ebit_margin] * projection_years)
 
     for yr in range(projection_years):
         g = growth_schedule[yr]
         next_rev = last_rev * (1 + g)
+        margin = margin_schedule[yr]
 
-        nopat = next_rev * ebit_margin * (1 - tax_rate)
-        ufcf = (
-            nopat
-            + (next_rev * avg_dna_pct)
-            - (next_rev * avg_capex_pct)
-            - (next_rev * avg_dnwc_pct)
-        )
+        nopat = next_rev * margin * (1 - tax_rate)
+        dna_add = next_rev * avg_dna_pct
+        capex_sub = next_rev * avg_capex_pct
+        delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
+        
+        ufcf = nopat + dna_add - capex_sub - delta_nwc
 
         proj_ufcf.append(ufcf)
         proj_rev.append(next_rev)
+        proj_nopat.append(nopat)
+        proj_dna.append(dna_add)
+        proj_capex.append(capex_sub)
+        proj_dnwc.append(delta_nwc)
+        
         last_rev = next_rev
 
     # Discount projected UFCFs
@@ -169,22 +182,47 @@ def run_dcf(
     pv_ufcf = sum(cf / df for cf, df in zip(proj_ufcf, discount_factors))
 
     # Terminal Value via Gordon Growth Model
-    terminal_value = (proj_ufcf[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-    pv_terminal_value = terminal_value / ((1 + discount_rate) ** projection_years)
+    terminal_value_valid = True
+    terminal_value_note = None
+    
+    if proj_ufcf[-1] <= 0:
+        terminal_value = None
+        pv_terminal_value = 0.0
+        terminal_value_valid = False
+        terminal_value_note = "Terminal UFCF is negative under current assumptions. Gordon Growth terminal value is not supported."
+    elif discount_rate <= terminal_growth:
+        terminal_value = None
+        pv_terminal_value = 0.0
+        terminal_value_valid = False
+        terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
+    else:
+        terminal_value = (proj_ufcf[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+        pv_terminal_value = terminal_value / ((1 + discount_rate) ** projection_years)
 
     # EV → Equity bridge
+    # No max(0, ...) clamping; let it be negative if it calculates out that way
     enterprise_val = pv_ufcf + pv_terminal_value
-    equity_value = max(0.0, enterprise_val + cash_equiv - total_debt)
-    implied_price = equity_value / shares_out if shares_out > 0 else 0.0
+    equity_value = enterprise_val + cash_equiv - total_debt
+    
+    # We still floor the implied price at 0.0 since negative stock price makes no sense
+    implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
     return {
         "implied_price": float(implied_price),
         "enterprise_value": float(enterprise_val),
         "projected_revenue": [float(r) for r in proj_rev],
         "projected_ufcf": [float(u) for u in proj_ufcf],
+        "projected_nopat": [float(n) for n in proj_nopat],
+        "projected_dna": [float(d) for d in proj_dna],
+        "projected_capex": [float(c) for c in proj_capex],
+        "projected_dnwc": [float(dw) for dw in proj_dnwc],
         "growth_schedule": growth_schedule.tolist(),
+        "margin_schedule": margin_schedule.tolist(),
         "pv_ufcf": float(pv_ufcf),
-        "terminal_value": float(terminal_value),
+        "terminal_value": float(terminal_value) if terminal_value is not None else None,
         "pv_terminal_value": float(pv_terminal_value),
         "equity_value": float(equity_value),
+        "terminal_value_valid": terminal_value_valid,
+        "terminal_value_note": terminal_value_note,
+        "normalized_nwc_to_revenue": float(normalized_nwc_to_revenue),
     }

@@ -316,7 +316,7 @@ def _build_dcf(wb: Workbook, data: Dict[str, Any]):
         ("Enterprise Value", dcf.get("enterprise_value"), cfmt),
         ("", None, None),  # spacer
         ("(−) Total Debt", _safe(data, "wacc", "total_debt", default=0), cfmt),
-        ("(+) Cash & Equivalents", _safe(data, "metrics", "cash_and_equivalents", default=0), cfmt),
+        ("(+) Cash & Equivalents", _safe(data, "wacc", "total_cash", default=0), cfmt),
         ("Equity Value", dcf.get("equity_value"), cfmt),
         ("÷ Shares Outstanding", _safe(data, "market_data", "shares_outstanding"), INT_FMT),
         ("= Implied Share Price", dcf.get("implied_price"), cfmt_full),

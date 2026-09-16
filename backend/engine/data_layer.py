@@ -206,8 +206,12 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     revenue = safe_get(income_stmt, "Total Revenue")[::-1]
     ebit = safe_get(income_stmt, "EBIT")[::-1]
-    capex = np.abs(safe_get(cash_flow, "Capital Expenditure", default=0)[::-1])
-    dna = safe_get(cash_flow, "Depreciation And Amortization")[::-1]
+    
+    raw_capex = safe_get(cash_flow, "Capital Expenditure", default=0)[::-1]
+    capex = np.where(raw_capex < 0, -raw_capex, raw_capex)  # explicit positive
+    
+    raw_dna = safe_get(cash_flow, "Depreciation And Amortization")[::-1]
+    dna = np.where(raw_dna < 0, -raw_dna, raw_dna)  # explicit positive
 
     # ------------------------------------------------------------------
     # 3E – Net Working Capital
@@ -234,12 +238,23 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     avg_capex_pct = float(np.mean(capex / np.where(revenue != 0, revenue, 1.0)))
     avg_dna_pct = float(np.mean(dna / np.where(revenue != 0, revenue, 1.0)))
     avg_dnwc_pct = float(np.mean(delta_nwc / np.where(revenue != 0, revenue, 1.0)))
+    
+    nwc_to_rev = nwc / np.where(revenue != 0, revenue, 1.0)
+    normalized_nwc_to_revenue = float(np.mean(nwc_to_rev))
 
     # Total debt and cash (most recent year – index [0] is newest before reversal,
     # but after [::-1] index [-1] is newest … however the original notebook uses
     # balance_sheet *before* reversal with index [0] for the latest snapshot).
     total_debt = float(safe_get(balance_sheet, "Total Debt")[0])  # newest row
-    cash_and_equivalents = float(safe_get(balance_sheet, "Cash And Cash Equivalents")[0])
+    
+    # For the EV-to-Equity bridge, cash MUST include marketable securities / short-term investments
+    if "Cash Cash Equivalents And Short Term Investments" in balance_sheet.columns:
+        cash_and_equivalents = float(safe_get(balance_sheet, "Cash Cash Equivalents And Short Term Investments")[0])
+    else:
+        cce = float(safe_get(balance_sheet, "Cash And Cash Equivalents")[0])
+        sti = float(safe_get(balance_sheet, "Other Short Term Investments")[0])
+        cash_and_equivalents = cce + sti
+
 
     # Interest expense (for cost-of-debt calculation)
     interest_expense: float = 0.0
@@ -271,6 +286,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "avg_capex_pct": avg_capex_pct,
         "avg_dna_pct": avg_dna_pct,
         "avg_dnwc_pct": avg_dnwc_pct,
+        "normalized_nwc_to_revenue": normalized_nwc_to_revenue,
         # Snapshot values
         "n_years": n_years,
         "last_revenue": float(revenue[-1]),
