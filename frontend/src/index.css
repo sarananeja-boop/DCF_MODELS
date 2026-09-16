@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #0a0e27;
-  --bg-secondary: #111640;
-  --bg-card: #1a1f52;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --bg-primary: #09090b;   /* zinc-950 */
+  --bg-secondary: #18181b; /* zinc-900 */
+  --bg-card: #27272a;      /* zinc-800 */
+  --text-primary: #f4f4f5; /* zinc-100 */
+  --text-secondary: #a1a1aa; /* zinc-400 */
   --accent-green: #10b981;
   --accent-red: #ef4444;
   --accent-blue: #3b82f6;
@@ -42,3 +42,14 @@ body {
 /* Tab transitions */
 .tab-content-enter { opacity: 0; transform: translateY(8px); }
 .tab-content-active { opacity: 1; transform: translateY(0); transition: all 0.3s ease; }
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+

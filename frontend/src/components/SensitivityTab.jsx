@@ -9,8 +9,8 @@ export default function SensitivityTab({ data }) {
 
   const layoutConfig = {
     paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: '#111640',
-    font: { color: '#f1f5f9' },
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#a1a1aa', family: 'font-mono, tabular-nums, sans-serif' },
     margin: { t: 40, r: 20, l: 80, b: 60 },
     xaxis: { tickformat: '.1%', title: 'Revenue Growth Rate' },
     yaxis: { tickformat: '.1%', title: 'WACC' },
@@ -34,7 +34,7 @@ export default function SensitivityTab({ data }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+      <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
         <h3 className="text-xl font-semibold mb-2">Sensitivity: Growth vs WACC</h3>
         <p className="text-sm text-text-secondary mb-4">
           Implied share price across variations of Yr-1 Revenue Growth and WACC.
@@ -62,7 +62,7 @@ export default function SensitivityTab({ data }) {
         </div>
       </div>
 
-      <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+      <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
         <h3 className="text-xl font-semibold mb-2">Sensitivity: Margin vs WACC</h3>
         <p className="text-sm text-text-secondary mb-4">
           Implied share price across variations of EBIT Margin and WACC.

@@ -30,10 +30,10 @@ const MonteCarloTab = ({ data }) => {
 
   const darkLayout = {
     paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: '#111640',
-    font: { color: '#e2e8f0', family: 'Inter, system-ui, sans-serif' },
-    xaxis: { gridcolor: '#252b6a', zerolinecolor: '#252b6a' },
-    yaxis: { gridcolor: '#252b6a', zerolinecolor: '#252b6a' },
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#a1a1aa', family: 'font-mono, tabular-nums, sans-serif' },
+    xaxis: { gridcolor: '#27272a', zerolinecolor: '#27272a' },
+    yaxis: { gridcolor: '#27272a', zerolinecolor: '#27272a' },
     margin: { l: 60, r: 30, t: 50, b: 50 },
   };
 
@@ -150,10 +150,10 @@ const MonteCarloTab = ({ data }) => {
         {statItems.map((stat, idx) => (
           <div 
             key={idx} 
-            className={`bg-navy-700 rounded-lg p-3 text-center ${stat.highlight ? 'border-l-2 border-blue-500' : ''}`}
+            className={`bg-zinc-800/80 rounded-lg p-3 text-center ${stat.highlight ? 'border-l-2 border-blue-500' : ''}`}
           >
             <div className="text-xs text-slate-400 uppercase mb-1">{stat.label}</div>
-            <div className="text-lg font-semibold font-mono text-slate-100">
+            <div className="text-lg font-semibold font-mono tabular-nums text-slate-100">
               {formatCurrency(stat.value)}
             </div>
           </div>
@@ -162,7 +162,7 @@ const MonteCarloTab = ({ data }) => {
 
       {/* Histogram Chart */}
       {histogram && (
-        <div className="bg-navy-700 rounded-xl p-4 mt-4">
+        <div className="bg-zinc-800/80 rounded-xl p-4 mt-4">
           <Plot
             data={[
               {
@@ -184,7 +184,7 @@ const MonteCarloTab = ({ data }) => {
       {/* Scatter Plots */}
       {scatter_data && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <div className="bg-navy-700 rounded-xl p-4">
+          <div className="bg-zinc-800/80 rounded-xl p-4">
             <Plot
               data={[
                 {
@@ -209,7 +209,7 @@ const MonteCarloTab = ({ data }) => {
             />
           </div>
           
-          <div className="bg-navy-700 rounded-xl p-4">
+          <div className="bg-zinc-800/80 rounded-xl p-4">
             <Plot
               data={[
                 {
@@ -234,7 +234,7 @@ const MonteCarloTab = ({ data }) => {
             />
           </div>
 
-          <div className="bg-navy-700 rounded-xl p-4">
+          <div className="bg-zinc-800/80 rounded-xl p-4">
             <Plot
               data={[
                 {

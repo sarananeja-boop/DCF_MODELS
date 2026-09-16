@@ -187,13 +187,15 @@ CapEx Trend: {trends.get('capex_trend', 'N/A')}
     return context
 
 
+from ai.prompts import SYSTEM_PROMPT
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def generate_valuation_summary(analysis_data: Dict[str, Any]) -> str:
     """
-    Generate a professional equity research note using Groq (LLaMA 3.1 70B).
+    Generate a professional equity research note using Groq.
 
     Parameters
     ----------
@@ -208,48 +210,10 @@ def generate_valuation_summary(analysis_data: Dict[str, Any]) -> str:
 
     data_context = _build_prompt(analysis_data)
 
-    system_prompt = (
-        "You are a senior sell-side equity research analyst at a top-tier "
-        "investment bank. You write concise, data-driven research notes. "
-        "Use specific numbers from the data provided. Be direct and avoid "
-        "generic filler. Write in professional but accessible language. "
-        "Format your output in Markdown."
-    )
-
     user_prompt = f"""Write a professional equity research note based on the following
-DCF valuation analysis. Use the exact numbers provided.
+DCF valuation analysis. Use the exact numbers provided. Strictly follow the OUTPUT STRUCTURE defined in your system prompt.
 
 {data_context}
-
-Structure your note with the following sections:
-
-## Investment Summary
-Write 2-3 sentences capturing the core investment thesis. Include the current
-price, DCF implied value, and Monte Carlo median with the valuation range (P5-P95).
-
-## Valuation Analysis
-Interpret the DCF result. What does the implied price suggest vs current market
-price? Discuss the EV/EBITDA cross-check — does the model's implied multiple
-look reasonable vs the market's? Mention terminal value as % of total EV.
-
-## Key Drivers & Risks
-What are the critical growth and margin assumptions? How sensitive is the
-valuation to changes in WACC? What could go wrong — identify 2-3 specific risks
-tied to the numbers (e.g., margin compression, growth deceleration, rising rates).
-
-## Trend Assessment
-Comment on revenue trajectory (CAGR), margin dynamics (expanding/contracting?),
-and capital efficiency trends. Use the historical data to support your points.
-
-## Conclusion
-State the valuation range (P25-P75 from Monte Carlo), the central estimate
-(median), and a clear recommendation. Be specific about upside/downside.
-
-Important:
-- Use the currency symbol ({analysis_data.get('company', {}).get('symbol', '$')}) throughout
-- Round numbers appropriately for readability
-- Do NOT include disclaimers or legal language
-- Keep it under 600 words
 """
 
     try:
@@ -257,11 +221,12 @@ Important:
         chat_completion = client.chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.4,
-            max_tokens=2048,
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=6000,
             top_p=0.9,
         )
         return chat_completion.choices[0].message.content

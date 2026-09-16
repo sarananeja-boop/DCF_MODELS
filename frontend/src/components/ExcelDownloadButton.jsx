@@ -45,8 +45,8 @@ export default function ExcelDownloadButton({ data }) {
       disabled={loading || !data}
       className={`w-full flex items-center justify-center gap-2 py-3 mt-4 rounded-md font-semibold transition ${
         loading || !data
-          ? 'bg-navy-700 text-gray-500 cursor-not-allowed'
-          : 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/30'
+          ? 'bg-zinc-800/80 text-gray-500 cursor-not-allowed'
+          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700'
       }`}
     >
       {loading ? (

@@ -1,6 +1,8 @@
 import React from 'react';
 import { FiCpu, FiTrendingUp, FiTrendingDown, FiCheckCircle, FiAlertTriangle } from 'react-icons/fi';
-import ReactMarkdown from 'react-markdown';
+import AIReportRenderer from './AIReportRenderer';
+import html2pdf from 'html2pdf.js';
+import { FiDownload } from 'react-icons/fi';
 
 // Helper functions
 const formatCurrency = (value, symbol, compact) => {
@@ -37,6 +39,31 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict } = data;
   const symbol = company?.currency === 'INR' ? '₹' : '$';
 
+  const handleDownloadPDF = () => {
+    const element = document.getElementById('ai-summary-content');
+    if (!element) return;
+    
+    // Add temporary styling for PDF export to ensure dark background
+    const originalBg = element.style.backgroundColor;
+    const originalPadding = element.style.padding;
+    element.style.backgroundColor = '#18181b'; // zinc-900
+    element.style.padding = '2rem';
+    
+    const opt = {
+      margin:       0,
+      filename:     `${company.ticker}_Equity_Research.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, backgroundColor: '#18181b' },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save().then(() => {
+      // Restore styles
+      element.style.backgroundColor = originalBg;
+      element.style.padding = originalPadding;
+    });
+  };
+
   // Verdict colors
   let verdictColors = "bg-amber-500/20 text-amber-400 border-amber-500/30";
   if (verdict?.verdict?.includes('BUY')) {
@@ -61,7 +88,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       {/* 1. Top Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Current Price */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <div className="text-sm text-slate-400 mb-1">Current Price</div>
           <div className="text-3xl font-bold text-white">
             {symbol}{formatNumber(market_data?.current_price)}
@@ -69,7 +96,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* DCF Implied Value */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <div className="text-sm text-slate-400 mb-1">DCF Fair Value</div>
           <div className="text-3xl font-bold text-white">
             {symbol}{formatNumber(dcf_result?.implied_price)}
@@ -81,7 +108,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* Monte Carlo Median */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <div className="text-sm text-slate-400 mb-1">MC Median</div>
           <div className="text-3xl font-bold text-white">
             {symbol}{formatNumber(monte_carlo?.stats?.median)}
@@ -92,7 +119,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* Verdict Badge */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600 flex flex-col justify-center items-center text-center">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 flex flex-col justify-center items-center text-center">
           <div className="text-sm text-slate-400 mb-2">Verdict</div>
           <div className={`px-4 py-2 rounded-lg font-bold text-lg border ${verdictColors}`}>
             {verdict?.verdict || 'N/A'}
@@ -106,7 +133,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       </div>
 
       {/* 2. Company Info Card */}
-      <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+      <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
         <h3 className="text-lg font-semibold text-white mb-4">Company Details</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
@@ -134,10 +161,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* 3. WACC Breakdown Card */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <h3 className="text-lg font-semibold text-white mb-4">WACC Breakdown</h3>
           <div className="mb-4">
-            <div className="flex h-3 rounded-full overflow-hidden bg-navy-800">
+            <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
               <div 
                 className="bg-blue-500 h-full" 
                 style={{ width: `${(wacc_details?.weight_equity || 0) * 100}%` }}
@@ -173,7 +200,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* 4. Validation Card */}
-        <div className="bg-navy-700 rounded-xl p-5 shadow-lg border border-navy-600">
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-white">Model Validation</h3>
             <span className={`px-2 py-1 text-xs font-semibold rounded-md ${validationColors}`}>
@@ -182,15 +209,15 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           </div>
           
           <div className="space-y-4">
-            <div className="flex justify-between items-center border-b border-navy-600 pb-2">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div className="text-sm text-slate-400">Market EV/EBITDA</div>
               <div className="font-medium">{formatNumber(validation?.market_ev_ebitda)}x</div>
             </div>
-            <div className="flex justify-between items-center border-b border-navy-600 pb-2">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div className="text-sm text-slate-400">Model EV/EBITDA</div>
               <div className="font-medium">{formatNumber(validation?.model_ev_ebitda)}x</div>
             </div>
-            <div className="flex justify-between items-center border-b border-navy-600 pb-2">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
               <div className="text-sm text-slate-400">Gap</div>
               <div className="font-medium">{formatPercent(validation?.multiple_gap_pct)}</div>
             </div>
@@ -205,16 +232,24 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       </div>
 
       {/* 5. AI Valuation Summary */}
-      <div className="bg-navy-700 rounded-xl p-6 shadow-lg border border-navy-600 mt-4">
-        <div className="flex items-center space-x-2 mb-4">
-          <FiCpu className="text-accent-blue text-xl" />
-          <h3 className="text-lg font-semibold text-white">AI Valuation Summary</h3>
+      <div className="bg-zinc-800/80 rounded-xl p-6 shadow-lg border border-zinc-800 mt-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <FiCpu className="text-accent-blue text-xl" />
+            <h3 className="text-lg font-semibold text-white">AI Valuation Summary</h3>
+          </div>
+          {aiSummary && (
+            <button 
+              onClick={handleDownloadPDF}
+              className="flex items-center space-x-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-3 py-1.5 rounded-md transition-colors"
+            >
+              <FiDownload /> <span>Download PDF</span>
+            </button>
+          )}
         </div>
         
         {aiSummary ? (
-          <div className="text-slate-300 leading-relaxed prose prose-invert max-w-none">
-            <ReactMarkdown>{aiSummary}</ReactMarkdown>
-          </div>
+          <AIReportRenderer jsonString={aiSummary} />
         ) : (
           <div className="flex flex-col items-center justify-center py-6 text-center">
             {aiLoading ? (
@@ -227,7 +262,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 <p className="text-slate-400 text-sm">No AI summary generated yet. Use AI to analyze the DCF assumptions and output.</p>
                 <button 
                   onClick={onFetchAISummary}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium rounded-lg px-6 py-2.5 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg hover:shadow-xl"
+                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium rounded-lg px-6 py-2.5 transition-all shadow-sm"
                 >
                   Generate AI Summary
                 </button>

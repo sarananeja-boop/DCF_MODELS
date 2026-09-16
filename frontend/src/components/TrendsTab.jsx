@@ -9,11 +9,20 @@ export default function TrendsTab({ data }) {
 
   const layoutConfig = {
     paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: '#111640',
-    font: { color: '#f1f5f9' },
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#a1a1aa', family: 'font-mono, tabular-nums, sans-serif' },
     margin: { t: 40, r: 20, l: 60, b: 40 },
     height: 300,
     autosize: true,
+    xaxis: { 
+      gridcolor: '#27272a', 
+      dtick: 1, 
+      tickfont: { color: '#a1a1aa' } 
+    },
+    yaxis: { 
+      gridcolor: '#27272a', 
+      tickfont: { color: '#a1a1aa' } 
+    }
   };
 
   const formatYAxis = (val) => {
@@ -27,10 +36,10 @@ export default function TrendsTab({ data }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Revenue History */}
-        <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+        <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-lg font-semibold">Revenue History</h3>
-            <span className="text-xs bg-accent-blue/20 text-accent-blue px-2 py-1 rounded font-mono">
+            <span className="text-xs bg-accent-blue/20 text-accent-blue px-2 py-1 rounded font-mono tabular-nums">
               CAGR: {(trends.revenue_cagr * 100).toFixed(1)}%
             </span>
           </div>
@@ -51,10 +60,10 @@ export default function TrendsTab({ data }) {
         </div>
 
         {/* EBIT Margin Trend */}
-        <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+        <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-lg font-semibold">EBIT Margin Trend</h3>
-            <span className={`text-xs px-2 py-1 rounded font-mono ${
+            <span className={`text-xs px-2 py-1 rounded font-mono tabular-nums ${
               trends.margin_trend === 'expanding' ? 'bg-accent-green/20 text-accent-green' : 
               trends.margin_trend === 'compressing' ? 'bg-accent-red/20 text-accent-red' : 'bg-gray-700 text-gray-300'
             }`}>
@@ -80,10 +89,10 @@ export default function TrendsTab({ data }) {
         </div>
 
         {/* CapEx Intensity */}
-        <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+        <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-lg font-semibold">CapEx / Revenue</h3>
-            <span className="text-xs bg-navy-700 text-text-secondary px-2 py-1 rounded">
+            <span className="text-xs bg-zinc-800/80 text-text-secondary px-2 py-1 rounded">
               {trends.capex_trend}
             </span>
           </div>
@@ -106,7 +115,7 @@ export default function TrendsTab({ data }) {
         </div>
 
         {/* FCF History */}
-        <div className="bg-navy-800 rounded-lg p-6 border border-navy-600 shadow-lg">
+        <div className="bg-zinc-900 rounded-lg p-6 border border-zinc-800 shadow-lg">
           <h3 className="text-lg font-semibold mb-2">Proxy FCF History</h3>
           <Plot
             data={[{

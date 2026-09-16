@@ -49,70 +49,102 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   };
 
   return (
-    <div className="bg-navy-800 rounded-lg p-4 border border-navy-600 mb-6 shadow-lg">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-white">Assumptions</h3>
+    <div className="bg-zinc-900/40 rounded-xl p-6 border border-zinc-800/80 mb-6 shadow-xl backdrop-blur-sm">
+      <div className="flex justify-between items-center mb-8 border-b border-zinc-800/50 pb-4">
+        <h3 className="font-semibold text-zinc-100 text-lg tracking-tight">Assumptions</h3>
         <button 
           onClick={handleReset}
-          className="text-xs text-text-secondary hover:text-white transition"
+          className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors uppercase tracking-wider font-medium"
         >
           Reset
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Revenue Growth */}
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-text-secondary">Rev Growth (Yr 1)</span>
-            <span className="font-mono text-accent-blue">{growth.toFixed(1)}%</span>
+        <div className="group">
+          <div className="flex justify-between items-center text-sm mb-3">
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">Rev Growth (Yr 1)</label>
+            <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
+              <input 
+                type="number" 
+                value={growth.toFixed(1)} 
+                onChange={wrapChange(setGrowth)}
+                className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
+              />
+              <span className="text-zinc-500 text-xs font-mono">%</span>
+            </div>
           </div>
           <input 
             type="range" min="-10" max="40" step="0.5" 
             value={growth} onChange={wrapChange(setGrowth)}
-            className="w-full accent-accent-blue" 
+            className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
-          <div className="text-[10px] text-gray-500 text-right mt-1">Default: {(defaultGrowth*100).toFixed(1)}%</div>
+          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Default: {(defaultGrowth*100).toFixed(1)}%</div>
         </div>
 
         {/* EBIT Margin */}
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-text-secondary">EBIT Margin</span>
-            <span className="font-mono text-accent-blue">{margin.toFixed(1)}%</span>
+        <div className="group">
+          <div className="flex justify-between items-center text-sm mb-3">
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">EBIT Margin</label>
+            <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
+              <input 
+                type="number" 
+                value={margin.toFixed(1)} 
+                onChange={wrapChange(setMargin)}
+                className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
+              />
+              <span className="text-zinc-500 text-xs font-mono">%</span>
+            </div>
           </div>
           <input 
             type="range" min="0" max="60" step="0.5" 
             value={margin} onChange={wrapChange(setMargin)}
-            className="w-full accent-accent-blue" 
+            className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
-          <div className="text-[10px] text-gray-500 text-right mt-1">Default: {(defaultMargin*100).toFixed(1)}%</div>
+          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Default: {(defaultMargin*100).toFixed(1)}%</div>
         </div>
 
         {/* WACC */}
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-text-secondary">WACC</span>
-            <span className="font-mono text-accent-blue">{wacc.toFixed(1)}%</span>
+        <div className="group">
+          <div className="flex justify-between items-center text-sm mb-3">
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">Discount Rate (WACC)</label>
+            <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
+              <input 
+                type="number" 
+                value={wacc.toFixed(1)} 
+                onChange={wrapChange(setWacc)}
+                className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
+              />
+              <span className="text-zinc-500 text-xs font-mono">%</span>
+            </div>
           </div>
           <input 
             type="range" min="5" max="25" step="0.1" 
             value={wacc} onChange={wrapChange(setWacc)}
-            className="w-full accent-accent-blue" 
+            className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
-          <div className="text-[10px] text-gray-500 text-right mt-1">Computed: {(defaultWacc*100).toFixed(1)}%</div>
+          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Computed: {(defaultWacc*100).toFixed(1)}%</div>
         </div>
         
         {/* Terminal Growth */}
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-text-secondary">Term. Growth Rate</span>
-            <span className="font-mono text-accent-blue">{tgr.toFixed(1)}%</span>
+        <div className="group">
+          <div className="flex justify-between items-center text-sm mb-3">
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">Term. Growth</label>
+            <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
+              <input 
+                type="number" 
+                value={tgr.toFixed(1)} 
+                onChange={wrapChange(setTgr)}
+                className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
+              />
+              <span className="text-zinc-500 text-xs font-mono">%</span>
+            </div>
           </div>
           <input 
             type="range" min="1" max="5" step="0.1" 
             value={tgr} onChange={wrapChange(setTgr)}
-            className="w-full accent-accent-blue" 
+            className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
         </div>
 
@@ -120,7 +152,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           <button 
             onClick={handleApply}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2 mt-2 bg-navy-600 hover:bg-navy-700 text-white text-sm rounded-md transition border border-accent-blue/50"
+            className="w-full flex items-center justify-center gap-2 py-3 mt-8 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-semibold rounded-lg transition shadow-lg shadow-zinc-100/10"
           >
             <FiRefreshCw className={loading ? 'animate-spin' : ''} />
             Re-run Analysis
