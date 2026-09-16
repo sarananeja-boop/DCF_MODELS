@@ -90,6 +90,9 @@ def run_monte_carlo(
         hist_corr_gm = float(np.corrcoef(rev_growth_arr, ebit_margins_aligned)[0, 1])
         if np.isnan(hist_corr_gm):
             hist_corr_gm = 0.0
+        else:
+            # Clip strictly inside (-1, 1) to guarantee positive definite matrix for Cholesky
+            hist_corr_gm = np.clip(hist_corr_gm, -0.99, 0.99)
     else:
         hist_corr_gm = 0.0
 
