@@ -100,7 +100,11 @@ def run_monte_carlo(
     corr_matrix[0, 1] = hist_corr_gm
     corr_matrix[1, 0] = hist_corr_gm
 
-    L = np.linalg.cholesky(corr_matrix)
+    try:
+        L = np.linalg.cholesky(corr_matrix)
+    except np.linalg.LinAlgError:
+        logger.warning("Cholesky decomposition failed. Falling back to independent variables.")
+        L = np.eye(num_vars)
 
     # ------------------------------------------------------------------
     # 5B – Correlated fat-tailed draws
