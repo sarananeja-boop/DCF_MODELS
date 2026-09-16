@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0e27;
+  --bg-secondary: #111640;
+  --bg-card: #1a1f52;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent-green: #10b981;
+  --accent-red: #ef4444;
+  --accent-blue: #3b82f6;
+  --accent-amber: #f59e0b;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* Number formatting */
+.font-tabular { font-variant-numeric: tabular-nums; }
+
+/* Pulse animation for loading */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+}
+.loading-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* Tab transitions */
+.tab-content-enter { opacity: 0; transform: translateY(8px); }
+.tab-content-active { opacity: 1; transform: translateY(0); transition: all 0.3s ease; }
