@@ -33,6 +33,9 @@ def run_monte_carlo(
     terminal_growth: float = 0.025,
     projection_years: int = 5,
     iterations: int = 10_000,
+    base_growth: float = None,
+    base_margin: float = None,
+    base_wacc: float = None,
 ) -> dict:
     """Run a Cholesky-correlated Monte Carlo DCF simulation.
 

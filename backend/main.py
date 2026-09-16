@@ -266,7 +266,7 @@ def analyze(req: AnalyzeRequest):
             projection_years=projection_years,
             iterations=req.monte_carlo_iterations,
             base_growth=start_growth,
-            base_margin=ebit_margin,
+            base_margin=target_margin,
             base_wacc=discount_rate
         )
 

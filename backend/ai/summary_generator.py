@@ -252,7 +252,7 @@ def _build_fallback(data: Dict[str, Any]) -> str:
     verdict = data.get("verdict", {})
     sym = company.get("symbol", "$")
 
-    return f"""## Valuation Summary — {company.get('name', 'N/A')} ({company.get('ticker', 'N/A')})
+    fallback_md = f"""## Valuation Summary — {company.get('name', 'N/A')} ({company.get('ticker', 'N/A')})
 
 > *AI-generated summary unavailable. Key metrics below.*
 
@@ -270,3 +270,8 @@ def _build_fallback(data: Dict[str, Any]) -> str:
 **Verdict:** {verdict.get('verdict', 'N/A')} — {verdict.get('description', 'N/A')}
 (Upside: {_fmt_pct(verdict.get('upside_pct'))})
 """
+    import json
+    return json.dumps({
+        "summary": fallback_md,
+        "risks": ["AI generation unavailable. Please verify API keys and quota."]
+    })
