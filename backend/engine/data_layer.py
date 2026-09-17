@@ -91,8 +91,14 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     if suffix and not yf_ticker.upper().endswith(suffix.upper()):
         yf_ticker = yf_ticker + suffix
 
+    import requests
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    })
+    
     logger.info("Fetching data for %s (yfinance ticker: %s)", ticker, yf_ticker)
-    stock = yf.Ticker(yf_ticker)
+    stock = yf.Ticker(yf_ticker, session=session)
 
     # Financial statements – .T transposes columns-as-years to rows-as-years
     income_stmt: pd.DataFrame = stock.financials.T
