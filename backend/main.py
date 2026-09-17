@@ -418,11 +418,24 @@ def analyze(req: AnalyzeRequest):
     except HTTPException:
         raise
     except ValueError as exc:
+        err_str = str(exc)
         logger.warning("Analyze — bad input: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc))
+        # Detect Yahoo Finance 429 rate limiting and return a user-friendly message
+        if "429" in err_str or "Too Many Requests" in err_str or "Expecting value" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail="Yahoo Finance is rate-limiting this server. Please wait 10–15 minutes and try again."
+            )
+        raise HTTPException(status_code=400, detail=err_str)
     except Exception as exc:
+        err_str = str(exc)
         logger.exception("Analyze — server error")
-        raise HTTPException(status_code=500, detail=str(exc))
+        if "429" in err_str or "Too Many Requests" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail="Yahoo Finance is rate-limiting this server. Please wait 10–15 minutes and try again."
+            )
+        raise HTTPException(status_code=500, detail=err_str)
 
 
 # ---------------------------------------------------------------------------
