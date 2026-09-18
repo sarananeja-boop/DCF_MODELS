@@ -45,6 +45,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
 logger = logging.getLogger("dcf-api")
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 app = FastAPI(
     title="Automated DCF Valuation Platform",

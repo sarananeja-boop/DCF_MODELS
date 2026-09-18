@@ -102,27 +102,31 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     balance_sheet: pd.DataFrame = stock.balance_sheet.T
     cash_flow: pd.DataFrame = stock.cashflow.T
 
+    # 1. Retrieve price & shares via fast_info (fast, direct chart API, no crumb required)
+    current_price = None
+    shares_out = None
     try:
-        info: dict = stock.info or {}
+        fast = stock.fast_info
+        current_price = getattr(fast, "last_price", None) or fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
+        shares_out = getattr(fast, "shares", None) or fast.get("shares")
+        if shares_out is None and fast.get("marketCap") and current_price:
+            shares_out = float(fast.get("marketCap")) / float(current_price)
     except Exception:
-        info = {}
+        pass
 
-    # Strict validation with robust fallbacks
-    current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
-    shares_out = info.get("sharesOutstanding")
-
+    # 2. Only query heavier stock.info if critical denominators are still missing
+    info: dict = {}
     if current_price is None or shares_out is None:
         try:
-            fast = stock.fast_info
+            info = stock.info or {}
             if current_price is None:
-                current_price = fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
+                current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
             if shares_out is None:
-                shares_out = fast.get("shares")
-            if shares_out is None and fast.get("marketCap") and current_price:
-                shares_out = float(fast.get("marketCap")) / float(current_price)
+                shares_out = info.get("sharesOutstanding")
         except Exception:
             pass
 
+    # 3. Last-resort fallback for price via 5-day history
     if current_price is None:
         try:
             hist = stock.history(period="5d")
