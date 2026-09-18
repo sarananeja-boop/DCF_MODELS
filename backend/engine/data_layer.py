@@ -102,11 +102,34 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     balance_sheet: pd.DataFrame = stock.balance_sheet.T
     cash_flow: pd.DataFrame = stock.cashflow.T
 
-    info: dict = stock.info
+    try:
+        info: dict = stock.info or {}
+    except Exception:
+        info = {}
 
-    # Strict validation (notebook Step 2)
-    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+    # Strict validation with robust fallbacks
+    current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
     shares_out = info.get("sharesOutstanding")
+
+    if current_price is None or shares_out is None:
+        try:
+            fast = stock.fast_info
+            if current_price is None:
+                current_price = fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
+            if shares_out is None:
+                shares_out = fast.get("shares")
+            if shares_out is None and fast.get("marketCap") and current_price:
+                shares_out = float(fast.get("marketCap")) / float(current_price)
+        except Exception:
+            pass
+
+    if current_price is None:
+        try:
+            hist = stock.history(period="5d")
+            if not hist.empty:
+                current_price = float(hist["Close"].iloc[-1])
+        except Exception:
+            pass
 
     if current_price is None or shares_out is None:
         raise ValueError(
@@ -120,9 +143,11 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         beta = 1.0
     market_cap = float(current_price) * float(shares_out)
 
+    company_name = info.get("shortName") or info.get("longName") or yf_ticker
+
     return {
         "ticker": yf_ticker,
-        "name": info.get("shortName", yf_ticker),
+        "name": company_name,
         "current_price": float(current_price),
         "shares_outstanding": float(shares_out),
         "market_cap": market_cap,
