@@ -44,7 +44,24 @@ export default function AIReportRenderer({ jsonString }) {
     );
   }
 
-  if (!report || !report.headline_metrics) return <div className="text-red-400">Invalid report structure.</div>;
+  if (!report || (!report.headline_metrics && !report.summary)) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl text-center space-y-3">
+        <div className="text-amber-400 font-medium">Unable to load AI report structure.</div>
+        <p className="text-xs text-zinc-400">The AI model response was interrupted or returned an incomplete payload. Please click "Generate AI Summary" above to retry.</p>
+      </div>
+    );
+  }
+
+  if (report && !report.headline_metrics && report.summary) {
+    return (
+      <div className="space-y-4 text-zinc-300 text-sm bg-zinc-900 border border-zinc-800 p-6 rounded-xl" id="ai-summary-content">
+        <div className="prose prose-invert max-w-none whitespace-pre-line leading-relaxed font-sans">
+          {report.summary}
+        </div>
+      </div>
+    );
+  }
 
   const { currency, headline_metrics: hl, executive_summary: exec, dcf_analysis: dcf, monte_carlo_analysis: mc, relative_valuation: rel, key_drivers, risks, model_quality, final_synopsis } = report;
 
@@ -55,26 +72,26 @@ export default function AIReportRenderer({ jsonString }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <div className="text-zinc-500 text-xs mb-1">Current Price</div>
-          <div className="text-2xl font-bold text-white">{formatNum(hl.current_price, currency)}</div>
+          <div className="text-2xl font-bold text-white">{formatNum(hl?.current_price, currency)}</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <div className="text-zinc-500 text-xs mb-1">DCF Value</div>
-          <div className="text-2xl font-bold text-blue-400">{formatNum(hl.dcf_value, currency)}</div>
-          <div className={`text-xs mt-1 ${hl.dcf_upside_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {hl.dcf_upside_percent >= 0 ? '+' : ''}{formatPct(hl.dcf_upside_percent)}
+          <div className="text-2xl font-bold text-blue-400">{formatNum(hl?.dcf_value, currency)}</div>
+          <div className={`text-xs mt-1 ${hl?.dcf_upside_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {hl?.dcf_upside_percent >= 0 ? '+' : ''}{formatPct(hl?.dcf_upside_percent)}
           </div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <div className="text-zinc-500 text-xs mb-1">MC Median</div>
-          <div className="text-2xl font-bold text-indigo-400">{formatNum(hl.monte_carlo_median, currency)}</div>
-          <div className={`text-xs mt-1 ${hl.monte_carlo_upside_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {hl.monte_carlo_upside_percent >= 0 ? '+' : ''}{formatPct(hl.monte_carlo_upside_percent)}
+          <div className="text-2xl font-bold text-indigo-400">{formatNum(hl?.monte_carlo_median, currency)}</div>
+          <div className={`text-xs mt-1 ${hl?.monte_carlo_upside_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {hl?.monte_carlo_upside_percent >= 0 ? '+' : ''}{formatPct(hl?.monte_carlo_upside_percent)}
           </div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <div className="text-zinc-500 text-xs mb-1">MC Range (P5-P95)</div>
           <div className="text-lg font-semibold text-white mt-1">
-            {formatNum(hl.monte_carlo_p5, currency)} - {formatNum(hl.monte_carlo_p95, currency)}
+            {formatNum(hl?.monte_carlo_p5, currency)} - {formatNum(hl?.monte_carlo_p95, currency)}
           </div>
         </div>
       </div>
