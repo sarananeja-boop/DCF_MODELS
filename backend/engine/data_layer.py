@@ -91,11 +91,8 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     if suffix and not yf_ticker.upper().endswith(suffix.upper()):
         yf_ticker = yf_ticker + suffix
 
-    import requests
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    })
+    from curl_cffi import requests as cffi_requests
+    session = cffi_requests.Session(impersonate="chrome")
     
     logger.info("Fetching data for %s (yfinance ticker: %s)", ticker, yf_ticker)
     stock = yf.Ticker(yf_ticker, session=session)
