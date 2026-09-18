@@ -154,16 +154,55 @@ const DCFModelTab = ({ data }) => {
                 </tr>
               )}
               {/* UFCF */}
-              <tr className="bg-zinc-800/80 hover:bg-zinc-800/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-slate-200 sticky left-0 bg-zinc-800/80 z-10 border-r border-zinc-800/30">
-                  UFCF
+              <tr className="bg-zinc-800/90 hover:bg-zinc-800 transition-colors border-t border-zinc-700">
+                <td className="px-4 py-3 font-semibold text-slate-100 sticky left-0 bg-zinc-800/90 z-10 border-r border-zinc-800/30">
+                  Unlevered FCF (UFCF)
                 </td>
                 {dcf_result.projected_ufcf?.map((val, i) => (
-                  <td key={i} className="px-4 py-3 text-right font-bold font-mono tabular-nums text-slate-100">
+                  <td key={i} className="px-4 py-3 text-right font-bold font-mono tabular-nums text-emerald-400">
                     {formatNum(val)}
                   </td>
                 ))}
               </tr>
+              {/* Mid-Year Period (t) */}
+              {dcf_result.discount_periods && (
+                <tr className="bg-zinc-900/40 hover:bg-zinc-800/60 transition-colors text-xs">
+                  <td className="px-4 py-2.5 font-medium text-slate-400 sticky left-0 bg-zinc-900/40 z-10 border-r border-zinc-800/30">
+                    Mid-Year Period (t)
+                  </td>
+                  {dcf_result.discount_periods.map((t, i) => (
+                    <td key={i} className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">
+                      {t.toFixed(1)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* Discount Factor */}
+              {dcf_result.discount_factors && (
+                <tr className="bg-zinc-900/30 hover:bg-zinc-800/60 transition-colors text-xs">
+                  <td className="px-4 py-2.5 font-medium text-slate-400 sticky left-0 bg-zinc-900/30 z-10 border-r border-zinc-800/30">
+                    Discount Factor [1/(1+WACC)^t]
+                  </td>
+                  {dcf_result.discount_factors.map((df, i) => (
+                    <td key={i} className="px-4 py-2.5 text-right font-mono tabular-nums text-blue-400">
+                      {df.toFixed(4)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {/* PV of UFCF */}
+              {dcf_result.pv_ufcf_list && (
+                <tr className="bg-emerald-950/20 hover:bg-emerald-950/30 transition-colors border-t border-emerald-900/40">
+                  <td className="px-4 py-3 font-semibold text-emerald-300 sticky left-0 bg-zinc-800/90 z-10 border-r border-zinc-800/30">
+                    Present Value of UFCF
+                  </td>
+                  {dcf_result.pv_ufcf_list.map((pv, i) => (
+                    <td key={i} className="px-4 py-3 text-right font-bold font-mono tabular-nums text-emerald-300">
+                      {formatNum(pv)}
+                    </td>
+                  ))}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -171,7 +210,20 @@ const DCFModelTab = ({ data }) => {
 
       {/* Terminal Value Section */}
       <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 mt-4">
-        <h2 className="text-xl font-semibold text-slate-100 mb-4">Terminal Value</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h2 className="text-xl font-semibold text-slate-100">Enterprise Value Breakdown</h2>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="px-2.5 py-1 rounded bg-blue-900/30 border border-blue-500/30 text-blue-300 font-mono">
+              Mid-Year Convention Active
+            </span>
+            <span className="px-2.5 py-1 rounded bg-zinc-700/50 border border-zinc-600/30 text-zinc-300 font-mono">
+              Tax Rate: {formatPct(dcf_result.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21))}
+            </span>
+            <span className="px-2.5 py-1 rounded bg-zinc-700/50 border border-zinc-600/30 text-zinc-300 font-mono">
+              Terminal g: {formatPct(dcf_result.terminal_growth ?? (market === 'IN' ? 0.055 : 0.025))}
+            </span>
+          </div>
+        </div>
         
         {!data.diagnostics?.terminal_value_valid && data.diagnostics?.terminal_value_note && (
           <div className="mb-4 bg-amber-900/20 border border-amber-500/30 p-3 rounded-lg text-amber-200/90 text-sm">
@@ -179,9 +231,16 @@ const DCFModelTab = ({ data }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
-            <p className="text-slate-400 text-sm mb-1">Terminal Value</p>
+            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">PV of 5-Yr Cash Flows</p>
+            <p className="text-xl font-semibold text-emerald-400 font-mono tabular-nums">
+              {formatNum(dcf_result.pv_ufcf)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Sum of discounted UFCF</p>
+          </div>
+          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
+            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Terminal Value (Nominal)</p>
             {dcf_result.terminal_value === null || !data.diagnostics?.terminal_value_valid ? (
               <p className="text-xl font-semibold text-zinc-500 font-mono tabular-nums">N/A</p>
             ) : (
@@ -189,12 +248,21 @@ const DCFModelTab = ({ data }) => {
                 {formatNum(dcf_result.terminal_value)}
               </p>
             )}
+            <p className="text-xs text-slate-500 mt-1">Gordon Growth formula</p>
           </div>
           <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
-            <p className="text-slate-400 text-sm mb-1">Enterprise Value</p>
-            <p className="text-xl font-semibold text-slate-100 font-mono tabular-nums">
+            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">PV of Terminal Value</p>
+            <p className="text-xl font-semibold text-blue-400 font-mono tabular-nums">
+              {formatNum(dcf_result.pv_terminal_value)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Discounted using Year 5 factor</p>
+          </div>
+          <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800/50">
+            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Enterprise Value</p>
+            <p className="text-xl font-semibold text-white font-mono tabular-nums">
               {formatNum(dcf_result.enterprise_value)}
             </p>
+            <p className="text-xs text-slate-500 mt-1">PV(UFCF) + PV(Terminal)</p>
           </div>
         </div>
       </div>

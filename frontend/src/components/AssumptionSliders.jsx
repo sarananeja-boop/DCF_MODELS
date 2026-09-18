@@ -12,18 +12,22 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   
   const defaultWacc = data.wacc.wacc;
 
+  const defaultTgr = (data.macro?.terminal_growth ?? (data.company?.market === 'IN' ? 0.055 : 0.025)) * 100;
+  const isIndia = data.company?.market === 'IN';
+  const maxTgr = isIndia ? 8.0 : 5.0;
+
   const [growth, setGrowth] = useState(defaultGrowth * 100);
   const [margin, setMargin] = useState(defaultMargin * 100);
   const [wacc, setWacc] = useState(defaultWacc * 100);
-  const [tgr, setTgr] = useState(2.5);
+  const [tgr, setTgr] = useState(defaultTgr);
 
   useEffect(() => {
     // Reset when data changes natively (new ticker)
     setGrowth(defaultGrowth * 100);
     setMargin(defaultMargin * 100);
     setWacc(defaultWacc * 100);
-    setTgr(2.5);
-  }, [data.company.ticker]);
+    setTgr(defaultTgr);
+  }, [data.company.ticker, defaultTgr]);
 
   useEffect(() => {
     // Sync to parent on every change without triggering API
@@ -133,7 +137,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
             </div>
           </div>
           <input 
-            type="range" min="1" max="5" step="0.1" 
+            type="range" min="1" max={maxTgr} step="0.1" 
             value={tgr} onChange={wrapChange(setTgr)}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />

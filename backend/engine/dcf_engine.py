@@ -100,34 +100,19 @@ def run_dcf(
     terminal_growth: float = 0.025,
     projection_years: int = 5,
     current_margin: Optional[float] = None,
+    tax_rate: Optional[float] = None,
+    use_mid_year: bool = True,
 ) -> dict:
-    """Run a single multi-stage DCF valuation with linear growth fade.
+    """Run a single multi-stage DCF valuation with linear growth fade and Mid-Year convention.
 
-    Implements the **exact** logic from notebook Step 4E:
+    Implements institutional Damodaran DCF modeling (matching HUL FINAL MODEL.xlsx):
 
     1. Revenue grows from ``start_growth`` in Year 1 to ``terminal_growth``
        in Year *N* via ``np.linspace``.
     2. UFCF = NOPAT + D&A − CapEx − Δ NWC (all as % of projected revenue).
-    3. Discount projected UFCFs.
-    4. Terminal Value via Gordon Growth Model.
+    3. Discount projected UFCFs using Mid-Year Convention (t = 0.5, 1.5, 2.5, 3.5, 4.5).
+    4. Terminal Value via Gordon Growth Model, discounted via the terminal period factor.
     5. EV → Equity bridge (add cash, subtract debt, floor at 0).
-
-    Args:
-        start_growth:     Year-1 revenue growth rate (decimal).
-        ebit_margin:      EBIT / Revenue (decimal).
-        discount_rate:    WACC used for discounting (decimal).
-        metrics:          Dict from ``compute_historical_metrics``.
-        wacc_data:        Dict from ``compute_wacc``.
-        stock_data:       Dict from ``fetch_stock_data``.
-        terminal_growth:  Long-run growth (default 2.5 %).
-        projection_years: Number of projected years (default 5).
-        current_margin:   Optional starting margin for interpolation (for loss-making companies).
-
-    Returns:
-        Dict with: ``implied_price``, ``enterprise_value``,
-        ``projected_revenue`` (list), ``projected_ufcf`` (list),
-        ``growth_schedule`` (list), ``pv_ufcf``, ``terminal_value``,
-        ``pv_terminal_value``, ``equity_value``.
     """
     avg_dna_pct: float = metrics["avg_dna_pct"]
     avg_capex_pct: float = metrics["avg_capex_pct"]
@@ -137,7 +122,10 @@ def run_dcf(
     total_debt: float = wacc_data["total_debt"]
     cash_equiv: float = metrics["cash_and_equivalents"]
     shares_out: float = stock_data["shares_outstanding"]
-    tax_rate: float = stock_data.get("_tax_rate", 0.21)
+
+    # Explicit tax rate priority: passed arg -> stock_data._tax_rate -> market fallback
+    if tax_rate is None:
+        tax_rate = stock_data.get("_tax_rate", 0.2517 if stock_data.get("market") == "IN" else 0.21)
 
     proj_ufcf: List[float] = []
     proj_rev: List[float] = []
@@ -177,9 +165,15 @@ def run_dcf(
         
         last_rev = next_rev
 
-    # Discount projected UFCFs
-    discount_factors = [(1 + discount_rate) ** (i + 1) for i in range(projection_years)]
-    pv_ufcf = sum(cf / df for cf, df in zip(proj_ufcf, discount_factors))
+    # Discount projected UFCFs using Mid-Year Convention (t = 0.5, 1.5, 2.5, ...)
+    if use_mid_year:
+        discount_periods = [float(i + 0.5) for i in range(projection_years)]
+    else:
+        discount_periods = [float(i + 1.0) for i in range(projection_years)]
+
+    discount_factors = [(1.0 + discount_rate) ** t for t in discount_periods]
+    pv_ufcf_list = [cf / df for cf, df in zip(proj_ufcf, discount_factors)]
+    pv_ufcf = sum(pv_ufcf_list)
 
     # Terminal Value via Gordon Growth Model
     terminal_value_valid = True
@@ -196,15 +190,15 @@ def run_dcf(
         terminal_value_valid = False
         terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
     else:
-        terminal_value = (proj_ufcf[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-        pv_terminal_value = terminal_value / ((1 + discount_rate) ** projection_years)
+        terminal_value = (proj_ufcf[-1] * (1.0 + terminal_growth)) / (discount_rate - terminal_growth)
+        # In HUL FINAL MODEL.xlsx (D29 = D24 * J10), TV is discounted using the final forecast period factor
+        pv_terminal_value = terminal_value / discount_factors[-1]
 
     # EV → Equity bridge
-    # No max(0, ...) clamping; let it be negative if it calculates out that way
     enterprise_val = pv_ufcf + pv_terminal_value
     equity_value = enterprise_val + cash_equiv - total_debt
     
-    # We still floor the implied price at 0.0 since negative stock price makes no sense
+    # Implied price per share floored at 0.0
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
     return {
@@ -219,10 +213,16 @@ def run_dcf(
         "growth_schedule": growth_schedule.tolist(),
         "margin_schedule": margin_schedule.tolist(),
         "pv_ufcf": float(pv_ufcf),
+        "pv_ufcf_list": [float(p) for p in pv_ufcf_list],
+        "discount_periods": discount_periods,
+        "discount_factors": [float(1.0 / df) for df in discount_factors],
         "terminal_value": float(terminal_value) if terminal_value is not None else None,
         "pv_terminal_value": float(pv_terminal_value),
         "equity_value": float(equity_value),
         "terminal_value_valid": terminal_value_valid,
         "terminal_value_note": terminal_value_note,
         "normalized_nwc_to_revenue": float(normalized_nwc_to_revenue),
+        "tax_rate": float(tax_rate),
+        "terminal_growth": float(terminal_growth),
+        "use_mid_year": use_mid_year,
     }

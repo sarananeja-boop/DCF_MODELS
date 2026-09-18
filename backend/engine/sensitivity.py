@@ -11,7 +11,9 @@ def generate_sensitivity_grid(
     projection_years: int = 5, 
     grid_size: int = 9,
     target_margin: float = None,
-    current_margin: Optional[float] = None
+    current_margin: Optional[float] = None,
+    tax_rate: Optional[float] = None,
+    use_mid_year: bool = True,
 ) -> Dict[str, Any]:
     """
     Generates a 2D sensitivity grid for Revenue Growth vs. WACC.
@@ -20,6 +22,9 @@ def generate_sensitivity_grid(
     ebit_margin = target_margin if target_margin is not None else metrics.get('avg_ebit_margin', 0.0)
     base_wacc = wacc_data.get('wacc', 0.10)
     
+    if tax_rate is None and market_profile:
+        tax_rate = market_profile.get("tax_rate")
+        
     # Generate ranges
     growth_range = np.linspace(avg_rev_growth - 0.06, avg_rev_growth + 0.06, grid_size)
     raw_wacc_range = np.linspace(base_wacc - 0.03, base_wacc + 0.03, grid_size)
@@ -42,7 +47,9 @@ def generate_sensitivity_grid(
                     stock_data=stock_data,
                     terminal_growth=terminal_growth,
                     projection_years=projection_years,
-                    current_margin=current_margin
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=use_mid_year,
                 )
                 row.append(float(dcf_result['implied_price']))
             except Exception:
@@ -66,7 +73,9 @@ def generate_margin_sensitivity_grid(
     projection_years: int = 5, 
     grid_size: int = 9,
     target_margin: float = None,
-    current_margin: Optional[float] = None
+    current_margin: Optional[float] = None,
+    tax_rate: Optional[float] = None,
+    use_mid_year: bool = True,
 ) -> Dict[str, Any]:
     """
     Generates a 2D sensitivity grid for EBIT Margin vs. WACC.
@@ -75,6 +84,9 @@ def generate_margin_sensitivity_grid(
     base_margin = target_margin if target_margin is not None else metrics.get('avg_ebit_margin', 0.0)
     base_wacc = wacc_data.get('wacc', 0.10)
     
+    if tax_rate is None and market_profile:
+        tax_rate = market_profile.get("tax_rate")
+        
     # Generate ranges
     margin_range = np.linspace(base_margin - 0.08, base_margin + 0.08, grid_size)
     raw_wacc_range = np.linspace(base_wacc - 0.03, base_wacc + 0.03, grid_size)
@@ -97,7 +109,9 @@ def generate_margin_sensitivity_grid(
                     stock_data=stock_data,
                     terminal_growth=terminal_growth,
                     projection_years=projection_years,
-                    current_margin=current_margin
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=use_mid_year,
                 )
                 row.append(float(dcf_result['implied_price']))
             except Exception:

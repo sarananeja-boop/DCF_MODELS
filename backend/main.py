@@ -233,10 +233,11 @@ def analyze(req: AnalyzeRequest):
             if overrides.wacc is not None
             else wacc_data.get("wacc", 0.10)
         )
+        default_terminal_g = market_profile.get("terminal_growth", 0.055 if market == "IN" else 0.025)
         terminal_growth = (
             overrides.terminal_growth
             if overrides.terminal_growth is not None
-            else 0.025
+            else default_terminal_g
         )
         projection_years = (
             overrides.projection_years
@@ -244,7 +245,11 @@ def analyze(req: AnalyzeRequest):
             else 5
         )
 
-        # 7. Base-case DCF
+        tax_rate = market_profile.get("tax_rate", 0.2517 if market == "IN" else 0.21)
+        stock_data["_tax_rate"] = tax_rate
+        stock_data["market"] = market
+
+        # 7. Base-case DCF with Mid-Year Convention
         dcf_result = run_dcf(
             start_growth=start_growth,
             ebit_margin=target_margin,
@@ -254,7 +259,9 @@ def analyze(req: AnalyzeRequest):
             stock_data=stock_data,
             terminal_growth=terminal_growth,
             projection_years=projection_years,
-            current_margin=current_margin
+            current_margin=current_margin,
+            tax_rate=tax_rate,
+            use_mid_year=True,
         )
 
         # 8. Monte Carlo
@@ -280,7 +287,9 @@ def analyze(req: AnalyzeRequest):
             terminal_growth=terminal_growth,
             projection_years=projection_years,
             target_margin=target_margin,
-            current_margin=current_margin
+            current_margin=current_margin,
+            tax_rate=tax_rate,
+            use_mid_year=True,
         )
         sens_margin_wacc = generate_margin_sensitivity_grid(
             metrics=metrics,
@@ -290,7 +299,8 @@ def analyze(req: AnalyzeRequest):
             terminal_growth=terminal_growth,
             projection_years=projection_years,
             target_margin=target_margin,
-            current_margin=current_margin
+            current_margin=current_margin,
+            tax_rate=tax_rate,
         )
 
         # 10. Validation (EV/EBITDA cross-check)
@@ -334,7 +344,9 @@ def analyze(req: AnalyzeRequest):
                 "risk_free_rate": market_profile.get("risk_free_rate"),
                 "risk_free_source": market_profile.get("risk_free_source"),
                 "market_return": market_profile.get("market_return"),
-                "tax_rate": market_profile.get("tax_rate"),
+                "tax_rate": tax_rate,
+                "terminal_growth": terminal_growth,
+                "gdp_growth": market_profile.get("gdp_growth", 0.065 if market == "IN" else 0.025),
                 "benchmark_index": market_profile.get("benchmark_index"),
             },
             "historicals": {

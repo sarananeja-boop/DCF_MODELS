@@ -31,6 +31,8 @@ MARKET_PROFILES: Dict[str, dict] = {
         "risk_free_rate": 0.042,           # fallback / default
         "market_return": 0.10,
         "tax_rate": 0.21,
+        "terminal_growth": 0.025,          # US long-term real GDP (2%) + inflation (2%) cap
+        "gdp_growth": 0.025,
         "currency": "USD",
         "symbol": "$",
         "ticker_suffix": "",
@@ -41,7 +43,9 @@ MARKET_PROFILES: Dict[str, dict] = {
     "IN": {
         "risk_free_rate": 0.071,           # fallback / default
         "market_return": 0.13,
-        "tax_rate": 0.2517,
+        "tax_rate": 0.2517,                # 22% basic + 10% surcharge + 4% cess
+        "terminal_growth": 0.055,          # India long-term nominal growth (sustainable < Rf 7.1%)
+        "gdp_growth": 0.065,               # India real GDP growth trend (~6.5%)
         "currency": "INR",
         "symbol": "₹",
         "ticker_suffix": ".NS",

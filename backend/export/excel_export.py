@@ -322,7 +322,7 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
     ke = wacc_data.get("cost_of_equity", 0)
     kd = wacc_data.get("cost_of_debt", 0)
     wacc_val = wacc_data.get("wacc", 0)
-    term_g = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else 0.025
+    term_g = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025)
     ebit_m = historicals.get("avg_ebit_margin", 0)
 
     driver_items = [
@@ -565,13 +565,13 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
     wacc_data = data.get("wacc", {})
     overrides = data.get("overrides_applied", {})
 
-    rf = macro.get("risk_free_rate", 0.066)
-    market_return = macro.get("market_return", 0.13)
-    tax_rate = macro.get("tax_rate", 0.25)
+    rf = macro.get("risk_free_rate", 0.071 if company.get("market") == "IN" else 0.042)
+    market_return = macro.get("market_return", 0.13 if company.get("market") == "IN" else 0.10)
+    tax_rate = macro.get("tax_rate", 0.2517 if company.get("market") == "IN" else 0.21)
     beta = market_data.get("beta", 1.0)
     market_cap = market_data.get("market_cap", 0.0)
     total_debt = wacc_data.get("total_debt", 0.0)
-    terminal_growth = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else 0.025
+    terminal_growth = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025)
 
     cfmt_large = _get_currency_fmt_large(currency)
 
@@ -725,11 +725,8 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     proj_nopat = dcf.get("projected_nopat", [])
     n_proj = len(growth_schedule)
 
-    # Determine exact tax rate used in DCF engine
-    if proj_rev and margin_schedule and proj_nopat and proj_rev[0] * margin_schedule[0] > 0:
-        tax_rate_dcf = round(1.0 - (proj_nopat[0] / (proj_rev[0] * margin_schedule[0])), 4)
-    else:
-        tax_rate_dcf = macro.get("tax_rate", 0.21)
+    # Tax rate from macro profile (25.17% for IN, 21.00% for US)
+    tax_rate_dcf = macro.get("tax_rate", 0.2517 if company.get("market") == "IN" else 0.21)
 
     avg_dna_pct = historicals.get("avg_dna_pct", 0.02)
     avg_capex_pct = historicals.get("avg_capex_pct", 0.03)
@@ -959,16 +956,20 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     fcff_row = r
     r += 1
 
-    # 11. Discount Period (t = 1, 2, 3, 4, 5)
-    lbl11 = ws.cell(row=r, column=2, value="Discounting Period (Years t)")
+    # 11. Mid-Year Convention (t = 0.5, 1.5, 2.5, 3.5, 4.5)
+    lbl11 = ws.cell(row=r, column=2, value="Mid-Year Convention (Years t)")
     lbl11.font = FONT_LABEL
     lbl11.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=0.0).alignment = ALIGN_CENTER
+    ws.cell(row=r, column=3, value="-").alignment = ALIGN_CENTER
     ws.cell(row=r, column=3).border = THIN_BORDER
 
     for i in range(n_proj):
         col = 4 + i
-        c = ws.cell(row=r, column=col, value=float(i + 1))
+        if i == 0:
+            c = ws.cell(row=r, column=col, value=0.5)
+        else:
+            prev_letter = get_column_letter(col - 1)
+            c = ws.cell(row=r, column=col, value=f"={prev_letter}{r}+1")
         c.font = FONT_DATA
         c.number_format = "0.0"
         c.alignment = ALIGN_CENTER

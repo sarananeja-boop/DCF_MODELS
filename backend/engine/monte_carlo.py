@@ -224,6 +224,8 @@ def run_monte_carlo(
             stock_data=stock_data_sim,
             terminal_growth=terminal_growth,
             projection_years=projection_years,
+            tax_rate=tax_rate,
+            use_mid_year=True,
         )
         simulated_prices[i] = result["implied_price"]
         simulated_evs[i] = result["enterprise_value"]
