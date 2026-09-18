@@ -21,6 +21,7 @@ import MonteCarloTab from './components/MonteCarloTab';
 import SensitivityTab from './components/SensitivityTab';
 import TrendsTab from './components/TrendsTab';
 import ExcelDownloadButton from './components/ExcelDownloadButton';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
@@ -340,18 +341,20 @@ export default function App() {
               
               {/* Tab Content */}
               <div className="flex-1 overflow-y-auto p-6">
-                {activeTab === 'overview' && (
-                  <OverviewTab 
-                    data={analysisData} 
-                    aiSummary={aiSummary} 
-                    aiLoading={aiLoading} 
-                    onFetchAISummary={handleFetchAISummary} 
-                  />
-                )}
-                {activeTab === 'dcf' && <DCFModelTab data={analysisData} />}
-                {activeTab === 'monte_carlo' && <MonteCarloTab data={analysisData} />}
-                {activeTab === 'sensitivity' && <SensitivityTab data={analysisData} />}
-                {activeTab === 'trends' && <TrendsTab data={analysisData} />}
+                <ErrorBoundary key={activeTab}>
+                  {activeTab === 'overview' && (
+                    <OverviewTab 
+                      data={analysisData} 
+                      aiSummary={aiSummary} 
+                      aiLoading={aiLoading} 
+                      onFetchAISummary={handleFetchAISummary} 
+                    />
+                  )}
+                  {activeTab === 'dcf' && <DCFModelTab data={analysisData} />}
+                  {activeTab === 'monte_carlo' && <MonteCarloTab data={analysisData} />}
+                  {activeTab === 'sensitivity' && <SensitivityTab data={analysisData} />}
+                  {activeTab === 'trends' && <TrendsTab data={analysisData} />}
+                </ErrorBoundary>
               </div>
               
             </div>

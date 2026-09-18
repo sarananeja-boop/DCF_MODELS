@@ -4,8 +4,8 @@ import { FiArrowRight } from 'react-icons/fi';
 const DCFModelTab = ({ data }) => {
   if (!data || !data.dcf_result) return null;
 
-  const isFinancial = Boolean(company?.is_financial || data.diagnostics?.is_financial || dcf_result?.is_financial);
   const { company: comp, dcf_result: dcf, wacc: waccObj } = data;
+  const isFinancial = Boolean(comp?.is_financial || data.diagnostics?.is_financial || dcf?.is_financial);
   const symbol = comp?.symbol || '$';
   const market = comp?.market || 'US';
 
