@@ -14,6 +14,7 @@ This module:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -62,6 +63,121 @@ def safe_get(df: pd.DataFrame, column: str, default: float = 0) -> np.ndarray:
             return df[alt].fillna(default).values
 
     return np.full(len(df), default, dtype=float)
+
+
+# ---------------------------------------------------------------------------
+# Benchmark Returns & Clean Beta Calculation
+# ---------------------------------------------------------------------------
+_BENCHMARK_CACHE: Dict[str, tuple] = {}
+_BENCHMARK_CACHE_TTL_SECONDS: int = 3600  # 1 hour TTL matching market_config.py
+
+
+def _get_benchmark_returns(benchmark: str) -> Optional[pd.Series]:
+    """Fetch and cache 2-year weekly returns for market benchmark."""
+    now = time.time()
+    if benchmark in _BENCHMARK_CACHE:
+        series, ts = _BENCHMARK_CACHE[benchmark]
+        if now - ts < _BENCHMARK_CACHE_TTL_SECONDS:
+            return series
+    try:
+        b = yf.Ticker(benchmark)
+        hist = b.history(period="2y", interval="1wk")
+        if not hist.empty and "Close" in hist:
+            returns = hist["Close"].pct_change().dropna()
+            _BENCHMARK_CACHE[benchmark] = (returns, now)
+            return returns
+    except Exception as e:
+        logger.warning("Could not fetch benchmark returns for %s: %s", benchmark, e)
+    return None
+
+
+def compute_clean_beta(
+    stock: yf.Ticker,
+    ticker: str,
+    market: str,
+    raw_info_beta: Optional[float] = None
+) -> dict:
+    """Compute an institutional Blume-adjusted beta against the local benchmark.
+
+    Addresses international distortion where Yahoo Finance beta is calculated
+    against the US S&P 500 (^GSPC in USD), producing negative or near-zero betas
+    for Indian/international equities.
+    
+    Returns a dict with:
+      - beta: Blume-adjusted beta for WACC/Ke calculations.
+      - raw_beta: Unadjusted covariance beta (or info beta).
+      - beta_clamped: True if an abnormal/negative beta triggered a safety floor.
+      - beta_note: Explanation of methodology or clamp reasons.
+    """
+    benchmark = "^NSEI" if market.upper() == "IN" else "^GSPC"
+    
+    # Check if regression against domestic benchmark is feasible
+    try:
+        hist = stock.history(period="2y", interval="1wk")
+        if not hist.empty and "Close" in hist:
+            df_asset = hist["Close"].pct_change().dropna()
+            df_bench = _get_benchmark_returns(benchmark)
+            if df_bench is not None and not df_bench.empty:
+                common = pd.concat([df_asset, df_bench], axis=1, join="inner").dropna()
+                common.columns = ["asset", "market"]
+                if len(common) >= 15:
+                    cov = np.cov(common["asset"], common["market"])[0, 1]
+                    var_m = np.var(common["market"])
+                    if var_m > 0:
+                        calc_raw = float(cov / var_m)
+                        beta_clamped = False
+                        clamp_reason = None
+                        
+                        # Only clamp if raw beta is negative or implausibly close to zero (<= 0.10)
+                        # Does NOT blanket-clamp genuine defensive low-beta stocks (0.3 - 0.5)
+                        eff_raw = calc_raw
+                        if calc_raw <= 0.10:
+                            eff_raw = 0.20
+                            beta_clamped = True
+                            clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was negative or near-zero; floored raw beta to 0.20."
+                        elif calc_raw > 2.80:
+                            eff_raw = 2.80
+                            beta_clamped = True
+                            clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was exceptionally volatile; capped raw beta to 2.80."
+
+                        # Blume's adjustment (standard at Bloomberg / Merrill Lynch):
+                        # Regresses beta towards market mean (1.0)
+                        blume_beta = (2.0 / 3.0) * eff_raw + (1.0 / 3.0) * 1.0
+
+                        note = (
+                            f"Blume-adjusted 2Y weekly regression vs {benchmark} "
+                            f"(raw: {calc_raw:.2f} → adj: {blume_beta:.2f})"
+                        )
+                        if clamp_reason:
+                            note = f"{clamp_reason} {note}"
+
+                        return {
+                            "beta": float(blume_beta),
+                            "raw_beta": float(calc_raw),
+                            "beta_clamped": beta_clamped,
+                            "beta_note": note,
+                        }
+    except Exception as exc:
+        logger.warning("Local benchmark beta calculation failed for %s: %s", ticker, exc)
+
+    # Fallback to Yahoo Finance info beta if valid
+    if raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta > 0.10:
+        eff_info = min(2.80, raw_info_beta)
+        blume_beta = (2.0 / 3.0) * eff_info + (1.0 / 3.0) * 1.0
+        return {
+            "beta": float(blume_beta),
+            "raw_beta": float(raw_info_beta),
+            "beta_clamped": False,
+            "beta_note": f"Blume-adjusted Yahoo Finance beta (raw: {raw_info_beta:.2f} → adj: {blume_beta:.2f})",
+        }
+
+    # Ultimate fallback: market baseline beta 1.0
+    return {
+        "beta": 1.0,
+        "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else 1.0,
+        "beta_clamped": True,
+        "beta_note": "Unreliable/negative beta from data provider; defaulted to market baseline beta 1.00.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -147,9 +263,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
             f"   Cannot build a DCF without these denominators."
         )
 
-    beta = info.get("beta", 1.0)
-    if beta is None or np.isnan(beta):
-        beta = 1.0
+    beta_info = compute_clean_beta(stock, yf_ticker, market, raw_info_beta=info.get("beta"))
     market_cap = float(current_price) * float(shares_out)
 
     company_name = info.get("shortName") or info.get("longName") or yf_ticker
@@ -174,7 +288,10 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "current_price": float(current_price),
         "shares_outstanding": float(shares_out),
         "market_cap": market_cap,
-        "beta": float(beta),
+        "beta": float(beta_info["beta"]),
+        "raw_beta": float(beta_info["raw_beta"]),
+        "beta_clamped": bool(beta_info["beta_clamped"]),
+        "beta_note": str(beta_info["beta_note"]),
         "income_stmt": income_stmt,
         "balance_sheet": balance_sheet,
         "cash_flow": cash_flow,

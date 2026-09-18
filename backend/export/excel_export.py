@@ -1038,7 +1038,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     r += 1
 
     ws.cell(row=r, column=2, value="Long-Term Terminal Growth Rate (g)").font = FONT_LABEL
-    ws.cell(row=r, column=4, value=f"={term_g_ref}").font = FONT_DATA_BOLD
+    ws.cell(row=r, column=4, value=f"=MIN({term_g_ref}, {wacc_ref}-0.02)").font = FONT_DATA_BOLD
     ws.cell(row=r, column=4).number_format = PCT_FMT
     ws.cell(row=r, column=4).alignment = ALIGN_RIGHT
     for c in (2, 3, 4, 5):
@@ -2185,7 +2185,7 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     last_col_letter = get_column_letter(3 + n_proj)
 
     tv_rows = [
-        ("Long-Term Terminal Growth Rate (g)", f"={ke_links['g_cell']}", PCT_FMT, False),
+        ("Long-Term Terminal Growth Rate (g)", f"=MIN({ke_links['g_cell']}, {ke_links['ke_cell']}-0.02)", PCT_FMT, False),
         ("Steady-State Terminal ROE", f"={last_col_letter}{roe_row}", PCT_FMT, False),
         ("Terminal Reinvestment Rate (g / ROE)", f"=D{tv_start_row}/D{tv_start_row+1}", PCT_FMT, False),
         ("Normalized Terminal Year Net Income", f"={last_col_letter}{ni_row}*(1+D{tv_start_row})", cfmt_large, False),

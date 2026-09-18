@@ -14,9 +14,11 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
     ? (data.diagnostics?.current_ebit_margin ?? data.historicals.avg_roe ?? 0.14)
     : (data.diagnostics?.current_ebit_margin ?? data.historicals.avg_ebit_margin);
   const isNegativeMargin = !isFinancial && currentMargin < 0;
+  
+  // Always use the true historical baseline as default (never the applied override)
   const defaultMargin = isFinancial
-    ? (data.diagnostics?.target_ebit_margin ?? data.historicals.avg_roe ?? 0.14)
-    : (data.diagnostics?.target_ebit_margin ?? (data.historicals.avg_ebit_margin || 0.20));
+    ? (data.historicals.avg_roe ?? 0.14)
+    : (data.historicals.avg_ebit_margin ?? 0.20);
   
   const defaultWacc = isFinancial
     ? (data.wacc.cost_of_equity || data.wacc.wacc || 0.10)
@@ -26,32 +28,67 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   const isIndia = data.company?.market === 'IN';
   const maxTgr = isIndia ? 8.0 : 5.0;
 
-  const [growth, setGrowth] = useState(defaultGrowth * 100);
-  const [margin, setMargin] = useState(defaultMargin * 100);
-  const [wacc, setWacc] = useState(defaultWacc * 100);
-  const [tgr, setTgr] = useState(defaultTgr);
+  // Initialize with applied override if present, else true default
+  const [growth, setGrowth] = useState(() => (data.overrides_applied?.revenue_growth != null ? data.overrides_applied.revenue_growth * 100 : defaultGrowth * 100));
+  const [margin, setMargin] = useState(() => (data.overrides_applied?.ebit_margin != null ? data.overrides_applied.ebit_margin * 100 : defaultMargin * 100));
+  const [wacc, setWacc] = useState(() => (data.overrides_applied?.wacc != null ? data.overrides_applied.wacc * 100 : defaultWacc * 100));
+  const [tgr, setTgr] = useState(() => (data.overrides_applied?.terminal_growth != null ? data.overrides_applied.terminal_growth * 100 : defaultTgr));
 
   useEffect(() => {
-    // Reset when data changes natively (new ticker)
-    setGrowth(defaultGrowth * 100);
-    setMargin(defaultMargin * 100);
-    setWacc(defaultWacc * 100);
-    setTgr(defaultTgr);
-  }, [data.company.ticker, defaultTgr]);
+    // Reset local slider state when a new ticker is loaded
+    const g = data.overrides_applied?.revenue_growth != null ? data.overrides_applied.revenue_growth * 100 : defaultGrowth * 100;
+    const m = data.overrides_applied?.ebit_margin != null ? data.overrides_applied.ebit_margin * 100 : defaultMargin * 100;
+    const w = data.overrides_applied?.wacc != null ? data.overrides_applied.wacc * 100 : defaultWacc * 100;
+    const t = data.overrides_applied?.terminal_growth != null ? data.overrides_applied.terminal_growth * 100 : defaultTgr;
+    setGrowth(g);
+    setMargin(m);
+    setWacc(w);
+    setTgr(t);
+  }, [data.company?.ticker, defaultTgr]);
 
-  useEffect(() => {
-    // Sync to parent on every change without triggering API
+  // Handlers that update local slider state AND notify parent only on user action
+  const handleGrowthChange = (val) => {
+    setGrowth(val);
     onOverride({
-      revenue_growth: growth / 100,
+      revenue_growth: val / 100,
       ebit_margin: margin / 100,
       wacc: wacc / 100,
       terminal_growth: tgr / 100,
       projection_years: 5
     });
-  }, [growth, margin, wacc, tgr]);
+  };
 
-  const wrapChange = (setter) => (e) => {
-    setter(parseFloat(e.target.value));
+  const handleMarginChange = (val) => {
+    setMargin(val);
+    onOverride({
+      revenue_growth: growth / 100,
+      ebit_margin: val / 100,
+      wacc: wacc / 100,
+      terminal_growth: tgr / 100,
+      projection_years: 5
+    });
+  };
+
+  const handleWaccChange = (val) => {
+    setWacc(val);
+    onOverride({
+      revenue_growth: growth / 100,
+      ebit_margin: margin / 100,
+      wacc: val / 100,
+      terminal_growth: tgr / 100,
+      projection_years: 5
+    });
+  };
+
+  const handleTgrChange = (val) => {
+    setTgr(val);
+    onOverride({
+      revenue_growth: growth / 100,
+      ebit_margin: margin / 100,
+      wacc: wacc / 100,
+      terminal_growth: val / 100,
+      projection_years: 5
+    });
   };
 
   return (
@@ -78,7 +115,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
               <input 
                 type="number" 
                 value={growth.toFixed(1)} 
-                onChange={wrapChange(setGrowth)}
+                onChange={(e) => handleGrowthChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
               />
               <span className="text-zinc-500 text-xs font-mono">%</span>
@@ -86,7 +123,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           </div>
           <input 
             type="range" min="-10" max="40" step="0.5" 
-            value={growth} onChange={wrapChange(setGrowth)}
+            value={growth} onChange={(e) => handleGrowthChange(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
           <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Default: {(defaultGrowth*100).toFixed(1)}%</div>
@@ -104,7 +141,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
               <input 
                 type="number" 
                 value={margin.toFixed(1)} 
-                onChange={wrapChange(setMargin)}
+                onChange={(e) => handleMarginChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
               />
               <span className="text-zinc-500 text-xs font-mono">%</span>
@@ -115,7 +152,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
             min={isFinancial ? "5" : "-60"} 
             max={isFinancial ? "35" : "60"} 
             step="0.5" 
-            value={margin} onChange={wrapChange(setMargin)}
+            value={margin} onChange={(e) => handleMarginChange(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
           <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono flex justify-between">
@@ -134,7 +171,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
               <input 
                 type="number" 
                 value={wacc.toFixed(1)} 
-                onChange={wrapChange(setWacc)}
+                onChange={(e) => handleWaccChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
               />
               <span className="text-zinc-500 text-xs font-mono">%</span>
@@ -142,10 +179,27 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           </div>
           <input 
             type="range" min="5" max="25" step="0.1" 
-            value={wacc} onChange={wrapChange(setWacc)}
+            value={wacc} onChange={(e) => handleWaccChange(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
-          <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Computed: {(defaultWacc*100).toFixed(1)}%</div>
+          <div className="text-[11px] text-zinc-600 mt-2 font-mono flex flex-col gap-1">
+            <div className="flex justify-between">
+              <span>Computed: {(defaultWacc*100).toFixed(1)}%</span>
+              {data.market_data?.beta && (
+                <span>Beta: {data.market_data.beta.toFixed(2)}</span>
+              )}
+            </div>
+            {data.diagnostics?.ke_floored && (
+              <span className="text-amber-400/90 text-[10px] bg-amber-950/40 p-1 rounded border border-amber-500/20">
+                {data.diagnostics.ke_note}
+              </span>
+            )}
+            {data.diagnostics?.beta_clamped && (
+              <span className="text-blue-400/90 text-[10px] bg-blue-950/40 p-1 rounded border border-blue-500/20">
+                {data.diagnostics.beta_note}
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Terminal Growth */}
@@ -156,7 +210,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
               <input 
                 type="number" 
                 value={tgr.toFixed(1)} 
-                onChange={wrapChange(setTgr)}
+                onChange={(e) => handleTgrChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-14 text-zinc-100 font-mono tabular-nums text-sm focus:outline-none"
               />
               <span className="text-zinc-500 text-xs font-mono">%</span>
@@ -164,9 +218,17 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           </div>
           <input 
             type="range" min="1" max={maxTgr} step="0.1" 
-            value={tgr} onChange={wrapChange(setTgr)}
+            value={tgr} onChange={(e) => handleTgrChange(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
+          <div className="text-[11px] text-zinc-600 mt-2 font-mono flex flex-col gap-1">
+            <div className="text-right">Default: {defaultTgr.toFixed(1)}%</div>
+            {data.diagnostics?.terminal_growth_capped && (
+              <span className="text-amber-400/90 text-[10px] bg-amber-950/40 p-1 rounded border border-amber-500/20">
+                {data.diagnostics.terminal_value_note}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* NWC Ratio Display */}

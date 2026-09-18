@@ -57,7 +57,19 @@ def compute_wacc(
     interest_expense: float = metrics["interest_expense"]
 
     # 4A – CAPM → Cost of Equity
-    cost_of_equity: float = risk_free_rate + beta * (market_return - risk_free_rate)
+    raw_cost_of_equity: float = risk_free_rate + beta * (market_return - risk_free_rate)
+    
+    # Fundamental economic guard: Cost of equity must reflect an equity risk premium
+    # Common equity is strictly riskier than sovereign debt (Rf). Minimum floor Rf + 1.5%
+    ke_min = risk_free_rate + 0.015
+    ke_floored = False
+    ke_note = None
+    if raw_cost_of_equity < ke_min:
+        cost_of_equity = ke_min
+        ke_floored = True
+        ke_note = f"Cost of equity floored at {ke_min*100:.1f}% (Rf + 1.5% minimum equity risk premium)."
+    else:
+        cost_of_equity = raw_cost_of_equity
 
     # 4B – Cost of Debt
     if total_debt > 0 and interest_expense != 0:
@@ -78,6 +90,9 @@ def compute_wacc(
 
     return {
         "cost_of_equity": float(cost_of_equity),
+        "raw_cost_of_equity": float(raw_cost_of_equity),
+        "ke_floored": ke_floored,
+        "ke_note": ke_note,
         "cost_of_debt": float(cost_of_debt),
         "weight_equity": float(weight_equity),
         "weight_debt": float(weight_debt),
@@ -178,6 +193,8 @@ def run_dcf(
     # Terminal Value via Gordon Growth Model
     terminal_value_valid = True
     terminal_value_note = None
+    terminal_growth_capped = False
+    effective_terminal_growth = terminal_growth
     
     if proj_ufcf[-1] <= 0:
         terminal_value = None
@@ -190,7 +207,16 @@ def run_dcf(
         terminal_value_valid = False
         terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
     else:
-        terminal_value = (proj_ufcf[-1] * (1.0 + terminal_growth)) / (discount_rate - terminal_growth)
+        # Protect against denominator compression (WACC - g < 2.0%) which causes explosive valuations
+        spread = discount_rate - terminal_growth
+        if spread < 0.020:
+            effective_terminal_growth = discount_rate - 0.020
+            terminal_growth_capped = True
+            terminal_value_note = f"Terminal growth capped at {effective_terminal_growth*100:.1f}% to preserve minimum 2.0% WACC spread."
+            terminal_value = (proj_ufcf[-1] * (1.0 + effective_terminal_growth)) / 0.020
+        else:
+            terminal_value = (proj_ufcf[-1] * (1.0 + terminal_growth)) / spread
+
         # In HUL FINAL MODEL.xlsx (D29 = D24 * J10), TV is discounted using the final forecast period factor
         pv_terminal_value = terminal_value / discount_factors[-1]
 
@@ -221,6 +247,8 @@ def run_dcf(
         "equity_value": float(equity_value),
         "terminal_value_valid": terminal_value_valid,
         "terminal_value_note": terminal_value_note,
+        "terminal_growth_capped": terminal_growth_capped,
+        "effective_terminal_growth": float(effective_terminal_growth),
         "normalized_nwc_to_revenue": float(normalized_nwc_to_revenue),
         "tax_rate": float(tax_rate),
         "terminal_growth": float(terminal_growth),

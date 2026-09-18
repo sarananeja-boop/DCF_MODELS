@@ -41,7 +41,16 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
     raw_beta = stock_data.get("beta", 1.0)
     beta = float(raw_beta) if raw_beta and not np.isnan(raw_beta) else 1.0
 
-    ke = rf + beta * erp
+    raw_ke = rf + beta * erp
+    ke_min = rf + 0.015
+    ke_floored = False
+    ke_note = None
+    if raw_ke < ke_min:
+        ke = ke_min
+        ke_floored = True
+        ke_note = f"Cost of equity floored at {ke_min*100:.1f}% (Rf + 1.5% minimum equity risk premium)."
+    else:
+        ke = raw_ke
 
     op_debt = 0.0
     bs = stock_data.get("balance_sheet")
@@ -52,6 +61,9 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
 
     return {
         "cost_of_equity": float(ke),
+        "raw_cost_of_equity": float(raw_ke),
+        "ke_floored": ke_floored,
+        "ke_note": ke_note,
         "wacc": float(ke),  # Ke represents the discount rate for equity
         "cost_of_debt": 0.0,
         "weight_equity": 1.0,
@@ -62,6 +74,9 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
         "market_return": rm,
         "equity_risk_premium": erp,
         "beta": beta,
+        "raw_beta": stock_data.get("raw_beta", beta),
+        "beta_clamped": stock_data.get("beta_clamped", False),
+        "beta_note": stock_data.get("beta_note", ""),
         "is_financial": True,
         "note": "For financial institutions, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly.",
     }
@@ -194,6 +209,8 @@ def run_bank_valuation(
     # Terminal Value Calculation (Gordon Growth Model with Regulatory Capital)
     terminal_value_valid = True
     terminal_value_note = ""
+    terminal_growth_capped = False
+    effective_terminal_growth = terminal_growth
 
     if cost_of_equity <= terminal_growth:
         terminal_value = 0.0
@@ -201,12 +218,23 @@ def run_bank_valuation(
         terminal_value_valid = False
         terminal_value_note = "Cost of Equity (Ke) must exceed terminal growth rate for Gordon Growth model."
     else:
-        term_roe = roe_schedule[-1]
-        term_retention = min(0.95, max(0.05, terminal_growth / term_roe if term_roe > 0 else 0.50))
-        term_ni = proj_net_income[-1] * (1.0 + terminal_growth)
-        term_fcfe = term_ni * (1.0 - term_retention)
+        spread = cost_of_equity - terminal_growth
+        if spread < 0.020:
+            effective_terminal_growth = cost_of_equity - 0.020
+            terminal_growth_capped = True
+            terminal_value_note = f"Terminal growth capped at {effective_terminal_growth*100:.1f}% to preserve minimum 2.0% Ke spread."
+            term_roe = roe_schedule[-1]
+            term_retention = min(0.95, max(0.05, effective_terminal_growth / term_roe if term_roe > 0 else 0.50))
+            term_ni = proj_net_income[-1] * (1.0 + effective_terminal_growth)
+            term_fcfe = term_ni * (1.0 - term_retention)
+            terminal_value = term_fcfe / 0.020
+        else:
+            term_roe = roe_schedule[-1]
+            term_retention = min(0.95, max(0.05, terminal_growth / term_roe if term_roe > 0 else 0.50))
+            term_ni = proj_net_income[-1] * (1.0 + terminal_growth)
+            term_fcfe = term_ni * (1.0 - term_retention)
+            terminal_value = term_fcfe / spread
 
-        terminal_value = term_fcfe / (cost_of_equity - terminal_growth)
         # In mid-year convention, TV is discounted using the Year-5 discount factor
         pv_terminal_value = terminal_value / discount_factors[-1]
 
@@ -216,8 +244,8 @@ def run_bank_valuation(
 
     # Institutional Cross-Check: Justified Price-to-Book (P/B) Model
     # Justified P/B = (ROE - g) / (Ke - g)
-    if cost_of_equity > terminal_growth:
-        justified_pb = max(0.2, (roe_schedule[-1] - terminal_growth) / (cost_of_equity - terminal_growth))
+    if cost_of_equity > effective_terminal_growth:
+        justified_pb = max(0.2, (roe_schedule[-1] - effective_terminal_growth) / (cost_of_equity - effective_terminal_growth))
     else:
         justified_pb = 1.0
     justified_price = max(0.0, bvps * justified_pb)
@@ -243,6 +271,8 @@ def run_bank_valuation(
         "pv_terminal_value": float(pv_terminal_value),
         "terminal_value_valid": terminal_value_valid,
         "terminal_value_note": terminal_value_note,
+        "terminal_growth_capped": terminal_growth_capped,
+        "effective_terminal_growth": float(effective_terminal_growth),
         "tax_rate": float(tax_rate),
         "terminal_growth": float(terminal_growth),
         "use_mid_year": use_mid_year,

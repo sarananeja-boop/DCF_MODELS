@@ -74,7 +74,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
     e.preventDefault();
     if (ticker.trim()) {
       setShowDropdown(false);
-      onAnalyze();
+      onAnalyze({}, true);
     }
   };
 

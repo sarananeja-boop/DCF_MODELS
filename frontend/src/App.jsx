@@ -79,7 +79,7 @@ export default function App() {
     }
   }, []);
 
-  const handleAnalyze = async (overrideParams = null) => {
+  const handleAnalyze = async (overrideParams = null, isNewSearch = false) => {
     if (!ticker) {
       toast.error('Please enter a ticker symbol');
       return;
@@ -87,17 +87,27 @@ export default function App() {
     setLoading(true);
     setError(null);
     
-    // Clear AI summary ONLY if we are analyzing a different company/market
-    if (!analysisData || 
+    // Check if analyzing a different company/market
+    const isDifferentCompany = !analysisData || 
         analysisData.company.ticker.toUpperCase() !== ticker.toUpperCase() ||
-        analysisData.company.market !== market) {
+        analysisData.company.market !== market;
+
+    // Clear AI summary and reset overrides on new company search or explicit isNewSearch
+    if (isDifferentCompany || isNewSearch) {
       setAiSummary('');
+      setOverrides({});
+      sessionStorage.removeItem('vl_overrides');
     }
     
-    // Prevent React event objects from being serialized as overrideParams
-    const safeOverrides = (overrideParams && !overrideParams.nativeEvent && !(overrideParams instanceof Event))
-      ? overrideParams 
-      : overrides;
+    // Prevent stale overrides from infecting a new search
+    let safeOverrides = {};
+    if (!isDifferentCompany && !isNewSearch) {
+      if (overrideParams && !overrideParams.nativeEvent && !(overrideParams instanceof Event)) {
+        safeOverrides = overrideParams;
+      } else {
+        safeOverrides = overrides;
+      }
+    }
 
     try {
       const response = await axios.post('/api/analyze', {
@@ -295,8 +305,9 @@ export default function App() {
                 <button 
                   onClick={() => {
                     setOverrides({});
+                    sessionStorage.removeItem('vl_overrides');
                     setResetKey(k => k + 1);
-                    handleAnalyze({});
+                    handleAnalyze({}, true);
                   }}
                   className="w-full bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center border border-zinc-700/50"
                 >
