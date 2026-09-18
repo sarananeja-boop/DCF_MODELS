@@ -23,6 +23,11 @@ import TrendsTab from './components/TrendsTab';
 import ExcelDownloadButton from './components/ExcelDownloadButton';
 import ErrorBoundary from './components/ErrorBoundary';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+if (API_BASE_URL) {
+  axios.defaults.baseURL = API_BASE_URL;
+}
+
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
     const saved = sessionStorage.getItem('vl_analysisData');
