@@ -28,13 +28,14 @@ from engine.sensitivity import (
     generate_sensitivity_grid,
     generate_margin_sensitivity_grid,
 )
-from engine.validators import validate_valuation, generate_verdict
+from engine.validators import validate_valuation, validate_bank_valuation, generate_verdict
 from engine.trend_analysis import compute_trends
 from engine.bank_engine import (
     compute_bank_cost_of_equity,
     run_bank_valuation,
     run_bank_monte_carlo,
     generate_bank_sensitivity_grid,
+    generate_bank_roe_sensitivity_grid,
 )
 
 # Local modules
@@ -292,16 +293,18 @@ def analyze(req: AnalyzeRequest):
                 base_roe=target_margin,
                 base_ke=discount_rate,
             )
-            sens_margin_wacc = sens_growth_wacc
+            sens_margin_wacc = generate_bank_roe_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+            )
 
-            validation = {
-                "metric_used": "Justified P/B (Residual Income)",
-                "justified_pb": dcf_result.get("justified_pb"),
-                "justified_price": dcf_result.get("justified_price"),
-                "bvps": dcf_result.get("bvps"),
-                "trailing_ebitda": 1.0,
-                "is_financial": True,
-            }
+            validation = validate_bank_valuation(dcf_result, stock_data, metrics)
         else:
             # Standard FCFF + WACC Pipeline for Non-Financials
             wacc_data = compute_wacc(stock_data, metrics, market_profile)

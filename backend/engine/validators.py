@@ -58,6 +58,54 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
         "status": status
     }
 
+
+def validate_bank_valuation(
+    dcf_result: Dict[str, Any],
+    stock_data: Dict[str, Any],
+    metrics: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Computes P/B (Price-to-Book) validation cross-check for financial institutions.
+    Compares Market P/B vs Implied Model P/B vs Justified Gordon P/B.
+    """
+    current_price = float(stock_data.get("current_price", 0.0))
+    bvps = float(dcf_result.get("bvps", 0.0) or metrics.get("bvps", 0.0) or 0.0)
+    implied_price = float(dcf_result.get("implied_price", 0.0))
+    justified_pb = float(dcf_result.get("justified_pb", 0.0) or 0.0)
+    justified_price = float(dcf_result.get("justified_price", 0.0) or 0.0)
+
+    market_pb = (current_price / bvps) if bvps > 0 else None
+    model_pb = (implied_price / bvps) if bvps > 0 else None
+
+    if current_price > 0:
+        gap = (implied_price - current_price) / current_price
+    else:
+        gap = 0.0
+
+    multiple_gap_pct = abs(gap)
+
+    if multiple_gap_pct <= 0.35:
+        status = "PASS"
+    elif multiple_gap_pct <= 0.60:
+        status = "WARNING"
+    else:
+        status = "FLAG"
+
+    return {
+        "status": status,
+        "metric_used": "price_to_book",
+        "market_multiple": float(market_pb) if market_pb is not None else None,
+        "model_multiple": float(model_pb) if model_pb is not None else None,
+        "multiple_gap_pct": float(multiple_gap_pct),
+        "justified_pb": justified_pb,
+        "justified_price": justified_price,
+        "bvps": bvps,
+        "gap": float(gap),
+        "trailing_ebitda": 1.0,
+        "is_financial": True,
+    }
+
+
 def generate_verdict(current_price: float, mc_stats: Dict[str, float], terminal_value_valid: bool = True, mc_valid: bool = True) -> Dict[str, Any]:
     """
     Generates a BUY/SELL/HOLD verdict based on Monte Carlo percentiles.

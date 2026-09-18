@@ -77,7 +77,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   let validationColors = "bg-amber-500/20 text-amber-400";
   if (validation?.status === 'PASS') {
     validationColors = "bg-green-500/20 text-green-400";
-  } else if (validation?.status === 'FAIL') {
+  } else if (validation?.status === 'FAIL' || validation?.status === 'FLAG') {
     validationColors = "bg-red-500/20 text-red-400";
   }
 
@@ -234,43 +234,91 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         {/* 4. Validation Card */}
         <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-white">Model Validation</h3>
+            <h3 className="text-lg font-semibold text-white">
+              {isFinancial ? 'Model Validation (P/B Framework)' : 'Model Validation'}
+            </h3>
             <span className={`px-2 py-1 text-xs font-semibold rounded-md ${validationColors}`}>
               {validation?.status || 'UNKNOWN'}
             </span>
           </div>
           
           <div className="space-y-4">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <div className="text-sm text-slate-400">
-                {validation?.metric_used === 'ev_revenue' ? 'Market EV/Revenue' : 'Market EV/EBITDA'}
-              </div>
-              <div className="font-medium">
-                {validation?.market_multiple !== null && validation?.market_multiple !== undefined ? `${formatNumber(validation.market_multiple)}x` : 'N/A'}
-              </div>
-            </div>
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <div className="text-sm text-slate-400">
-                {validation?.metric_used === 'ev_revenue' ? 'Model EV/Revenue' : 'Model EV/EBITDA'}
-              </div>
-              <div className="font-medium">
-                {validation?.model_multiple !== null && validation?.model_multiple !== undefined ? `${formatNumber(validation.model_multiple)}x` : 'N/A'}
-              </div>
-            </div>
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-              <div className="text-sm text-slate-400">Gap</div>
-              <div className="font-medium">{formatPercent(validation?.multiple_gap_pct)}</div>
-            </div>
-            {validation?.metric_used === 'ev_revenue' && (
-              <div className="text-xs text-blue-400 bg-blue-500/10 p-3 rounded-lg flex items-start mt-2">
-                <span>Negative EBITDA detected. Falling back to EV/Revenue validation.</span>
-              </div>
-            )}
-            {validation?.warning && (
-              <div className="text-xs text-amber-400 bg-amber-500/10 p-3 rounded-lg flex items-start mt-2">
-                <FiAlertTriangle className="mr-2 mt-0.5 flex-shrink-0" />
-                <span>{validation.warning}</span>
-              </div>
+            {isFinancial ? (
+              <>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Market P/B Multiple</div>
+                  <div className="font-medium font-mono">
+                    {validation?.market_multiple !== null && validation?.market_multiple !== undefined 
+                      ? `${formatNumber(validation.market_multiple)}x` 
+                      : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Model Implied P/B</div>
+                  <div className="font-medium font-mono">
+                    {validation?.model_multiple !== null && validation?.model_multiple !== undefined 
+                      ? `${formatNumber(validation.model_multiple)}x` 
+                      : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Justified P/B (Residual ROE)</div>
+                  <div className="font-medium font-mono">
+                    {validation?.justified_pb !== null && validation?.justified_pb !== undefined 
+                      ? `${formatNumber(validation.justified_pb)}x` 
+                      : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Book Value Per Share (BVPS)</div>
+                  <div className="font-medium font-mono">
+                    {symbol}{formatNumber(validation?.bvps)}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Valuation Gap</div>
+                  <div className={`font-medium font-mono ${validation?.gap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {validation?.gap >= 0 ? '+' : ''}{formatPercent(validation?.gap)}
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-400 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-700/50 mt-2">
+                  <span className="text-slate-300 font-medium">FIG Benchmarks:</span> Bank valuation cross-checks against Book Value (P/B) and Residual ROE, replacing industrial EV/EBITDA multiples.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">
+                    {validation?.metric_used === 'ev_revenue' ? 'Market EV/Revenue' : 'Market EV/EBITDA'}
+                  </div>
+                  <div className="font-medium">
+                    {validation?.market_multiple !== null && validation?.market_multiple !== undefined ? `${formatNumber(validation.market_multiple)}x` : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">
+                    {validation?.metric_used === 'ev_revenue' ? 'Model EV/Revenue' : 'Model EV/EBITDA'}
+                  </div>
+                  <div className="font-medium">
+                    {validation?.model_multiple !== null && validation?.model_multiple !== undefined ? `${formatNumber(validation.model_multiple)}x` : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Gap</div>
+                  <div className="font-medium">{formatPercent(validation?.multiple_gap_pct)}</div>
+                </div>
+                {validation?.metric_used === 'ev_revenue' && (
+                  <div className="text-xs text-blue-400 bg-blue-500/10 p-3 rounded-lg flex items-start mt-2">
+                    <span>Negative EBITDA detected. Falling back to EV/Revenue validation.</span>
+                  </div>
+                )}
+                {validation?.warning && (
+                  <div className="text-xs text-amber-400 bg-amber-500/10 p-3 rounded-lg flex items-start mt-2">
+                    <FiAlertTriangle className="mr-2 mt-0.5 flex-shrink-0" />
+                    <span>{validation.warning}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

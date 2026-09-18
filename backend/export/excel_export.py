@@ -2308,7 +2308,7 @@ def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any]):
     grid_data = sens.get("growth_wacc", {})
     ke_range = grid_data.get("wacc_range", [0.08, 0.09, 0.10, 0.11, 0.12])
     g_range = grid_data.get("growth_range", [0.08, 0.09, 0.10, 0.11, 0.12])
-    grid = grid_data.get("grid", [[0]*5]*5)
+    grid = grid_data.get("price_grid") or grid_data.get("grid", [[0]*5]*5)
 
     headers = ["Cost of Equity (Ke) \\ Growth (g)"] + [f"{g*100:.1f}%" for g in g_range]
     _set_table_headers(ws, r, headers, start_col=2)
@@ -2343,6 +2343,44 @@ def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any]):
     start_cell = "C7"
     end_cell = f"G{6 + len(ke_range)}"
     ws.conditional_formatting.add(f"{start_cell}:{end_cell}", color_scale)
+
+    # Matrix 2: Target ROE vs Ke
+    r += 2
+    _set_banner(ws, r, 2, 7, "Matrix 2: Target Return on Equity (ROE) (Columns) vs Cost of Equity (Rows)")
+    r += 1
+
+    roe_data = sens.get("margin_wacc", {})
+    ke_range2 = roe_data.get("wacc_range", [0.08, 0.09, 0.10, 0.11, 0.12])
+    roe_range = roe_data.get("margin_range") or roe_data.get("roe_range", [0.10, 0.12, 0.14, 0.16, 0.18])
+    grid2 = roe_data.get("price_grid") or roe_data.get("grid", [[0]*5]*5)
+
+    headers2 = ["Cost of Equity (Ke) \\ Target ROE"] + [f"{roe*100:.1f}%" for roe in roe_range]
+    _set_table_headers(ws, r, headers2, start_col=2)
+    r += 1
+    m2_start_r = r
+
+    for row_idx, ke_val in enumerate(ke_range2):
+        fill = ALT_ROW_FILL if row_idx % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=ke_val)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.number_format = PCT_FMT
+        lbl.alignment = ALIGN_RIGHT
+
+        for col_idx, roe_val in enumerate(roe_range):
+            val = grid2[row_idx][col_idx] if row_idx < len(grid2) and col_idx < len(grid2[row_idx]) else 0.0
+            cell = ws.cell(row=r, column=3 + col_idx, value=val)
+            cell.font = FONT_DATA
+            cell.fill = fill or PatternFill(fill_type=None)
+            cell.border = THIN_BORDER
+            cell.number_format = cfmt_price
+            cell.alignment = ALIGN_RIGHT
+        ws.row_dimensions[r].height = 20
+        r += 1
+
+    m2_end_r = m2_start_r + len(ke_range2) - 1
+    ws.conditional_formatting.add(f"C{m2_start_r}:G{m2_end_r}", color_scale)
 
     ws.column_dimensions["A"].width = 4
     ws.column_dimensions["B"].width = 34

@@ -358,10 +358,12 @@ def run_bank_monte_carlo(
         "mean": float(np.mean(sim_arr)),
         "median": float(np.median(sim_arr)),
         "std": float(np.std(sim_arr)),
+        "p5": float(np.percentile(sim_arr, 5)),
         "p10": float(np.percentile(sim_arr, 10)),
         "p25": float(np.percentile(sim_arr, 25)),
         "p75": float(np.percentile(sim_arr, 75)),
         "p90": float(np.percentile(sim_arr, 90)),
+        "p95": float(np.percentile(sim_arr, 95)),
         "prob_undervalued": float(np.mean(sim_arr > current_price)) if len(sim_arr) > 0 else 0.0,
         "zero_price_simulations": iterations - valid_count,
         "positive_price_simulations": valid_count,
@@ -425,4 +427,59 @@ def generate_bank_sensitivity_grid(
         "wacc_range": ke_steps,          # Ke
         "growth_range": growth_steps,    # Net Income Growth
         "grid": grid,
+        "price_grid": grid,
+        "base_growth": float(mid_growth),
+        "base_wacc": float(mid_ke),
+    }
+
+
+def generate_bank_roe_sensitivity_grid(
+    metrics: dict,
+    stock_data: dict,
+    market_profile: dict,
+    terminal_growth: float,
+    projection_years: int = 5,
+    base_growth: Optional[float] = None,
+    base_roe: Optional[float] = None,
+    base_ke: Optional[float] = None,
+) -> dict:
+    """Generate 5x5 sensitivity table: Target ROE vs Cost of Equity (Ke)."""
+    ke_data = compute_bank_cost_of_equity(stock_data, market_profile)
+    mid_ke = base_ke if base_ke is not None else float(ke_data["cost_of_equity"])
+    mid_growth = base_growth if base_growth is not None else float(metrics.get("avg_ni_growth", 0.10))
+    t_roe = base_roe if base_roe is not None else float(metrics.get("avg_roe", 0.14))
+
+    roe_steps = [t_roe - 0.04, t_roe - 0.02, t_roe, t_roe + 0.02, t_roe + 0.04]
+    ke_steps = [mid_ke - 0.01, mid_ke - 0.005, mid_ke, mid_ke + 0.005, mid_ke + 0.01]
+
+    grid: List[List[float]] = []
+
+    for k in ke_steps:
+        row: List[float] = []
+        for r in roe_steps:
+            if k <= terminal_growth:
+                row.append(0.0)
+            else:
+                res = run_bank_valuation(
+                    start_growth=mid_growth,
+                    target_roe=r,
+                    cost_of_equity=k,
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    use_mid_year=True,
+                )
+                row.append(res.get("implied_price", 0.0))
+        grid.append(row)
+
+    return {
+        "wacc_range": ke_steps,          # Ke
+        "margin_range": roe_steps,       # ROE mapped to margin_range for frontend compatibility
+        "roe_range": roe_steps,
+        "grid": grid,
+        "price_grid": grid,
+        "base_margin": float(t_roe),
+        "base_wacc": float(mid_ke),
     }
