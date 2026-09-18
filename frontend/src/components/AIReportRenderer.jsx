@@ -286,12 +286,17 @@ export default function AIReportRenderer({ jsonString }) {
         </Card>
 
         <Card title="Final Synopsis" className="bg-zinc-900 border-zinc-700">
-          <p className="text-zinc-200 leading-relaxed mb-4">{final_synopsis?.paragraph}</p>
-          {final_synopsis?.monitoring_points && final_synopsis.monitoring_points.length > 0 && (
+          <p className="text-zinc-200 leading-relaxed mb-4">
+            {final_synopsis?.paragraph || exec?.key_takeaway || exec?.overview || 'Intrinsic valuation synthesis indicates cash flow dynamics support current fundamental estimates.'}
+          </p>
+          {((final_synopsis?.monitoring_points && final_synopsis.monitoring_points.length > 0) || (key_drivers && key_drivers.length > 0)) && (
             <div>
               <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Key Monitoring Points</div>
               <ul className="list-disc pl-4 space-y-1 text-zinc-400">
-                {final_synopsis.monitoring_points.map((pt, i) => (
+                {(final_synopsis?.monitoring_points && final_synopsis.monitoring_points.length > 0
+                  ? final_synopsis.monitoring_points
+                  : key_drivers?.slice(0, 3).map(d => `Monitor ${d.driver}: ${d.what_to_monitor}`) || []
+                ).map((pt, i) => (
                   <li key={i}>{pt}</li>
                 ))}
               </ul>

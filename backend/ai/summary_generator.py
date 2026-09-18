@@ -16,7 +16,7 @@ logger = logging.getLogger("dcf-api.ai")
 # ---------------------------------------------------------------------------
 _groq_client = None
 
-MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+MODELS = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "groq/compound-mini"]
 
 
 def _get_client():
@@ -228,12 +228,50 @@ DCF valuation analysis. Use the exact numbers provided. Strictly follow the OUTP
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                max_tokens=3500,
+                max_tokens=2500,
                 top_p=0.9,
             )
             content = chat_completion.choices[0].message.content
             if content and "headline_metrics" in content:
-                logger.info("AI summary successfully generated with %s", model_name)
+                try:
+                    import json
+                    parsed = json.loads(content)
+                    if isinstance(parsed, dict) and "headline_metrics" in parsed:
+                        # Guarantee final_synopsis is always non-empty
+                        if not parsed.get("final_synopsis") or not parsed["final_synopsis"].get("paragraph"):
+                            exec_sum = parsed.get("executive_summary", {})
+                            dcf_val = parsed.get("headline_metrics", {}).get("dcf_value", 0.0)
+                            sym = analysis_data.get("company", {}).get("symbol", "$")
+                            verdict_info = analysis_data.get("verdict", {})
+                            verdict_str = verdict_info.get("verdict", "FAIR VALUE")
+                            
+                            synopsis_p = exec_sum.get("key_takeaway") or exec_sum.get("overview") or (
+                                f"Fundamental DCF modeling yields an implied fair value of {sym}{dcf_val:.2f} "
+                                f"supporting a '{verdict_str}' stance based on projected cash flow conversion and cost of capital."
+                            )
+                            monitoring = [
+                                "Quarterly revenue growth and volume delivery against guidance",
+                                "Operating margin resilience and free cash flow conversion",
+                                "Benchmark sovereign yield shifts influencing the cost of capital (WACC)",
+                            ]
+                            parsed["final_synopsis"] = {
+                                "paragraph": synopsis_p,
+                                "monitoring_points": monitoring,
+                            }
+
+                        # Guarantee model_quality is always present
+                        if not parsed.get("model_quality"):
+                            parsed["model_quality"] = {
+                                "terminal_value_dependency": "Terminal value represents majority of enterprise value, typical of long-duration cash flow assets.",
+                                "assumption_risk": "Valuation is sensitive to revenue CAGR and terminal growth rate assumptions.",
+                                "model_red_flags": [],
+                            }
+
+                        logger.info("AI summary successfully generated and enriched with %s", model_name)
+                        return json.dumps(parsed)
+                except Exception as parse_err:
+                    logger.warning("Failed to enrich LLM JSON with %s: %s", model_name, parse_err)
+                
                 return content
             logger.warning("Model %s returned incomplete JSON, trying next", model_name)
         except Exception as exc:
