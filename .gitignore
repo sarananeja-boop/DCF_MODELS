@@ -20,3 +20,5 @@ dist/
 .DS_Store
 Thumbs.db
 backend/server.log
+backend/test_*.py
+backend/patch_*.py

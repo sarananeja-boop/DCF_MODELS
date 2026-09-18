@@ -42,10 +42,15 @@ def safe_get(df: pd.DataFrame, column: str, default: float = 0) -> np.ndarray:
     Returns:
         A numpy array of length ``len(df)``.
     """
-    # Alternate name map – Indian stocks sometimes use different labels
+    # Alternate name map – Indian stocks and financial companies sometimes use different labels
     _alternates: Dict[str, List[str]] = {
-        "Total Revenue": ["Revenue", "Total Revenue From Operations"],
+        "Total Revenue": ["Revenue", "Total Revenue From Operations", "Operating Revenue"],
         "Current Debt": ["Current Borrowings", "Short Term Debt"],
+        "Net Income": ["Net Income Common Stockholders", "Net Income Continuous Operations", "Net Income Including Noncontrolling Interests", "Normalized Income"],
+        "Stockholders Equity": ["Common Stock Equity", "Total Equity Gross Minority Interest", "Tangible Book Value"],
+        "Net Interest Income": ["Operating Revenue", "Total Revenue"],
+        "Pretax Income": ["Income Before Tax", "Earnings Before Taxes"],
+        "Cash Dividends Paid": ["Common Stock Dividend Paid", "Payment Of Dividends"],
     }
 
     if column in df.columns:
@@ -114,17 +119,17 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     except Exception:
         pass
 
-    # 2. Only query heavier stock.info if critical denominators are still missing
+    # 2. Query stock.info for sector, industry, denominators and metadata
     info: dict = {}
-    if current_price is None or shares_out is None:
-        try:
-            info = stock.info or {}
-            if current_price is None:
-                current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
-            if shares_out is None:
-                shares_out = info.get("sharesOutstanding")
-        except Exception:
-            pass
+    try:
+        info = stock.info or {}
+    except Exception as e:
+        logger.warning("Could not fetch stock.info for %s: %s", yf_ticker, e)
+
+    if current_price is None:
+        current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+    if shares_out is None:
+        shares_out = info.get("sharesOutstanding")
 
     # 3. Last-resort fallback for price via 5-day history
     if current_price is None:
@@ -143,15 +148,29 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         )
 
     beta = info.get("beta", 1.0)
-    if beta is None:
+    if beta is None or np.isnan(beta):
         beta = 1.0
     market_cap = float(current_price) * float(shares_out)
 
     company_name = info.get("shortName") or info.get("longName") or yf_ticker
+    sector = info.get("sector")
+    industry = info.get("industry")
+
+    # Financial Institution Detection (Banks, NBFCs, Insurance, Capital Markets)
+    is_financial = False
+    sec_lower = (sector or "").lower()
+    ind_lower = (industry or "").lower()
+    if any(k in sec_lower for k in ["financial", "banking"]):
+        is_financial = True
+    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "capital markets", "asset management", "consumer finance"]):
+        is_financial = True
 
     return {
         "ticker": yf_ticker,
         "name": company_name,
+        "sector": sector,
+        "industry": industry,
+        "is_financial": is_financial,
         "current_price": float(current_price),
         "shares_outstanding": float(shares_out),
         "market_cap": market_cap,
@@ -206,15 +225,16 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     balance_sheet = balance_sheet.loc[common_dates]
 
     # ------------------------------------------------------------------
-    # 3B – Drop years with missing Revenue or EBIT
+    # 3B – Drop years with missing Revenue or EBIT (or Net Income for Banks)
     # ------------------------------------------------------------------
-    for col in ["Total Revenue", "EBIT"]:
-        # safe_get will resolve alternate names, but we need the actual
-        # column present in the DataFrame for filtering.
+    is_financial = stock_data.get("is_financial", False)
+    cols_to_check = ["Total Revenue"] if is_financial else ["Total Revenue", "EBIT"]
+
+    for col in cols_to_check:
         resolved_col = col
         if col not in income_stmt.columns:
             _alt_map = {
-                "Total Revenue": ["Revenue", "Total Revenue From Operations"],
+                "Total Revenue": ["Revenue", "Total Revenue From Operations", "Operating Revenue"],
             }
             for alt in _alt_map.get(col, []):
                 if alt in income_stmt.columns:
@@ -239,6 +259,14 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     revenue = safe_get(income_stmt, "Total Revenue")[::-1]
     ebit = safe_get(income_stmt, "EBIT")[::-1]
     
+    # Financial institutions specific metrics
+    net_income = safe_get(income_stmt, "Net Income")[::-1]
+    net_interest_income = safe_get(income_stmt, "Net Interest Income")[::-1]
+    pretax_income = safe_get(income_stmt, "Pretax Income")[::-1]
+    book_value = safe_get(balance_sheet, "Stockholders Equity")[::-1]
+    raw_divs = safe_get(cash_flow, "Cash Dividends Paid", default=0)[::-1]
+    dividends_paid = np.where(raw_divs < 0, -raw_divs, raw_divs)
+    
     raw_capex = safe_get(cash_flow, "Capital Expenditure", default=0)[::-1]
     capex = np.where(raw_capex < 0, -raw_capex, raw_capex)  # explicit positive
     
@@ -259,13 +287,45 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     # 3F – Historical ratio calculations
     # ------------------------------------------------------------------
-    rev_growth = np.diff(revenue) / revenue[:-1]
+    rev_growth = np.diff(revenue) / np.where(revenue[:-1] != 0, revenue[:-1], 1.0)
     ebit_margins = ebit / np.where(revenue != 0, revenue, 1.0)
 
     avg_rev_growth = float(np.mean(rev_growth))
     std_rev_growth = float(np.std(rev_growth, ddof=1)) if len(rev_growth) > 1 else 0.05
     avg_ebit_margin = float(np.mean(ebit_margins))
     std_ebit_margin = float(np.std(ebit_margins, ddof=1)) if len(ebit_margins) > 1 else 0.02
+
+    # Banking specific ratio calculations (ROE, Payout, Net Income growth)
+    roes = []
+    payouts = []
+    for idx in range(len(net_income)):
+        bv = book_value[idx - 1] if idx > 0 else book_value[idx]
+        ni = net_income[idx]
+        div = dividends_paid[idx] if idx < len(dividends_paid) else 0.0
+        if bv > 0 and ni != 0:
+            roes.append(float(ni / bv))
+        if ni > 0 and div > 0:
+            payouts.append(float(min(1.0, max(0.0, div / ni))))
+
+    info_roe = stock_data.get("info", {}).get("returnOnEquity")
+    if info_roe and not np.isnan(info_roe) and info_roe > 0:
+        avg_roe = float(info_roe)
+    elif roes:
+        avg_roe = float(np.median(roes))
+    else:
+        avg_roe = 0.14
+
+    std_roe = float(np.std(roes, ddof=1)) if len(roes) > 1 else 0.02
+    avg_payout = float(np.mean(payouts)) if payouts else 0.25
+
+    valid_ni = [float(x) for x in net_income if x > 0]
+    if len(valid_ni) > 1:
+        ni_growth = np.diff(valid_ni) / valid_ni[:-1]
+        avg_ni_growth = float(np.mean(ni_growth))
+        std_ni_growth = float(np.std(ni_growth, ddof=1)) if len(ni_growth) > 1 else 0.05
+    else:
+        avg_ni_growth = avg_rev_growth
+        std_ni_growth = std_rev_growth
 
     avg_capex_pct = float(np.mean(capex / np.where(revenue != 0, revenue, 1.0)))
     avg_dna_pct = float(np.mean(dna / np.where(revenue != 0, revenue, 1.0)))
@@ -310,6 +370,17 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "delta_nwc": delta_nwc.tolist(),
         "rev_growth": rev_growth.tolist(),
         "ebit_margins": ebit_margins.tolist(),
+        # Bank & Financial Institutions Specifics
+        "net_income": net_income.tolist(),
+        "net_interest_income": net_interest_income.tolist(),
+        "pretax_income": pretax_income.tolist(),
+        "book_value": book_value.tolist(),
+        "dividends_paid": dividends_paid.tolist(),
+        "avg_roe": avg_roe,
+        "std_roe": std_roe,
+        "avg_payout": avg_payout,
+        "avg_ni_growth": avg_ni_growth,
+        "std_ni_growth": std_ni_growth,
         # Computed averages
         "avg_rev_growth": avg_rev_growth,
         "std_rev_growth": std_rev_growth,

@@ -4,13 +4,23 @@ import { FiRefreshCw } from 'react-icons/fi';
 export default function AssumptionSliders({ data, onOverride, loading }) {
   if (!data) return null;
 
-  const defaultGrowth = data.historicals.revenue_cagr || data.historicals.avg_rev_growth || 0.10;
+  const isFinancial = Boolean(data.company?.is_financial || data.diagnostics?.is_financial);
+
+  const defaultGrowth = isFinancial
+    ? (data.historicals.avg_ni_growth || data.historicals.avg_rev_growth || 0.10)
+    : (data.historicals.revenue_cagr || data.historicals.avg_rev_growth || 0.10);
   
-  const currentMargin = data.diagnostics?.current_ebit_margin ?? data.historicals.avg_ebit_margin;
-  const isNegativeMargin = currentMargin < 0;
-  const defaultMargin = data.diagnostics?.target_ebit_margin ?? (data.historicals.avg_ebit_margin || 0.20);
+  const currentMargin = isFinancial
+    ? (data.diagnostics?.current_ebit_margin ?? data.historicals.avg_roe ?? 0.14)
+    : (data.diagnostics?.current_ebit_margin ?? data.historicals.avg_ebit_margin);
+  const isNegativeMargin = !isFinancial && currentMargin < 0;
+  const defaultMargin = isFinancial
+    ? (data.diagnostics?.target_ebit_margin ?? data.historicals.avg_roe ?? 0.14)
+    : (data.diagnostics?.target_ebit_margin ?? (data.historicals.avg_ebit_margin || 0.20));
   
-  const defaultWacc = data.wacc.wacc;
+  const defaultWacc = isFinancial
+    ? (data.wacc.cost_of_equity || data.wacc.wacc || 0.10)
+    : data.wacc.wacc;
 
   const defaultTgr = (data.macro?.terminal_growth ?? (data.company?.market === 'IN' ? 0.055 : 0.025)) * 100;
   const isIndia = data.company?.market === 'IN';
@@ -47,14 +57,23 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   return (
     <div className="bg-zinc-900/40 rounded-xl p-6 border border-zinc-800/80 mb-6 shadow-xl backdrop-blur-sm">
       <div className="flex justify-between items-center mb-8 border-b border-zinc-800/50 pb-4">
-        <h3 className="font-semibold text-zinc-100 text-lg tracking-tight">Assumptions</h3>
+        <div>
+          <h3 className="font-semibold text-zinc-100 text-lg tracking-tight">Assumptions</h3>
+          {isFinancial && (
+            <span className="text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded mt-1 inline-block">
+              Financial Institution (FCFE / DDM Model)
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-8">
-        {/* Revenue Growth */}
+        {/* Growth Slider */}
         <div className="group">
           <div className="flex justify-between items-center text-sm mb-3">
-            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">Rev Growth (Yr 1)</label>
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">
+              {isFinancial ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
+            </label>
             <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
               <input 
                 type="number" 
@@ -73,11 +92,13 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           <div className="text-[11px] text-zinc-600 text-right mt-2 font-mono">Default: {(defaultGrowth*100).toFixed(1)}%</div>
         </div>
 
-        {/* EBIT Margin */}
+        {/* Profitability / ROE Slider */}
         <div className="group">
           <div className="flex justify-between items-center text-sm mb-3">
             <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">
-              {isNegativeMargin ? 'Target EBIT Margin' : 'EBIT Margin'}
+              {isFinancial 
+                ? 'Target Return on Equity (ROE)' 
+                : (isNegativeMargin ? 'Target EBIT Margin' : 'EBIT Margin')}
             </label>
             <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
               <input 
@@ -90,7 +111,10 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
             </div>
           </div>
           <input 
-            type="range" min="-60" max="60" step="0.5" 
+            type="range" 
+            min={isFinancial ? "5" : "-60"} 
+            max={isFinancial ? "35" : "60"} 
+            step="0.5" 
             value={margin} onChange={wrapChange(setMargin)}
             className="w-full h-1.5 bg-zinc-800/80 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400" 
           />
@@ -100,10 +124,12 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           </div>
         </div>
 
-        {/* WACC */}
+        {/* Discount Rate (WACC vs Ke) */}
         <div className="group">
           <div className="flex justify-between items-center text-sm mb-3">
-            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">Discount Rate (WACC)</label>
+            <label className="text-zinc-400 group-hover:text-zinc-300 transition-colors font-medium">
+              {isFinancial ? 'Discount Rate (Cost of Equity Ke)' : 'Discount Rate (WACC)'}
+            </label>
             <div className="flex items-center gap-1 bg-zinc-950/60 px-3 py-1.5 rounded-md border border-zinc-800 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 transition-all">
               <input 
                 type="number" 

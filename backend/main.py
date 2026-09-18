@@ -30,6 +30,12 @@ from engine.sensitivity import (
 )
 from engine.validators import validate_valuation, generate_verdict
 from engine.trend_analysis import compute_trends
+from engine.bank_engine import (
+    compute_bank_cost_of_equity,
+    run_bank_valuation,
+    run_bank_monte_carlo,
+    generate_bank_sensitivity_grid,
+)
 
 # Local modules
 from ai.summary_generator import generate_valuation_summary
@@ -207,32 +213,9 @@ def analyze(req: AnalyzeRequest):
         # 4. Market profile (with live RFR)
         market_profile = get_market_profile(market)
 
-        # 5. WACC
-        wacc_data = compute_wacc(stock_data, metrics, market_profile)
+        # 5. Dual Engine Routing: Financial Institutions vs Non-Financial Corporations
+        is_financial = stock_data.get("is_financial", False)
 
-        # 6. Resolve overrides
-        start_growth = (
-            overrides.revenue_growth
-            if overrides.revenue_growth is not None
-            else metrics.get("avg_rev_growth", 0.10)
-        )
-        
-        avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
-        if avg_ebit_margin < 0 and overrides.ebit_margin is None:
-            target_margin = 0.0
-            current_margin = avg_ebit_margin
-        elif avg_ebit_margin < 0 and overrides.ebit_margin is not None:
-            target_margin = overrides.ebit_margin
-            current_margin = avg_ebit_margin
-        else:
-            target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else avg_ebit_margin
-            current_margin = None
-
-        discount_rate = (
-            overrides.wacc
-            if overrides.wacc is not None
-            else wacc_data.get("wacc", 0.10)
-        )
         default_terminal_g = market_profile.get("terminal_growth", 0.055 if market == "IN" else 0.025)
         terminal_growth = (
             overrides.terminal_growth
@@ -249,62 +232,159 @@ def analyze(req: AnalyzeRequest):
         stock_data["_tax_rate"] = tax_rate
         stock_data["market"] = market
 
-        # 7. Base-case DCF with Mid-Year Convention
-        dcf_result = run_dcf(
-            start_growth=start_growth,
-            ebit_margin=target_margin,
-            discount_rate=discount_rate,
-            metrics=metrics,
-            wacc_data=wacc_data,
-            stock_data=stock_data,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            current_margin=current_margin,
-            tax_rate=tax_rate,
-            use_mid_year=True,
-        )
+        if is_financial:
+            logger.info("Routing %s to Financial Services (Bank/NBFC) Multi-Stage FCFE Model", ticker)
+            # Cost of Equity (Ke via CAPM)
+            wacc_data = compute_bank_cost_of_equity(stock_data, market_profile)
 
-        # 8. Monte Carlo
-        mc_result = run_monte_carlo(
-            metrics=metrics,
-            wacc_data=wacc_data,
-            stock_data=stock_data,
-            market_profile=market_profile,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            iterations=req.monte_carlo_iterations,
-            base_growth=start_growth,
-            base_margin=target_margin,
-            base_wacc=discount_rate
-        )
+            start_growth = (
+                overrides.revenue_growth
+                if overrides.revenue_growth is not None
+                else metrics.get("avg_ni_growth", 0.10)
+            )
+            target_margin = (
+                overrides.ebit_margin
+                if overrides.ebit_margin is not None
+                else metrics.get("avg_roe", 0.14)
+            )
+            current_margin = metrics.get("avg_roe", 0.14)
 
-        # 9. Sensitivity grids
-        sens_growth_wacc = generate_sensitivity_grid(
-            metrics=metrics,
-            wacc_data=wacc_data,
-            stock_data=stock_data,
-            market_profile=market_profile,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            target_margin=target_margin,
-            current_margin=current_margin,
-            tax_rate=tax_rate,
-            use_mid_year=True,
-        )
-        sens_margin_wacc = generate_margin_sensitivity_grid(
-            metrics=metrics,
-            wacc_data=wacc_data,
-            stock_data=stock_data,
-            market_profile=market_profile,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            target_margin=target_margin,
-            current_margin=current_margin,
-            tax_rate=tax_rate,
-        )
+            discount_rate = (
+                overrides.wacc
+                if overrides.wacc is not None
+                else wacc_data.get("cost_of_equity", 0.10)
+            )
 
-        # 10. Validation (EV/EBITDA cross-check)
-        validation = validate_valuation(dcf_result, stock_data, metrics, wacc_data)
+            # Bank Multi-Stage FCFE / Regulatory Capital Model
+            dcf_result = run_bank_valuation(
+                start_growth=start_growth,
+                target_roe=target_margin,
+                cost_of_equity=discount_rate,
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                use_mid_year=True,
+            )
+
+            # Bank Monte Carlo
+            mc_result = run_bank_monte_carlo(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                iterations=req.monte_carlo_iterations,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+            )
+
+            # Bank Sensitivity Grids
+            sens_growth_wacc = generate_bank_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+            )
+            sens_margin_wacc = sens_growth_wacc
+
+            validation = {
+                "metric_used": "Justified P/B (Residual Income)",
+                "justified_pb": dcf_result.get("justified_pb"),
+                "justified_price": dcf_result.get("justified_price"),
+                "bvps": dcf_result.get("bvps"),
+                "trailing_ebitda": 1.0,
+                "is_financial": True,
+            }
+        else:
+            # Standard FCFF + WACC Pipeline for Non-Financials
+            wacc_data = compute_wacc(stock_data, metrics, market_profile)
+
+            start_growth = (
+                overrides.revenue_growth
+                if overrides.revenue_growth is not None
+                else metrics.get("avg_rev_growth", 0.10)
+            )
+            
+            avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
+            if avg_ebit_margin < 0 and overrides.ebit_margin is None:
+                target_margin = 0.0
+                current_margin = avg_ebit_margin
+            elif avg_ebit_margin < 0 and overrides.ebit_margin is not None:
+                target_margin = overrides.ebit_margin
+                current_margin = avg_ebit_margin
+            else:
+                target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else avg_ebit_margin
+                current_margin = None
+
+            discount_rate = (
+                overrides.wacc
+                if overrides.wacc is not None
+                else wacc_data.get("wacc", 0.10)
+            )
+
+            # Base-case DCF with Mid-Year Convention
+            dcf_result = run_dcf(
+                start_growth=start_growth,
+                ebit_margin=target_margin,
+                discount_rate=discount_rate,
+                metrics=metrics,
+                wacc_data=wacc_data,
+                stock_data=stock_data,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                current_margin=current_margin,
+                tax_rate=tax_rate,
+                use_mid_year=True,
+            )
+
+            # Monte Carlo
+            mc_result = run_monte_carlo(
+                metrics=metrics,
+                wacc_data=wacc_data,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                iterations=req.monte_carlo_iterations,
+                base_growth=start_growth,
+                base_margin=target_margin,
+                base_wacc=discount_rate,
+            )
+
+            # Sensitivity grids
+            sens_growth_wacc = generate_sensitivity_grid(
+                metrics=metrics,
+                wacc_data=wacc_data,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                target_margin=target_margin,
+                current_margin=current_margin,
+                tax_rate=tax_rate,
+                use_mid_year=True,
+            )
+            sens_margin_wacc = generate_margin_sensitivity_grid(
+                metrics=metrics,
+                wacc_data=wacc_data,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                target_margin=target_margin,
+                current_margin=current_margin,
+                tax_rate=tax_rate,
+            )
+
+            # Validation (EV/EBITDA cross-check)
+            validation = validate_valuation(dcf_result, stock_data, metrics, wacc_data)
 
         # 11. Verdict
         current_price = stock_data.get("current_price", 0)
@@ -333,6 +413,10 @@ def analyze(req: AnalyzeRequest):
                 "market": market,
                 "currency": market_profile.get("currency", "USD"),
                 "symbol": market_profile.get("symbol", "$"),
+                "sector": stock_data.get("sector"),
+                "industry": stock_data.get("industry"),
+                "is_financial": is_financial,
+                "model_type": "BANKING_DDM" if is_financial else "STANDARD_FCFF",
             },
             "market_data": {
                 "current_price": current_price,
@@ -404,14 +488,19 @@ def analyze(req: AnalyzeRequest):
             "validation": validation,
             "verdict": verdict,
             "diagnostics": {
-                "historical_fcf_negative": False, # Not directly calculated, could be omitted, but let's pass None if unknown
+                "is_financial": is_financial,
+                "model_type": "BANKING_DDM" if is_financial else "STANDARD_FCFF",
+                "bvps": dcf_result.get("bvps"),
+                "justified_pb": dcf_result.get("justified_pb"),
+                "justified_price": dcf_result.get("justified_price"),
+                "historical_fcf_negative": False,
                 "terminal_ufcf_positive": bool(dcf_result.get("terminal_value_valid", True)),
                 "terminal_value_valid": dcf_result.get("terminal_value_valid", True),
                 "terminal_value_note": dcf_result.get("terminal_value_note"),
                 "negative_ebitda": validation.get("trailing_ebitda", 1.0) <= 0,
                 "metric_used": validation.get("metric_used", "none"),
                 "margin_normalization_used": current_margin is not None,
-                "current_ebit_margin": float(current_margin) if current_margin is not None else float(avg_ebit_margin),
+                "current_ebit_margin": float(current_margin) if current_margin is not None else float(metrics.get("avg_roe" if is_financial else "avg_ebit_margin", 0.14)),
                 "target_ebit_margin": float(target_margin),
                 "normalized_nwc_to_revenue": float(metrics.get("normalized_nwc_to_revenue", 0.0)),
             },
