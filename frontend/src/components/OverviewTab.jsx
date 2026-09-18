@@ -37,6 +37,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   if (!data) return <div className="p-8 text-center text-slate-400">No data available</div>;
 
   const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict } = data;
+  const isFinancial = Boolean(company?.is_financial || data.diagnostics?.is_financial || dcf_result?.is_financial);
   const symbol = company?.currency === 'INR' ? '₹' : '$';
 
   const handleDownloadPDF = () => {
@@ -162,9 +163,19 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* 3. WACC Breakdown Card */}
+        {/* 3. Cost of Capital / WACC Breakdown Card */}
         <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
-          <h3 className="text-lg font-semibold text-white mb-4">WACC Breakdown</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-white">
+              {isFinancial ? 'Cost of Capital (FIG Framework)' : 'WACC Breakdown'}
+            </h3>
+            {isFinancial && (
+              <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded">
+                100% Equity Basis (FCFE)
+              </span>
+            )}
+          </div>
+
           <div className="mb-4">
             <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
               <div 
@@ -177,28 +188,47 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               ></div>
             </div>
             <div className="flex justify-between text-xs mt-1 text-slate-400">
-              <span>Equity {formatPercent(wacc_details?.weight_equity)}</span>
-              <span>Debt {formatPercent(wacc_details?.weight_debt)}</span>
+              <span>{isFinancial ? 'Equity (Capital Base) 100%' : `Equity ${formatPercent(wacc_details?.weight_equity)}`}</span>
+              <span>{isFinancial ? 'Debt: Operational Inventory' : `Debt ${formatPercent(wacc_details?.weight_debt)}`}</span>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-y-4 gap-x-2">
             <div>
-              <div className="text-xs text-slate-400">Cost of Equity</div>
-              <div className="font-medium">{formatPercent(wacc_details?.cost_of_equity)}</div>
+              <div className="text-xs text-slate-400">Cost of Equity (Ke)</div>
+              <div className="font-medium text-emerald-400 font-mono">{formatPercent(wacc_details?.cost_of_equity)}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">Cost of Debt (after tax)</div>
-              <div className="font-medium">{formatPercent(wacc_details?.cost_of_debt)}</div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Valuation Basis' : 'Cost of Debt (after tax)'}
+              </div>
+              <div className="font-medium text-slate-200">
+                {isFinancial ? 'Direct FCFE / DDM' : formatPercent(wacc_details?.cost_of_debt)}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">WACC</div>
-              <div className="font-medium text-lg text-accent-blue">{formatPercent(wacc_details?.wacc)}</div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Discount Rate (Ke)' : 'WACC'}
+              </div>
+              <div className="font-medium text-lg text-accent-blue font-mono">{formatPercent(wacc_details?.wacc)}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">Total Debt</div>
-              <div className="font-medium">{formatCurrency(wacc_details?.total_debt, symbol, true)}</div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Deposits & Borrowings' : 'Total Debt'}
+              </div>
+              <div className="font-medium text-slate-200">
+                {isFinancial 
+                  ? (wacc_details?.operational_debt ? formatCurrency(wacc_details.operational_debt, symbol, true) : 'Operational Inventory')
+                  : formatCurrency(wacc_details?.total_debt, symbol, true)}
+              </div>
             </div>
           </div>
+
+          {isFinancial && (
+            <div className="mt-4 pt-3 border-t border-zinc-800 text-[11px] text-slate-400 leading-relaxed">
+              <span className="text-slate-300 font-medium">Why 100% Equity?</span> For banks and NBFCs, customer deposits and borrowings are operating raw materials (used to create loans), not capital structure debt. FCFE cash flows are net of interest, so discounting uses 100% Cost of Equity (Ke).
+            </div>
+          )}
         </div>
 
         {/* 4. Validation Card */}

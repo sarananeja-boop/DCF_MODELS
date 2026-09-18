@@ -465,7 +465,9 @@ def analyze(req: AnalyzeRequest):
                 "weight_debt": wacc_data.get("weight_debt"),
                 "wacc": wacc_data.get("wacc"),
                 "total_debt": wacc_data.get("total_debt"),
+                "operational_debt": wacc_data.get("operational_debt", 0.0),
                 "total_cash": metrics.get("cash_and_equivalents"),
+                "note": wacc_data.get("note"),
             },
             "dcf_result": dcf_result,
             "monte_carlo": {
