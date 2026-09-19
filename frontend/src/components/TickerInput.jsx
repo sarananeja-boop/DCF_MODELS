@@ -1,6 +1,74 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
+// Curated top equities for instant 0ms autocomplete suggestions
+const POPULAR_TICKERS = [
+  // US Equities
+  { symbol: 'AAPL', name: 'Apple Inc.' },
+  { symbol: 'MSFT', name: 'Microsoft Corporation' },
+  { symbol: 'NVDA', name: 'NVIDIA Corporation' },
+  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)' },
+  { symbol: 'AMZN', name: 'Amazon.com Inc.' },
+  { symbol: 'META', name: 'Meta Platforms Inc.' },
+  { symbol: 'TSLA', name: 'Tesla Inc.' },
+  { symbol: 'BRK-B', name: 'Berkshire Hathaway Inc.' },
+  { symbol: 'JPM', name: 'JPMorgan Chase & Co.' },
+  { symbol: 'V', name: 'Visa Inc.' },
+  { symbol: 'WMT', name: 'Walmart Inc.' },
+  { symbol: 'JNJ', name: 'Johnson & Johnson' },
+  { symbol: 'NFLX', name: 'Netflix Inc.' },
+  { symbol: 'AMD', name: 'Advanced Micro Devices' },
+  { symbol: 'INTC', name: 'Intel Corporation' },
+  { symbol: 'ADBE', name: 'Adobe Inc.' },
+  { symbol: 'CRM', name: 'Salesforce Inc.' },
+  { symbol: 'CSCO', name: 'Cisco Systems Inc.' },
+  { symbol: 'QCOM', name: 'Qualcomm Inc.' },
+  { symbol: 'PLTR', name: 'Palantir Technologies' },
+  { symbol: 'UBER', name: 'Uber Technologies Inc.' },
+  { symbol: 'DIS', name: 'Walt Disney Co.' },
+  { symbol: 'KO', name: 'Coca-Cola Company' },
+  { symbol: 'PEP', name: 'PepsiCo Inc.' },
+  { symbol: 'COST', name: 'Costco Wholesale Corp.' },
+  { symbol: 'PYPL', name: 'PayPal Holdings' },
+  { symbol: 'BA', name: 'Boeing Company' },
+  { symbol: 'COIN', name: 'Coinbase Global Inc.' },
+  // Indian Equities (NSE)
+  { symbol: 'RELIANCE.NS', name: 'Reliance Industries Ltd.' },
+  { symbol: 'TCS.NS', name: 'Tata Consultancy Services Ltd.' },
+  { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd.' },
+  { symbol: 'INFY.NS', name: 'Infosys Ltd.' },
+  { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd.' },
+  { symbol: 'HINDUNILVR.NS', name: 'Hindustan Unilever Ltd.' },
+  { symbol: 'ITC.NS', name: 'ITC Ltd.' },
+  { symbol: 'SBIN.NS', name: 'State Bank of India' },
+  { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel Ltd.' },
+  { symbol: 'LT.NS', name: 'Larsen & Toubro Ltd.' },
+  { symbol: 'KOTAKBANK.NS', name: 'Kotak Mahindra Bank Ltd.' },
+  { symbol: 'AXISBANK.NS', name: 'Axis Bank Ltd.' },
+  { symbol: 'MARUTI.NS', name: 'Maruti Suzuki India Ltd.' },
+  { symbol: 'SUNPHARMA.NS', name: 'Sun Pharmaceutical Industries' },
+  { symbol: 'TITAN.NS', name: 'Titan Company Ltd.' },
+  { symbol: 'BAJFINANCE.NS', name: 'Bajaj Finance Ltd.' },
+  { symbol: 'TATAMOTORS.NS', name: 'Tata Motors Ltd.' },
+  { symbol: 'TATASTEEL.NS', name: 'Tata Steel Ltd.' },
+  { symbol: 'WIPRO.NS', name: 'Wipro Ltd.' },
+  { symbol: 'HCLTECH.NS', name: 'HCL Technologies Ltd.' },
+  { symbol: 'NESTLEIND.NS', name: 'Nestle India Ltd.' },
+  { symbol: 'ADANIENT.NS', name: 'Adani Enterprises Ltd.' },
+  { symbol: 'ADANIPORTS.NS', name: 'Adani Ports & SEZ Ltd.' },
+  { symbol: 'NTPC.NS', name: 'NTPC Ltd.' },
+  { symbol: 'ONGC.NS', name: 'Oil & Natural Gas Corp.' },
+  { symbol: 'POWERGRID.NS', name: 'Power Grid Corp. of India' },
+  { symbol: 'COALINDIA.NS', name: 'Coal India Ltd.' },
+  { symbol: 'ASIANPAINT.NS', name: 'Asian Paints Ltd.' },
+  { symbol: 'ULTRACEMCO.NS', name: 'UltraTech Cement Ltd.' },
+  { symbol: 'M&M.NS', name: 'Mahindra & Mahindra Ltd.' },
+  { symbol: 'DRREDDY.NS', name: "Dr. Reddy's Laboratories" },
+  { symbol: 'CIPLA.NS', name: 'Cipla Ltd.' },
+  { symbol: 'ZOMATO.NS', name: 'Zomato Ltd.' },
+  { symbol: 'JIOFIN.NS', name: 'Jio Financial Services' }
+];
+
 export default function TickerInput({ ticker, setTicker, market, setMarket, onAnalyze, loading, vertical = false }) {
   const [query, setQuery] = useState(ticker);
   const [suggestions, setSuggestions] = useState([]);
@@ -8,6 +76,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
   const [searching, setSearching] = useState(false);
   const dropdownRef = useRef(null);
   const timeoutRef = useRef(null);
+  const searchCache = useRef(new Map());
 
   // Sync prop changes (e.g. from reset or initial) to local query
   useEffect(() => {
@@ -25,20 +94,51 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchSuggestions = async (q) => {
-    if (!q || q.length < 2) {
-      setSuggestions([]);
-      setShowDropdown(false);
+  const filterLocal = (q) => {
+    if (!q || q.length < 1) return [];
+    const lower = q.trim().toLowerCase();
+    return POPULAR_TICKERS.filter(item => {
+      const symClean = item.symbol.replace('.NS', '').replace('.BO', '').toLowerCase();
+      const name = item.name.toLowerCase();
+      return symClean.startsWith(lower) || symClean.includes(lower) || name.includes(lower);
+    }).slice(0, 8);
+  };
+
+  const fetchSuggestions = async (q, localMatches = []) => {
+    if (!q || q.length < 2) return;
+    
+    const cacheKey = q.trim().toLowerCase();
+    if (searchCache.current.has(cacheKey)) {
+      const cached = searchCache.current.get(cacheKey);
+      setSuggestions(cached);
+      setShowDropdown(cached.length > 0);
       return;
     }
-    
+
     setSearching(true);
     try {
-      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`);
-      setSuggestions(response.data.results || []);
-      setShowDropdown(true);
+      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 4000 });
+      const remoteResults = response.data.results || [];
+      
+      // Merge remote results with local matches, avoiding duplicates
+      const seen = new Set();
+      const combined = [];
+      for (const item of [...localMatches, ...remoteResults]) {
+        if (!seen.has(item.symbol)) {
+          seen.add(item.symbol);
+          combined.push(item);
+        }
+      }
+      const finalSuggestions = combined.slice(0, 8);
+      searchCache.current.set(cacheKey, finalSuggestions);
+      setSuggestions(finalSuggestions);
+      setShowDropdown(finalSuggestions.length > 0);
     } catch (err) {
-      console.error("Search failed:", err);
+      console.warn("Remote search error (falling back to local):", err.message);
+      if (localMatches.length > 0) {
+        setSuggestions(localMatches);
+        setShowDropdown(true);
+      }
     } finally {
       setSearching(false);
     }
@@ -49,11 +149,21 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
     setQuery(val);
     setTicker(val); // optimistic update
     
-    // Debounce search
+    // 1. Instant 0ms local match
+    const localMatches = filterLocal(val);
+    if (localMatches.length > 0) {
+      setSuggestions(localMatches);
+      setShowDropdown(true);
+    } else if (val.trim().length < 2) {
+      setSuggestions([]);
+      setShowDropdown(false);
+    }
+
+    // 2. Debounced background API lookup for exhaustive universe
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      fetchSuggestions(val);
-    }, 300);
+      fetchSuggestions(val, localMatches);
+    }, 250);
   };
 
   const handleSelectSuggestion = (sym, name) => {

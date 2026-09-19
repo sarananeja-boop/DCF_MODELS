@@ -61,6 +61,11 @@ export default function App() {
   useEffect(() => sessionStorage.setItem('vl_market', market), [market]);
   useEffect(() => sessionStorage.setItem('vl_overrides', JSON.stringify(overrides)), [overrides]);
 
+  // Pre-warm backend container immediately upon page load to minimize cold starts
+  useEffect(() => {
+    axios.get('/api/health').catch(() => {});
+  }, []);
+
   // Auto-refresh on page reload (Cmd+R)
   useEffect(() => {
     const savedTicker = sessionStorage.getItem('vl_ticker');

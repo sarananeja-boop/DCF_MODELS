@@ -615,14 +615,26 @@ if __name__ == "__main__":
     )
 
 import requests
+_search_cache = {}
+
 @app.get("/api/search")
 def search_ticker(q: str):
+    q_norm = q.strip().upper()
+    if q_norm in _search_cache:
+        return {"results": _search_cache[q_norm]}
+
     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=8&newsCount=0"
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        r = requests.get(url, headers=headers)
+        r = requests.get(url, headers=headers, timeout=4)
         data = r.json()
-        results = [{"symbol": quote['symbol'], "name": quote.get('shortname', quote.get('longname', ''))} for quote in data.get('quotes', []) if quote.get('quoteType') in ['EQUITY', 'ETF']]
+        results = [
+            {"symbol": quote['symbol'], "name": quote.get('shortname', quote.get('longname', ''))}
+            for quote in data.get('quotes', [])
+            if quote.get('quoteType') in ['EQUITY', 'ETF']
+        ]
+        if results:
+            _search_cache[q_norm] = results
         return {"results": results}
     except Exception as e:
         return {"results": []}
