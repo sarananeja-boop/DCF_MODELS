@@ -23,7 +23,7 @@ import TrendsTab from './components/TrendsTab';
 import ExcelDownloadButton from './components/ExcelDownloadButton';
 import ErrorBoundary from './components/ErrorBoundary';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 if (API_BASE_URL) {
   axios.defaults.baseURL = API_BASE_URL;
 }
