@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Toaster, toast } from 'react-hot-toast';
+import { Analytics } from '@vercel/analytics/react';
 import { 
   FiTrendingUp, 
   FiBarChart2, 
@@ -382,6 +383,7 @@ export default function App() {
           </div>
         )}
       </main>
+      <Analytics />
     </div>
   );
 }

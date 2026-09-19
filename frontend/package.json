@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "axios": "^1.7.2",
     "html2pdf.js": "^0.14.0",
     "plotly.js": "^2.33.0",
