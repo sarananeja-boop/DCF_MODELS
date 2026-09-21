@@ -266,6 +266,68 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     beta_info = compute_clean_beta(stock, yf_ticker, market, raw_info_beta=info.get("beta"))
     market_cap = float(current_price) * float(shares_out)
 
+    # -----------------------------------------------------------------------
+    # Automated Statement Unit Scale Reconciliation
+    # Fixes international scraping discrepancies where Yahoo Finance reports
+    # statements in units that differ by 10x, 100x, or 1000x from the per-share metrics.
+    # E.g. Indian filings in Crores scraped as Tens of Millions or Lakhs (e.g. INDOMIM).
+    # -----------------------------------------------------------------------
+    scale_multiplier = 1.0
+    try:
+        rev_per_share = info.get("revenuePerShare")
+        bs_bv_per_share = info.get("bookValue")
+        
+        fin_rev = None
+        if not income_stmt.empty:
+            for col in ["Total Revenue", "Operating Revenue"]:
+                if col in income_stmt.columns:
+                    val = income_stmt[col].dropna()
+                    if not val.empty and float(val.iloc[0]) > 0:
+                        fin_rev = float(val.iloc[0])
+                        break
+        
+        fin_equity = None
+        if not balance_sheet.empty:
+            for col in ["Stockholders Equity", "Total Stockholders' Equity", "Common Stock Equity"]:
+                if col in balance_sheet.columns:
+                    val = balance_sheet[col].dropna()
+                    if not val.empty and float(val.iloc[0]) > 0:
+                        fin_equity = float(val.iloc[0])
+                        break
+
+        ratios = []
+        if rev_per_share and shares_out and fin_rev and fin_rev > 0:
+            implied_rev = float(rev_per_share) * float(shares_out)
+            ratios.append(implied_rev / fin_rev)
+            
+        if bs_bv_per_share and shares_out and fin_equity and fin_equity > 0:
+            implied_eq = float(bs_bv_per_share) * float(shares_out)
+            ratios.append(implied_eq / fin_equity)
+
+        if ratios:
+            avg_ratio = float(np.median(ratios))
+            if 7.0 <= avg_ratio <= 14.0:
+                scale_multiplier = 10.0
+            elif 70.0 <= avg_ratio <= 140.0:
+                scale_multiplier = 100.0
+            elif 700.0 <= avg_ratio <= 1400.0:
+                scale_multiplier = 1000.0
+            elif 0.07 <= avg_ratio <= 0.14:
+                scale_multiplier = 0.1
+
+            if scale_multiplier != 1.0:
+                logger.warning(
+                    "Detected %sx unit scale mismatch for %s (implied vs statement ratio: %.2f). "
+                    "Auto-reconciling financial statements by %sx.",
+                    scale_multiplier, yf_ticker, avg_ratio, scale_multiplier
+                )
+                income_stmt = income_stmt * scale_multiplier
+                balance_sheet = balance_sheet * scale_multiplier
+                cash_flow = cash_flow * scale_multiplier
+    except Exception as e:
+        logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
+
+
     company_name = info.get("shortName") or info.get("longName") or yf_ticker
     sector = info.get("sector")
     industry = info.get("industry")
