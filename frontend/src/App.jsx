@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Toaster, toast } from 'react-hot-toast';
 import { Analytics } from '@vercel/analytics/react';
@@ -16,7 +16,8 @@ import {
   FiLayers,
   FiFileText,
   FiSliders,
-  FiExternalLink
+  FiExternalLink,
+  FiX
 } from 'react-icons/fi';
 
 import TickerInput from './components/TickerInput';
@@ -43,6 +44,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadingTimer, setLoadingTimer] = useState(0);
   const [error, setError] = useState(null);
+  const abortControllerRef = useRef(null);
   
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('vl_activeTab') || 'overview');
   const [aiSummary, setAiSummary] = useState(() => sessionStorage.getItem('vl_aiSummary') || '');
@@ -145,19 +147,31 @@ export default function App() {
       }
     }
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await axios.post('/api/analyze', {
         ticker: targetTicker,
         market: targetMarket,
         overrides: safeOverrides,
         monte_carlo_iterations: monteCarloIterations
-      }, { timeout: 45000 });
+      }, { 
+        timeout: 45000,
+        signal: abortControllerRef.current.signal
+      });
       
       setAnalysisData(response.data);
       setTicker(targetTicker);
       setMarket(targetMarket);
       toast.success(`Analysis for ${response.data.company.ticker} completed`);
     } catch (err) {
+      if (axios.isCancel(err) || err.name === 'CanceledError') {
+        toast('Valuation request cancelled', { icon: 'ℹ️' });
+        return;
+      }
       let errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message;
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep on Render. Please retry in 10 seconds.';
@@ -169,6 +183,14 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelAnalyze = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setLoading(false);
+    setLoadingTimer(0);
   };
 
   const handleQuickLaunch = (quickTicker, quickMarket) => {
@@ -251,9 +273,9 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 relative overflow-hidden flex flex-col">
         
-        {/* Reassuring Loading Overlay with cold start progress timer */}
+        {/* Reassuring Loading Overlay with cold start progress timer and cancel escape hatch */}
         {loading && (
-          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
+          <div className="fixed inset-0 bg-zinc-950/85 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
             <div className="relative mb-6">
               <div className="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div>
               <div className="absolute inset-0 flex items-center justify-center font-mono text-xs text-blue-400 font-bold">
@@ -263,14 +285,28 @@ export default function App() {
             <h2 className="text-2xl font-bold tracking-tight text-zinc-100 mb-2">
               Valuing {ticker || 'Company'}...
             </h2>
-            <p className="text-zinc-400 max-w-md text-sm leading-relaxed mb-4">
-              Ingesting SEC/BSE filings, calculating dynamic WACC, projecting 10-year cash flows, and running 10,000 Monte Carlo iterations.
+            <p className="text-zinc-400 max-w-md text-sm leading-relaxed mb-4 min-h-[40px] flex items-center justify-center">
+              {loadingTimer < 4
+                ? 'Connecting to valuation engine & fetching SEC/BSE filings...'
+                : loadingTimer < 10
+                ? 'Extracting multi-year financials, computing WACC & projecting cash flows...'
+                : loadingTimer < 20
+                ? 'Waking up cloud valuation engine (~15-25s on first request)...'
+                : 'Finalizing 10,000 Monte Carlo simulation runs & confidence intervals...'}
             </p>
             {loadingTimer >= 4 && (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs animate-pulse">
-                <span>⚡ Cloud valuation engine warming up (~15-20s on first request)</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs mb-6 animate-pulse">
+                <span>⚡ Cloud server warming up from idle sleep</span>
               </div>
             )}
+            <button
+              type="button"
+              onClick={handleCancelAnalyze}
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg transition-colors cursor-pointer"
+            >
+              <FiX className="w-3.5 h-3.5" />
+              <span>Cancel & Return</span>
+            </button>
           </div>
         )}
 
