@@ -167,24 +167,24 @@ export default function TickerInput({
 
   const handleSelectSuggestion = (sym, name, itemMarket) => {
     const isIN = itemMarket === 'IN' || sym.endsWith('.NS') || sym.endsWith('.BO');
-    if (isIN) {
-      setMarket('IN');
-      const cleanSym = sym.replace('.NS', '').replace('.BO', '');
-      setQuery(cleanSym);
-      setTicker(cleanSym);
-    } else {
-      setMarket('US');
-      setQuery(sym);
-      setTicker(sym);
-    }
+    const cleanSym = isIN ? sym.replace('.NS', '').replace('.BO', '') : sym;
+    const resolvedMarket = isIN ? 'IN' : 'US';
+    
+    setMarket(resolvedMarket);
+    setQuery(cleanSym);
+    setTicker(cleanSym);
     setShowDropdown(false);
+
+    // Immediately trigger valuation on selection without requiring a second click
+    onAnalyze({}, true, cleanSym, resolvedMarket);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (ticker.trim()) {
+    const cleanQuery = query.trim().toUpperCase();
+    if (cleanQuery) {
       setShowDropdown(false);
-      onAnalyze({}, true);
+      onAnalyze({}, true, cleanQuery, market);
     }
   };
 

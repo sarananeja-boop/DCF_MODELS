@@ -45,6 +45,16 @@ export default function App() {
   const [loadingTimer, setLoadingTimer] = useState(0);
   const [error, setError] = useState(null);
   const abortControllerRef = useRef(null);
+  const activeRequestIdRef = useRef(0);
+  const valuationCacheRef = useRef(new Map());
+
+  // Populate valuation cache from session state if already present
+  useEffect(() => {
+    if (analysisData?.company?.ticker) {
+      const key = `${analysisData.company.ticker.toUpperCase()}:${analysisData.company.market || market}`;
+      valuationCacheRef.current.set(key, analysisData);
+    }
+  }, []);
   
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('vl_activeTab') || 'overview');
   const [aiSummary, setAiSummary] = useState(() => sessionStorage.getItem('vl_aiSummary') || '');
@@ -136,7 +146,11 @@ export default function App() {
   useEffect(() => {
     if (!window.history.state) {
       const initialView = analysisData ? 'analysis' : 'home';
-      window.history.replaceState({ view: initialView, ticker: analysisData?.company?.ticker || '' }, '');
+      window.history.replaceState({ 
+        view: initialView, 
+        ticker: analysisData?.company?.ticker || '', 
+        market: analysisData?.company?.market || 'auto' 
+      }, '');
     }
 
     const onPopState = (e) => {
@@ -144,7 +158,7 @@ export default function App() {
       if (!state || state.view === 'home' || !state.ticker) {
         handleGoHome(false);
       } else if (state.view === 'analysis' && state.ticker) {
-        handleAnalyze({}, false, state.ticker, state.market || 'auto');
+        handleAnalyze({}, false, state.ticker, state.market || 'auto', true);
       }
     };
 
@@ -152,7 +166,13 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const handleAnalyze = async (overrideParams = null, isNewSearch = false, explicitTicker = null, explicitMarket = null) => {
+  const handleAnalyze = async (
+    overrideParams = null, 
+    isNewSearch = false, 
+    explicitTicker = null, 
+    explicitMarket = null,
+    isHistoryNav = false
+  ) => {
     const targetTicker = (explicitTicker || ticker || '').trim().toUpperCase();
     const targetMarket = explicitMarket || market;
 
@@ -160,8 +180,6 @@ export default function App() {
       toast.error('Please enter a ticker symbol');
       return;
     }
-    setLoading(true);
-    setError(null);
     
     const isDifferentCompany = !analysisData || 
         analysisData.company.ticker.toUpperCase() !== targetTicker ||
@@ -182,10 +200,31 @@ export default function App() {
       }
     }
 
+    // Instant in-memory cache check: eliminate re-fetching on back/forward or repeat navigation
+    const cacheKey = `${targetTicker}:${targetMarket}`;
+    if (!isNewSearch && Object.keys(safeOverrides).length === 0 && valuationCacheRef.current.has(cacheKey)) {
+      const cached = valuationCacheRef.current.get(cacheKey);
+      setAnalysisData(cached);
+      setTicker(cached.company.ticker);
+      setMarket(cached.company.market || targetMarket);
+      setError(null);
+      setLoading(false);
+      sessionStorage.setItem('vl_ticker', cached.company.ticker);
+      return;
+    }
+
+    // Assign unique incremental ID to this valuation request
+    const currentReqId = ++activeRequestIdRef.current;
+
+    // Abort previous in-flight network request silently
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    abortControllerRef.current = new AbortController();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setLoading(true);
+    setError(null);
 
     try {
       const response = await axios.post('/api/analyze', {
@@ -195,28 +234,42 @@ export default function App() {
         monte_carlo_iterations: monteCarloIterations
       }, { 
         timeout: 45000,
-        signal: abortControllerRef.current.signal
+        signal: controller.signal
       });
       
+      // If a newer search was initiated while this request was running, discard silently
+      if (currentReqId !== activeRequestIdRef.current) {
+        return;
+      }
+
+      valuationCacheRef.current.set(cacheKey, response.data);
       setAnalysisData(response.data);
       setTicker(targetTicker);
       setMarket(targetMarket);
       sessionStorage.setItem('vl_ticker', response.data.company.ticker);
       toast.success(`Analysis for ${response.data.company.ticker} completed`);
       
-      // Update browser history so Back button returns to search instead of exiting website
-      try {
-        window.history.pushState(
-          { view: 'analysis', ticker: response.data.company.ticker, market: targetMarket },
-          '',
-          `?ticker=${encodeURIComponent(response.data.company.ticker)}`
-        );
-      } catch (_) {}
+      // Update browser history only for new searches (not on popstate back/forward traversal)
+      if (!isHistoryNav) {
+        try {
+          window.history.pushState(
+            { view: 'analysis', ticker: response.data.company.ticker, market: targetMarket },
+            '',
+            `?ticker=${encodeURIComponent(response.data.company.ticker)}`
+          );
+        } catch (_) {}
+      }
     } catch (err) {
-      if (axios.isCancel(err) || err.name === 'CanceledError') {
-        toast('Valuation request cancelled', { icon: 'ℹ️' });
+      // If this is no longer the active request, ignore completely
+      if (currentReqId !== activeRequestIdRef.current) {
         return;
       }
+
+      if (axios.isCancel(err) || err.name === 'CanceledError') {
+        // Silent cancellation when superseded by newer request
+        return;
+      }
+
       let errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message;
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep on Render. Please retry in 10 seconds.';
@@ -235,17 +288,22 @@ export default function App() {
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
-      setLoading(false);
-      setLoadingTimer(0);
+      // Only the active request is allowed to reset the loading state
+      if (currentReqId === activeRequestIdRef.current) {
+        setLoading(false);
+        setLoadingTimer(0);
+      }
     }
   };
 
   const handleCancelAnalyze = () => {
+    activeRequestIdRef.current++;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     setLoading(false);
     setLoadingTimer(0);
+    toast('Valuation request cancelled', { icon: 'ℹ️' });
   };
 
   const handleQuickLaunch = (quickTicker, quickMarket) => {
@@ -255,6 +313,12 @@ export default function App() {
   };
 
   const handleGoHome = (updateHistory = true) => {
+    activeRequestIdRef.current++;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setLoading(false);
+    setLoadingTimer(0);
     setAnalysisData(null);
     setError(null);
     setTicker('');
@@ -264,9 +328,9 @@ export default function App() {
     sessionStorage.removeItem('vl_analysisData');
     sessionStorage.removeItem('vl_ticker');
     sessionStorage.removeItem('vl_overrides');
-    if (updateHistory) {
+    if (updateHistory === true) {
       try {
-        window.history.pushState({ view: 'home' }, '', window.location.pathname);
+        window.history.pushState({ view: 'home', ticker: '', market: 'auto' }, '', window.location.pathname);
       } catch (_) {}
     }
   };
