@@ -1,11 +1,11 @@
 """
-Banking & Financial Institutions Valuation Engine
-=================================================
+Banking & Financial Services Valuation Engine
+=============================================
 
 Dedicated valuation framework for Financial Services (Banks, NBFCs, Insurance,
 Capital Markets, Consumer Finance).
 
-Financial institutions operate under fundamentally different economic and regulatory
+Financial services firms operate under fundamentally different economic and regulatory
 principles than non-financial corporations:
 1. Customer deposits and wholesale borrowings are OPERATIONAL INVENTORY, not capital structure debt.
 2. Interest expense is direct Cost of Goods Sold (COGS).
@@ -14,7 +14,7 @@ principles than non-financial corporations:
    capital adequacy ratios / CRAR as risk-weighted assets expand), not physical CapEx.
 5. Equity is valued directly using the Multi-Stage Free Cash Flow to Equity (FCFE) /
    Dividend Discount Model (DDM) discounted at the Cost of Equity (Ke). WACC is not applicable.
-6. A Justified Price-to-Book (P/B) / Residual Income model is provided as an institutional cross-check.
+6. A Justified Price-to-Book (P/B) / Residual Income model is provided as a valuation cross-check.
 
 Reference: Professor Aswath Damodaran, "Valuing Financial Services Firms".
 """
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
-    """Compute Cost of Equity (Ke) via CAPM for a financial institution.
+    """Compute Cost of Equity (Ke) via CAPM for a banking or financial services firm.
 
     For banks, debt is operational, so equity is the entire capital claim being valued.
     WACC is identical to Ke.
@@ -78,7 +78,7 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
         "beta_clamped": stock_data.get("beta_clamped", False),
         "beta_note": stock_data.get("beta_note", ""),
         "is_financial": True,
-        "note": "For financial institutions, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly.",
+        "note": "For banking and financial firms, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly.",
     }
 
 
@@ -106,7 +106,7 @@ def run_bank_valuation(
         terminal_growth: Long-term nominal GDP growth rate (bounded by Rf).
         projection_years: Number of forecast years (default 5).
         current_roe: Optional override for base ROE.
-        use_mid_year: Whether to use institutional mid-year discounting (t = 0.5, 1.5, ...).
+        use_mid_year: Whether to use mid-year discounting (t = 0.5, 1.5, ...).
 
     Returns:
         A dict containing implied per share price, equity value, forecast schedules,
@@ -242,7 +242,7 @@ def run_bank_valuation(
     equity_value = pv_fcfe + pv_terminal_value
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
-    # Institutional Cross-Check: Justified Price-to-Book (P/B) Model
+    # Valuation Cross-Check: Justified Price-to-Book (P/B) Model
     # Justified P/B = (ROE - g) / (Ke - g)
     if cost_of_equity > effective_terminal_growth:
         justified_pb = max(0.2, (roe_schedule[-1] - effective_terminal_growth) / (cost_of_equity - effective_terminal_growth))

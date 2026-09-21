@@ -97,7 +97,7 @@ def compute_clean_beta(
     market: str,
     raw_info_beta: Optional[float] = None
 ) -> dict:
-    """Compute an institutional Blume-adjusted beta against the local benchmark.
+    """Compute a Blume-adjusted beta against the local benchmark.
 
     Addresses international distortion where Yahoo Finance beta is calculated
     against the US S&P 500 (^GSPC in USD), producing negative or near-zero betas
@@ -270,7 +270,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     sector = info.get("sector")
     industry = info.get("industry")
 
-    # Financial Institution Detection (Banks, NBFCs, Insurance, Capital Markets)
+    # Banking & Financial Services Detection (Banks, NBFCs, Insurance, Capital Markets)
     is_financial = False
     sec_lower = (sector or "").lower()
     ind_lower = (industry or "").lower()
@@ -376,7 +376,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     revenue = safe_get(income_stmt, "Total Revenue")[::-1]
     ebit = safe_get(income_stmt, "EBIT")[::-1]
     
-    # Financial institutions specific metrics
+    # Banking & Financial Services specific metrics
     net_income = safe_get(income_stmt, "Net Income")[::-1]
     net_interest_income = safe_get(income_stmt, "Net Interest Income")[::-1]
     pretax_income = safe_get(income_stmt, "Pretax Income")[::-1]
@@ -476,6 +476,72 @@ def compute_historical_metrics(stock_data: dict) -> dict:
 
     n_years = len(revenue)
 
+    def _extract_series(df, col_candidates, default=0.0):
+        if isinstance(col_candidates, str):
+            col_candidates = [col_candidates]
+        for col_name in col_candidates:
+            if col_name in df.columns:
+                series = df[col_name].fillna(default).values[::-1]
+                return [float(x) for x in series]
+        return [default] * n_years
+
+    # Full structured 3-statements matching HUL FINAL MODEL.xlsx
+    statements = {
+        "income_statement": {
+            "Revenues / Net Sales": revenue.tolist(),
+            "Cost of Goods Sold (COGS)": _extract_series(income_stmt, ["Cost Of Revenue", "Reconciled Cost Of Revenue"]),
+            "Gross Profit": _extract_series(income_stmt, ["Gross Profit"]),
+            "Selling, General & Admin (SG&A)": _extract_series(income_stmt, ["Selling General And Administration", "Operating Expense"]),
+            "Operating Profit (EBITDA)": _extract_series(income_stmt, ["EBITDA", "Normalized EBITDA"]),
+            "Depreciation & Amortization (D&A)": dna.tolist(),
+            "Operating Income (EBIT)": ebit.tolist(),
+            "Interest Expense": _extract_series(income_stmt, ["Interest Expense", "Interest Expense Non Operating"]),
+            "Earnings Before Tax (EBT)": _extract_series(income_stmt, ["Pretax Income"]),
+            "Income Tax Expense": _extract_series(income_stmt, ["Tax Provision"]),
+            "Net Profit / Net Income": net_income.tolist(),
+            "Diluted Shares Outstanding": _extract_series(income_stmt, ["Diluted Average Shares", "Basic Average Shares"]),
+            "Earnings Per Share (EPS)": _extract_series(income_stmt, ["Diluted EPS", "Basic EPS"]),
+            "Cash Dividends Paid": dividends_paid.tolist(),
+        },
+        "balance_sheet": {
+            "Equity Share Capital": _extract_series(balance_sheet, ["Common Stock", "Capital Stock", "Ordinary Shares Number"]),
+            "Reserves & Retained Earnings": _extract_series(balance_sheet, ["Retained Earnings", "Additional Paid In Capital"]),
+            "Total Stockholders' Equity": _extract_series(balance_sheet, ["Stockholders Equity", "Common Stock Equity"]),
+            "Short-Term Borrowings": _extract_series(balance_sheet, ["Current Debt", "Current Debt And Capital Lease Obligation"]),
+            "Long-Term Borrowings": _extract_series(balance_sheet, ["Long Term Debt", "Long Term Debt And Capital Lease Obligation"]),
+            "Total Debt": _extract_series(balance_sheet, ["Total Debt"]),
+            "Other Liabilities": _extract_series(balance_sheet, ["Other Current Liabilities", "Other Non Current Liabilities"]),
+            "Total Liabilities & Equity": _extract_series(balance_sheet, ["Total Liabilities Net Minority Interest", "Total Capitalization"]),
+            "Fixed Assets (Net PPE)": _extract_series(balance_sheet, ["Net PPE", "Properties"]),
+            "Capital Work in Progress (CWIP)": _extract_series(balance_sheet, ["Construction In Progress"]),
+            "Investments": _extract_series(balance_sheet, ["Investmentin Financial Assets", "Long Term Equity Investment", "Available For Sale Securities"]),
+            "Other Non-Current Assets": _extract_series(balance_sheet, ["Other Non Current Assets"]),
+            "Total Non-Current Assets": _extract_series(balance_sheet, ["Total Non Current Assets"]),
+            "Receivables": _extract_series(balance_sheet, ["Accounts Receivable", "Gross Accounts Receivable"]),
+            "Inventory": _extract_series(balance_sheet, ["Inventory", "Finished Goods"]),
+            "Cash & Bank Balances": _extract_series(balance_sheet, ["Cash And Cash Equivalents", "Cash Financial"]),
+            "Short-Term Investments": _extract_series(balance_sheet, ["Other Short Term Investments", "Cash Cash Equivalents And Short Term Investments"]),
+            "Total Current Assets": _extract_series(balance_sheet, ["Current Assets"]),
+            "Total Assets": _extract_series(balance_sheet, ["Total Assets"]),
+        },
+        "cash_flow": {
+            "Net Profit from Operations": net_income.tolist(),
+            "Depreciation & Amortization": dna.tolist(),
+            "Change in Working Capital": _extract_series(cash_flow, ["Change In Working Capital"]),
+            "Direct Taxes Paid": _extract_series(cash_flow, ["Taxes Refund Paid"]),
+            "Cash Flow from Operating Activities (CFO)": _extract_series(cash_flow, ["Operating Cash Flow"]),
+            "Fixed Assets Purchased (CapEx)": capex.tolist(),
+            "Net Investments Cash Flow": _extract_series(cash_flow, ["Net Investment Purchase And Sale"]),
+            "Cash Flow from Investing Activities (CFI)": _extract_series(cash_flow, ["Investing Cash Flow"]),
+            "Net Debt Flow": _extract_series(cash_flow, ["Net Issuance Payments Of Debt"]),
+            "Dividends Paid": dividends_paid.tolist(),
+            "Cash Flow from Financing Activities (CFF)": _extract_series(cash_flow, ["Financing Cash Flow"]),
+            "Net Change in Cash": _extract_series(cash_flow, ["Changes In Cash"]),
+            "Ending Cash Position": _extract_series(cash_flow, ["End Cash Position"]),
+            "Free Cash Flow (FCFF)": _extract_series(cash_flow, ["Free Cash Flow"]),
+        }
+    }
+
     return {
         "years": [str(d.year) if hasattr(d, 'year') else str(d)[:4] for d in income_stmt.index][::-1],
         # Raw arrays (as lists for JSON-serialisability)
@@ -487,7 +553,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "delta_nwc": delta_nwc.tolist(),
         "rev_growth": rev_growth.tolist(),
         "ebit_margins": ebit_margins.tolist(),
-        # Bank & Financial Institutions Specifics
+        # Banking & Financial Services Specifics
         "net_income": net_income.tolist(),
         "net_interest_income": net_interest_income.tolist(),
         "pretax_income": pretax_income.tolist(),
@@ -513,4 +579,6 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "total_debt": total_debt,
         "cash_and_equivalents": cash_and_equivalents,
         "interest_expense": interest_expense,
+        # Full 3-statement models
+        "statements": statements,
     }

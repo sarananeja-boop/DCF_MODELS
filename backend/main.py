@@ -133,11 +133,21 @@ def _numpy_to_python(obj: Any) -> Any:
 def _histogram(prices: Any, bins: int = 100) -> Dict[str, List[float]]:
     """Return {bins, counts} suitable for Plotly histogram rendering."""
     arr = np.asarray(prices, dtype=float)
-    counts, bin_edges = np.histogram(arr, bins=bins)
+    if len(arr) == 0:
+        return {"bins": [], "counts": []}
+    
+    # Clip extreme fat-tail outliers (top 0.5%) to avoid squishing 99.5% of simulations into 2 bins
+    p_low = max(0.0, float(np.percentile(arr, 0.1)))
+    p_high = float(np.percentile(arr, 99.5))
+    if p_high <= p_low:
+        p_high = p_low + 1.0
+        
+    clipped_arr = np.clip(arr, p_low, p_high)
+    counts, bin_edges = np.histogram(clipped_arr, bins=bins, range=(p_low, p_high))
     # Use bin midpoints for the x-axis
     midpoints = ((bin_edges[:-1] + bin_edges[1:]) / 2).tolist()
     return {
-        "bins": [float(b) for b in midpoints],
+        "bins": [round(float(b), 2) for b in midpoints],
         "counts": [int(c) for c in counts],
     }
 
@@ -214,7 +224,7 @@ def analyze(req: AnalyzeRequest):
         # 4. Market profile (with live RFR)
         market_profile = get_market_profile(market)
 
-        # 5. Dual Engine Routing: Financial Institutions vs Non-Financial Corporations
+        # 5. Dual Engine Routing: Banking & Financial Services vs Non-Financial Corporations
         is_financial = stock_data.get("is_financial", False)
 
         default_terminal_g = market_profile.get("terminal_growth", 0.055 if market == "IN" else 0.025)
@@ -457,6 +467,7 @@ def analyze(req: AnalyzeRequest):
                 "avg_dnwc_pct": metrics.get("avg_dnwc_pct"),
                 "n_years": metrics.get("n_years"),
                 "cash_and_equivalents": metrics.get("cash_and_equivalents"),
+                "statements": metrics.get("statements", {}),
             },
             "wacc": {
                 "cost_of_equity": wacc_data.get("cost_of_equity"),
@@ -490,6 +501,7 @@ def analyze(req: AnalyzeRequest):
                 "histogram": mc_histogram,
                 "scatter": mc_scatter,
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
+                "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])],
             },
             "sensitivity": {
                 "growth_wacc": sens_growth_wacc,

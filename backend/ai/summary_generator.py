@@ -277,7 +277,7 @@ DCF valuation analysis. Use the exact numbers provided. Strictly follow the OUTP
         except Exception as exc:
             logger.warning("Groq call failed for model %s: %s", model_name, exc)
 
-    logger.error("All AI models failed, using institutional algorithmic fallback")
+    logger.error("All AI models failed, using algorithmic fallback")
     return _build_fallback(analysis_data)
 
 

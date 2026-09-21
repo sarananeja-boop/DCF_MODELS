@@ -65,7 +65,7 @@ def validate_bank_valuation(
     metrics: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Computes P/B (Price-to-Book) validation cross-check for financial institutions.
+    Computes P/B (Price-to-Book) validation cross-check for banking and financial services firms.
     Compares Market P/B vs Implied Model P/B vs Justified Gordon P/B.
     """
     current_price = float(stock_data.get("current_price", 0.0))
@@ -118,9 +118,9 @@ def generate_verdict(current_price: float, mc_stats: Dict[str, float], terminal_
 
     import math
     def is_invalid(val):
-        return val is None or math.isnan(val) or math.isinf(val) or val == 0.0
+        return val is None or math.isnan(val) or math.isinf(val) or val < 0.0
 
-    if not terminal_value_valid or not mc_valid or is_invalid(p5) or is_invalid(p95) or is_invalid(median):
+    if not terminal_value_valid or not mc_valid or is_invalid(p5) or is_invalid(p95) or is_invalid(median) or median == 0.0:
         return {
             "verdict": "N/A",
             "description": "Valuation assumptions do not currently support a valid terminal value or sufficient valid simulations.",

@@ -120,7 +120,7 @@ def run_dcf(
 ) -> dict:
     """Run a single multi-stage DCF valuation with linear growth fade and Mid-Year convention.
 
-    Implements institutional Damodaran DCF modeling (matching HUL FINAL MODEL.xlsx):
+    Implements Damodaran DCF modeling (matching HUL FINAL MODEL.xlsx):
 
     1. Revenue grows from ``start_growth`` in Year 1 to ``terminal_growth``
        in Year *N* via ``np.linspace``.
@@ -159,6 +159,11 @@ def run_dcf(
     else:
         margin_schedule = np.array([ebit_margin] * projection_years)
 
+    # In corporate finance / Damodaran framework, CapEx% converges towards steady-state
+    # maintenance CapEx: D&A * (1 + terminal_growth)
+    steady_state_capex_pct = avg_dna_pct * (1.0 + terminal_growth)
+    capex_schedule = np.linspace(avg_capex_pct, steady_state_capex_pct, projection_years)
+
     for yr in range(projection_years):
         g = growth_schedule[yr]
         next_rev = last_rev * (1 + g)
@@ -166,7 +171,7 @@ def run_dcf(
 
         nopat = next_rev * margin * (1 - tax_rate)
         dna_add = next_rev * avg_dna_pct
-        capex_sub = next_rev * avg_capex_pct
+        capex_sub = next_rev * capex_schedule[yr]
         delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
         
         ufcf = nopat + dna_add - capex_sub - delta_nwc
@@ -190,22 +195,44 @@ def run_dcf(
     pv_ufcf_list = [cf / df for cf, df in zip(proj_ufcf, discount_factors)]
     pv_ufcf = sum(pv_ufcf_list)
 
-    # Terminal Value via Gordon Growth Model
+    # ------------------------------------------------------------------
+    # Terminal Value via Damodaran Sustainable Reinvestment Model
+    # (Matches HUL FINAL MODEL.xlsx: Reinvestment Rate = g / ROIC)
+    # ------------------------------------------------------------------
     terminal_value_valid = True
     terminal_value_note = None
     terminal_growth_capped = False
     effective_terminal_growth = terminal_growth
     
-    if proj_ufcf[-1] <= 0:
-        terminal_value = None
-        pv_terminal_value = 0.0
-        terminal_value_valid = False
-        terminal_value_note = "Terminal UFCF is negative under current assumptions. Gordon Growth terminal value is not supported."
-    elif discount_rate <= terminal_growth:
+    # Calculate Sustainable Terminal ROIC & Reinvestment Rate
+    bs = metrics.get("statements", {}).get("balance_sheet", {}) if isinstance(metrics.get("statements"), dict) else {}
+    equity_series = bs.get("Total Stockholders' Equity", [0]) if isinstance(bs, dict) else [0]
+    equity_bv = equity_series[-1] if equity_series else 0.0
+    invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
+    
+    hist_ebit = metrics.get("ebit", [])
+    last_ebit = hist_ebit[-1] if hist_ebit else (last_rev * ebit_margin)
+    hist_nopat = last_ebit * (1 - tax_rate)
+    hist_roic = (hist_nopat / invested_capital) if (invested_capital > 0 and hist_nopat > 0) else discount_rate
+    
+    # Economic competition bounds sustainable long-term ROIC
+    sustainable_roic = max(discount_rate, min(hist_roic, 0.25))
+    terminal_reinv_rate = min(0.85, max(0.15, terminal_growth / sustainable_roic))
+    
+    # Terminal NOPAT in Year N+1
+    terminal_nopat = proj_rev[-1] * (1 + terminal_growth) * margin_schedule[-1] * (1 - tax_rate)
+    terminal_ufcf = terminal_nopat * (1 - terminal_reinv_rate)
+    
+    if discount_rate <= terminal_growth:
         terminal_value = None
         pv_terminal_value = 0.0
         terminal_value_valid = False
         terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
+    elif terminal_ufcf <= 0:
+        terminal_value = None
+        pv_terminal_value = 0.0
+        terminal_value_valid = False
+        terminal_value_note = "Terminal UFCF is negative under current assumptions."
     else:
         # Protect against denominator compression (WACC - g < 2.0%) which causes explosive valuations
         spread = discount_rate - terminal_growth
@@ -213,9 +240,9 @@ def run_dcf(
             effective_terminal_growth = discount_rate - 0.020
             terminal_growth_capped = True
             terminal_value_note = f"Terminal growth capped at {effective_terminal_growth*100:.1f}% to preserve minimum 2.0% WACC spread."
-            terminal_value = (proj_ufcf[-1] * (1.0 + effective_terminal_growth)) / 0.020
+            terminal_value = (terminal_ufcf * (1.0 + effective_terminal_growth)) / 0.020
         else:
-            terminal_value = (proj_ufcf[-1] * (1.0 + terminal_growth)) / spread
+            terminal_value = (terminal_ufcf * (1.0 + terminal_growth)) / spread
 
         # In HUL FINAL MODEL.xlsx (D29 = D24 * J10), TV is discounted using the final forecast period factor
         pv_terminal_value = terminal_value / discount_factors[-1]

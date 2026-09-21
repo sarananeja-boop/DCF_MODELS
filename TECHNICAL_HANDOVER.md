@@ -14,7 +14,7 @@
 3. **Multi-Stage DCF Modeling:** Computes Unlevered Free Cash Flows (UFCF), projects mid-year discounted future cash flows, values terminal equity via Gordon Growth, and computes intrinsic equity value per share using a comprehensive Enterprise Value (EV) to Equity bridge.
 4. **10,000-Iteration Correlated Monte Carlo Simulation:** Implements a stochastic simulation over historical covariance matrices using **Cholesky decomposition** to evaluate 90% confidence intervals and intrinsic value probability distributions.
 5. **Multi-Scenario Sensitivity Matrices:** Generates 2D heatmaps across varying WACC, Terminal Growth rates, and operating margins.
-6. **Institutional Reporting:** Employs LLMs via the Groq API (`llama3-70b-8192`) for narrative valuation summaries and generates downloadable Excel spreadsheets (`.xlsx`) via `openpyxl`.
+6. **Professional Reporting:** Employs LLMs via the Groq API (`llama3-70b-8192`) for narrative valuation summaries and generates downloadable Excel spreadsheets (`.xlsx`) via `openpyxl`.
 
 ---
 

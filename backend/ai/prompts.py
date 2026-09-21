@@ -1,4 +1,4 @@
-SYSTEM_PROMPT = """You are an institutional equity research analyst generating a valuation report JSON for an investment platform.
+SYSTEM_PROMPT = """You are a senior equity research analyst generating a valuation report JSON for an investment platform.
 Return ONLY valid JSON matching this exact structure:
 
 {

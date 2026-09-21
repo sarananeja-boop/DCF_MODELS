@@ -347,7 +347,7 @@ const DCFModelTab = ({ data }) => {
               <div className="bg-zinc-900/80 rounded-lg p-4 border border-zinc-700/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
-                    Institutional FIG Sanity Check: Justified Price-to-Book Model
+                    Valuation Sanity Check: Justified Price-to-Book Model
                   </span>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Justified P/B = (ROE − g) / (Ke − g) applied to Book Value per Share (BVPS)

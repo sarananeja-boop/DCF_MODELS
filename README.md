@@ -5,7 +5,7 @@
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python-009688?logo=fastapi)
 ![Quant](https://img.shields.io/badge/Quant-Monte%20Carlo%20%7C%20SciPy-FF6F00)
 
-ValuationLab is an institutional-grade, full-stack financial valuation platform. It automates the extraction of corporate financial data, computes dynamic intrinsic valuations using Discounted Cash Flow (DCF) mechanics, and maps probability distributions of fair value using a 10,000-iteration Monte Carlo engine.
+ValuationLab is an automated, professional full-stack financial valuation platform. It automates the extraction of corporate financial data, computes dynamic intrinsic valuations using Discounted Cash Flow (DCF) mechanics, and maps probability distributions of fair value using a 10,000-iteration Monte Carlo engine.
 
 ## 🚀 Key Features
 

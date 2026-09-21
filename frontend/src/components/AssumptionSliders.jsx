@@ -98,7 +98,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
           <h3 className="font-semibold text-zinc-100 text-lg tracking-tight">Assumptions</h3>
           {isFinancial && (
             <span className="text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded mt-1 inline-block">
-              Financial Institution (FCFE / DDM Model)
+              Banking & Financial Services (FCFE / DDM Model)
             </span>
           )}
         </div>

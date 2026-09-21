@@ -1,8 +1,6 @@
 import React from 'react';
-import { FiCpu, FiTrendingUp, FiTrendingDown, FiCheckCircle, FiAlertTriangle } from 'react-icons/fi';
+import { FiCpu, FiTrendingUp, FiTrendingDown, FiCheckCircle, FiAlertTriangle, FiDownload } from 'react-icons/fi';
 import AIReportRenderer from './AIReportRenderer';
-import html2pdf from 'html2pdf.js';
-import { FiDownload } from 'react-icons/fi';
 
 // Helper functions
 const formatCurrency = (value, symbol, compact) => {
@@ -40,29 +38,36 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const isFinancial = Boolean(company?.is_financial || data.diagnostics?.is_financial || dcf_result?.is_financial);
   const symbol = company?.currency === 'INR' ? '₹' : '$';
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const element = document.getElementById('ai-summary-content');
     if (!element) return;
     
-    // Add temporary styling for PDF export to ensure dark background
-    const originalBg = element.style.backgroundColor;
-    const originalPadding = element.style.padding;
-    element.style.backgroundColor = '#18181b'; // zinc-900
-    element.style.padding = '2rem';
-    
-    const opt = {
-      margin:       0,
-      filename:     `${company.ticker}_Equity_Research.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, backgroundColor: '#18181b' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    
-    html2pdf().set(opt).from(element).save().then(() => {
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      
+      // Add temporary styling for PDF export to ensure dark background
+      const originalBg = element.style.backgroundColor;
+      const originalPadding = element.style.padding;
+      element.style.backgroundColor = '#18181b'; // zinc-900
+      element.style.padding = '2rem';
+      
+      const opt = {
+        margin:       0,
+        filename:     `${company.ticker}_Equity_Research.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, backgroundColor: '#18181b' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+      
       // Restore styles
       element.style.backgroundColor = originalBg;
       element.style.padding = originalPadding;
-    });
+    } catch (err) {
+      console.error("Failed to export PDF:", err);
+    }
   };
 
   // Verdict colors

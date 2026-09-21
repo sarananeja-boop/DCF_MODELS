@@ -1,75 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
+import rawStocks from '../data/stocks.json';
 
-// Curated top equities for instant 0ms autocomplete suggestions
-const POPULAR_TICKERS = [
-  // US Equities
-  { symbol: 'AAPL', name: 'Apple Inc.' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation' },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.' },
-  { symbol: 'META', name: 'Meta Platforms Inc.' },
-  { symbol: 'TSLA', name: 'Tesla Inc.' },
-  { symbol: 'BRK-B', name: 'Berkshire Hathaway Inc.' },
-  { symbol: 'JPM', name: 'JPMorgan Chase & Co.' },
-  { symbol: 'V', name: 'Visa Inc.' },
-  { symbol: 'WMT', name: 'Walmart Inc.' },
-  { symbol: 'JNJ', name: 'Johnson & Johnson' },
-  { symbol: 'NFLX', name: 'Netflix Inc.' },
-  { symbol: 'AMD', name: 'Advanced Micro Devices' },
-  { symbol: 'INTC', name: 'Intel Corporation' },
-  { symbol: 'ADBE', name: 'Adobe Inc.' },
-  { symbol: 'CRM', name: 'Salesforce Inc.' },
-  { symbol: 'CSCO', name: 'Cisco Systems Inc.' },
-  { symbol: 'QCOM', name: 'Qualcomm Inc.' },
-  { symbol: 'PLTR', name: 'Palantir Technologies' },
-  { symbol: 'UBER', name: 'Uber Technologies Inc.' },
-  { symbol: 'DIS', name: 'Walt Disney Co.' },
-  { symbol: 'KO', name: 'Coca-Cola Company' },
-  { symbol: 'PEP', name: 'PepsiCo Inc.' },
-  { symbol: 'COST', name: 'Costco Wholesale Corp.' },
-  { symbol: 'PYPL', name: 'PayPal Holdings' },
-  { symbol: 'BA', name: 'Boeing Company' },
-  { symbol: 'COIN', name: 'Coinbase Global Inc.' },
-  // Indian Equities (NSE)
-  { symbol: 'RELIANCE.NS', name: 'Reliance Industries Ltd.' },
-  { symbol: 'TCS.NS', name: 'Tata Consultancy Services Ltd.' },
-  { symbol: 'HDFCBANK.NS', name: 'HDFC Bank Ltd.' },
-  { symbol: 'INFY.NS', name: 'Infosys Ltd.' },
-  { symbol: 'ICICIBANK.NS', name: 'ICICI Bank Ltd.' },
-  { symbol: 'HINDUNILVR.NS', name: 'Hindustan Unilever Ltd.' },
-  { symbol: 'ITC.NS', name: 'ITC Ltd.' },
-  { symbol: 'SBIN.NS', name: 'State Bank of India' },
-  { symbol: 'BHARTIARTL.NS', name: 'Bharti Airtel Ltd.' },
-  { symbol: 'LT.NS', name: 'Larsen & Toubro Ltd.' },
-  { symbol: 'KOTAKBANK.NS', name: 'Kotak Mahindra Bank Ltd.' },
-  { symbol: 'AXISBANK.NS', name: 'Axis Bank Ltd.' },
-  { symbol: 'MARUTI.NS', name: 'Maruti Suzuki India Ltd.' },
-  { symbol: 'SUNPHARMA.NS', name: 'Sun Pharmaceutical Industries' },
-  { symbol: 'TITAN.NS', name: 'Titan Company Ltd.' },
-  { symbol: 'BAJFINANCE.NS', name: 'Bajaj Finance Ltd.' },
-  { symbol: 'TATAMOTORS.NS', name: 'Tata Motors Ltd.' },
-  { symbol: 'TATASTEEL.NS', name: 'Tata Steel Ltd.' },
-  { symbol: 'WIPRO.NS', name: 'Wipro Ltd.' },
-  { symbol: 'HCLTECH.NS', name: 'HCL Technologies Ltd.' },
-  { symbol: 'NESTLEIND.NS', name: 'Nestle India Ltd.' },
-  { symbol: 'ADANIENT.NS', name: 'Adani Enterprises Ltd.' },
-  { symbol: 'ADANIPORTS.NS', name: 'Adani Ports & SEZ Ltd.' },
-  { symbol: 'NTPC.NS', name: 'NTPC Ltd.' },
-  { symbol: 'ONGC.NS', name: 'Oil & Natural Gas Corp.' },
-  { symbol: 'POWERGRID.NS', name: 'Power Grid Corp. of India' },
-  { symbol: 'COALINDIA.NS', name: 'Coal India Ltd.' },
-  { symbol: 'ASIANPAINT.NS', name: 'Asian Paints Ltd.' },
-  { symbol: 'ULTRACEMCO.NS', name: 'UltraTech Cement Ltd.' },
-  { symbol: 'M&M.NS', name: 'Mahindra & Mahindra Ltd.' },
-  { symbol: 'DRREDDY.NS', name: "Dr. Reddy's Laboratories" },
-  { symbol: 'CIPLA.NS', name: 'Cipla Ltd.' },
-  { symbol: 'ZOMATO.NS', name: 'Zomato Ltd.' },
-  { symbol: 'JIOFIN.NS', name: 'Jio Financial Services' }
-];
+// Comprehensive 2,750+ equity database (NSE India & US Markets) for instant 0ms autocomplete
+const STOCK_UNIVERSE = rawStocks.map(item => ({
+  symbol: item.s,
+  name: item.n,
+  market: item.m
+}));
 
-export default function TickerInput({ ticker, setTicker, market, setMarket, onAnalyze, loading, vertical = false }) {
+export default function TickerInput({ 
+  ticker, 
+  setTicker, 
+  market, 
+  setMarket, 
+  onAnalyze, 
+  loading, 
+  vertical = false 
+}) {
   const [query, setQuery] = useState(ticker);
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -78,7 +26,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
   const timeoutRef = useRef(null);
   const searchCache = useRef(new Map());
 
-  // Sync prop changes (e.g. from reset or initial) to local query
+  // Sync prop changes (e.g. from reset or popular pill clicks) to local query
   useEffect(() => {
     setQuery(ticker);
   }, [ticker]);
@@ -94,19 +42,58 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Instant 0ms client-side search across 2,750+ equities
   const filterLocal = (q) => {
-    if (!q || q.length < 1) return [];
+    if (!q || q.trim().length < 1) return [];
     const lower = q.trim().toLowerCase();
-    return POPULAR_TICKERS.filter(item => {
+    const cleanLower = lower.replace(/\.(ns|bo)$/, '');
+
+    const prefixSymbolMatches = [];
+    const containSymbolMatches = [];
+    const nameMatches = [];
+
+    for (let i = 0; i < STOCK_UNIVERSE.length; i++) {
+      const item = STOCK_UNIVERSE[i];
       const symClean = item.symbol.replace('.NS', '').replace('.BO', '').toLowerCase();
+      const symFull = item.symbol.toLowerCase();
       const name = item.name.toLowerCase();
-      return symClean.startsWith(lower) || symClean.includes(lower) || name.includes(lower);
-    }).slice(0, 8);
+
+      // Prioritize exact prefix match on ticker symbol
+      if (symClean.startsWith(cleanLower) || symFull.startsWith(lower)) {
+        prefixSymbolMatches.push(item);
+        if (prefixSymbolMatches.length >= 8) break;
+      } else if (symClean.includes(cleanLower) || symFull.includes(lower)) {
+        if (containSymbolMatches.length < 6) {
+          containSymbolMatches.push(item);
+        }
+      } else if (name.includes(cleanLower)) {
+        if (nameMatches.length < 6) {
+          nameMatches.push(item);
+        }
+      }
+    }
+
+    const combined = [...prefixSymbolMatches, ...containSymbolMatches, ...nameMatches];
+    const seen = new Set();
+    const unique = [];
+    for (const item of combined) {
+      if (!seen.has(item.symbol)) {
+        seen.add(item.symbol);
+        unique.push(item);
+        if (unique.length >= 8) break;
+      }
+    }
+    return unique;
   };
 
   const fetchSuggestions = async (q, localMatches = []) => {
     if (!q || q.length < 2) return;
     
+    // If local database already provides plenty of high-relevance matches, skip remote network call!
+    if (localMatches.length >= 6) {
+      return;
+    }
+
     const cacheKey = q.trim().toLowerCase();
     if (searchCache.current.has(cacheKey)) {
       const cached = searchCache.current.get(cacheKey);
@@ -117,16 +104,21 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
 
     setSearching(true);
     try {
-      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 4000 });
+      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 3500 });
       const remoteResults = response.data.results || [];
       
       // Merge remote results with local matches, avoiding duplicates
-      const seen = new Set();
-      const combined = [];
-      for (const item of [...localMatches, ...remoteResults]) {
+      const seen = new Set(localMatches.map(m => m.symbol));
+      const combined = [...localMatches];
+      for (const item of remoteResults) {
         if (!seen.has(item.symbol)) {
           seen.add(item.symbol);
-          combined.push(item);
+          const isIN = item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO');
+          combined.push({
+            symbol: item.symbol,
+            name: item.name,
+            market: isIN ? 'IN' : 'US'
+          });
         }
       }
       const finalSuggestions = combined.slice(0, 8);
@@ -134,7 +126,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
       setSuggestions(finalSuggestions);
       setShowDropdown(finalSuggestions.length > 0);
     } catch (err) {
-      console.warn("Remote search error (falling back to local):", err.message);
+      // If remote search times out or errors, local matches still shine!
       if (localMatches.length > 0) {
         setSuggestions(localMatches);
         setShowDropdown(true);
@@ -149,7 +141,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
     setQuery(val);
     setTicker(val); // optimistic update
     
-    // 1. Instant 0ms local match
+    // 1. Instant 0ms local match across full database
     const localMatches = filterLocal(val);
     if (localMatches.length > 0) {
       setSuggestions(localMatches);
@@ -159,15 +151,16 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
       setShowDropdown(false);
     }
 
-    // 2. Debounced background API lookup for exhaustive universe
+    // 2. Debounced background fallback lookup only for ultra-obscure tickers
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       fetchSuggestions(val, localMatches);
     }, 250);
   };
 
-  const handleSelectSuggestion = (sym, name) => {
-    if (sym.endsWith('.NS') || sym.endsWith('.BO')) {
+  const handleSelectSuggestion = (sym, name, itemMarket) => {
+    const isIN = itemMarket === 'IN' || sym.endsWith('.NS') || sym.endsWith('.BO');
+    if (isIN) {
       setMarket('IN');
       const cleanSym = sym.replace('.NS', '').replace('.BO', '');
       setQuery(cleanSym);
@@ -189,57 +182,83 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
   };
 
   return (
-    <div className={`bg-zinc-900/40 rounded-xl border border-zinc-800/80 shadow-xl backdrop-blur-sm ${vertical ? 'p-4' : 'p-6'}`}>
+    <div className={`bg-zinc-900/50 rounded-2xl border border-zinc-800 shadow-2xl backdrop-blur-md ${vertical ? 'p-4' : 'p-6 sm:p-7'}`}>
       <form onSubmit={handleSubmit} className={`flex ${vertical ? 'flex-col gap-4' : 'flex-col sm:flex-row gap-4 items-end'}`}>
         <div className="flex-1 relative w-full" ref={dropdownRef}>
-          <label className="block text-sm font-medium text-zinc-400 mb-1.5">Company or Ticker Symbol</label>
-          <input
-            type="text"
-            value={query}
-            onChange={handleInputChange}
-            onFocus={() => { if(suggestions.length > 0) setShowDropdown(true); }}
-            className="w-full bg-zinc-950/60 border border-zinc-800 rounded-lg py-2.5 px-4 text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 uppercase transition-all"
-            placeholder="e.g. Reliance, TCS, Apple..."
-            autoComplete="off"
-          />
+          <label className="block text-sm font-medium text-zinc-300 mb-2">Company or Ticker Symbol</label>
+          <div className="relative">
+            <input
+              type="text"
+              value={query}
+              onChange={handleInputChange}
+              onFocus={() => { if(suggestions.length > 0) setShowDropdown(true); }}
+              className="w-full bg-zinc-950/80 border border-zinc-700/80 hover:border-zinc-600 focus:border-blue-500 rounded-xl py-3 px-4 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase font-medium tracking-wide transition-all shadow-inner"
+              placeholder="e.g. AAPL, Reliance, HINDUNILVR, NVDA..."
+              autoComplete="off"
+            />
+            {searching && (
+              <div className="absolute right-3.5 top-3.5 pointer-events-none">
+                <svg className="animate-spin h-5 w-5 text-blue-400 opacity-80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+            )}
+          </div>
           
-          {/* Autocomplete Dropdown */}
+          {/* Instant 0ms Autocomplete Dropdown */}
           {showDropdown && suggestions.length > 0 && (
-            <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl max-h-60 overflow-y-auto overflow-x-hidden">
-              {suggestions.map((item, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => handleSelectSuggestion(item.symbol, item.name)}
-                  className="px-4 py-3 hover:bg-zinc-800/80 cursor-pointer flex justify-between items-center border-b border-zinc-800/50 last:border-0 transition-colors"
-                >
-                  <span className="font-semibold text-blue-400">{item.symbol}</span>
-                  <span className="text-xs text-zinc-500 truncate ml-4 max-w-[150px] sm:max-w-[200px] text-right">{item.name}</span>
-                </div>
-              ))}
+            <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden divide-y divide-zinc-800/60 backdrop-blur-xl">
+              {suggestions.map((item, idx) => {
+                const isIN = item.market === 'IN' || item.symbol.endsWith('.NS');
+                return (
+                  <div 
+                    key={idx}
+                    onClick={() => handleSelectSuggestion(item.symbol, item.name, item.market)}
+                    className="px-4 py-3 hover:bg-zinc-800/90 cursor-pointer flex justify-between items-center transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                        isIN 
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      }`}>
+                        {isIN ? 'NSE' : 'US'}
+                      </span>
+                      <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors">
+                        {item.symbol.replace('.NS', '')}
+                      </span>
+                    </div>
+                    <span className="text-xs text-zinc-400 truncate ml-3 max-w-[160px] sm:max-w-[240px] text-right font-normal">
+                      {item.name}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
         
-        <div className={vertical ? "w-full" : "w-48"}>
-          <label className="block text-sm font-medium text-zinc-400 mb-1.5">Market</label>
+        <div className={vertical ? "w-full" : "w-full sm:w-48"}>
+          <label className="block text-sm font-medium text-zinc-300 mb-2">Market</label>
           <select
             value={market}
             onChange={(e) => setMarket(e.target.value)}
-            className="w-full bg-zinc-950/60 border border-zinc-800 rounded-lg py-2.5 px-3 text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all appearance-none"
+            className="w-full bg-zinc-950/80 border border-zinc-700/80 hover:border-zinc-600 focus:border-blue-500 rounded-xl py-3 px-3.5 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer font-medium"
           >
-            <option value="auto">Auto-detect</option>
-            <option value="US">US Market</option>
-            <option value="IN">Indian Market</option>
+            <option value="auto">🌐 Auto-detect</option>
+            <option value="US">🇺🇸 US Market</option>
+            <option value="IN">🇮🇳 Indian Market</option>
           </select>
         </div>
 
         <button
           type="submit"
           disabled={loading || !ticker.trim()}
-          className={`w-full ${vertical ? '' : 'sm:w-auto px-8'} py-2.5 rounded-lg font-semibold transition-all ${
+          className={`w-full ${vertical ? '' : 'sm:w-auto px-8'} py-3 rounded-xl font-bold tracking-wide transition-all ${
             loading || !ticker.trim()
-              ? 'bg-zinc-800/50 text-zinc-500 cursor-not-allowed' 
-              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-950 shadow-lg shadow-zinc-100/10'
+              ? 'bg-zinc-800/50 text-zinc-500 cursor-not-allowed border border-zinc-800' 
+              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/25 hover:shadow-blue-500/35 active:scale-[0.98]'
           }`}
         >
           {loading ? (
@@ -251,7 +270,7 @@ export default function TickerInput({ ticker, setTicker, market, setMarket, onAn
               Analyzing...
             </span>
           ) : (
-            'Analyze'
+            'Run DCF'
           )}
         </button>
       </form>
