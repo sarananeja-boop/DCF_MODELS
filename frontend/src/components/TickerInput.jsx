@@ -42,12 +42,13 @@ export default function TickerInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Instant 0ms client-side search across 2,750+ equities
+  // Instant 0ms client-side search across equities with smart relevance ranking
   const filterLocal = (q) => {
     if (!q || q.trim().length < 1) return [];
     const lower = q.trim().toLowerCase();
     const cleanLower = lower.replace(/\.(ns|bo)$/, '');
 
+    const exactMatches = [];
     const prefixSymbolMatches = [];
     const containSymbolMatches = [];
     const nameMatches = [];
@@ -58,22 +59,25 @@ export default function TickerInput({
       const symFull = item.symbol.toLowerCase();
       const name = item.name.toLowerCase();
 
-      // Prioritize exact prefix match on ticker symbol
-      if (symClean.startsWith(cleanLower) || symFull.startsWith(lower)) {
+      if (symClean === cleanLower || symFull === lower) {
+        exactMatches.push(item);
+      } else if (symClean.startsWith(cleanLower) || symFull.startsWith(lower)) {
         prefixSymbolMatches.push(item);
-        if (prefixSymbolMatches.length >= 8) break;
       } else if (symClean.includes(cleanLower) || symFull.includes(lower)) {
-        if (containSymbolMatches.length < 6) {
-          containSymbolMatches.push(item);
-        }
-      } else if (name.includes(cleanLower)) {
-        if (nameMatches.length < 6) {
-          nameMatches.push(item);
-        }
+        containSymbolMatches.push(item);
+      } else if (name.startsWith(cleanLower) || name.includes(' ' + cleanLower)) {
+        nameMatches.push(item);
       }
     }
 
-    const combined = [...prefixSymbolMatches, ...containSymbolMatches, ...nameMatches];
+    // Sort prefix symbol matches by ticker length ascending (e.g. NVDA, NTPC before NIPPOBATRY)
+    prefixSymbolMatches.sort((a, b) => {
+      const aLen = a.symbol.replace('.NS', '').length;
+      const bLen = b.symbol.replace('.NS', '').length;
+      return aLen - bLen;
+    });
+
+    const combined = [...exactMatches, ...prefixSymbolMatches, ...containSymbolMatches, ...nameMatches];
     const seen = new Set();
     const unique = [];
     for (const item of combined) {
@@ -208,29 +212,35 @@ export default function TickerInput({
           
           {/* Instant 0ms Autocomplete Dropdown */}
           {showDropdown && suggestions.length > 0 && (
-            <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden divide-y divide-zinc-800/60 backdrop-blur-xl">
+            <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl max-h-80 overflow-y-auto overflow-x-hidden divide-y divide-zinc-800/60 backdrop-blur-xl">
               {suggestions.map((item, idx) => {
                 const isIN = item.market === 'IN' || item.symbol.endsWith('.NS');
+                const cleanSymbol = item.symbol.replace('.NS', '').replace('.BO', '');
                 return (
                   <div 
                     key={idx}
                     onClick={() => handleSelectSuggestion(item.symbol, item.name, item.market)}
-                    className="px-4 py-3 hover:bg-zinc-800/90 cursor-pointer flex justify-between items-center transition-colors group"
+                    className="px-4 py-2.5 hover:bg-zinc-800/90 cursor-pointer flex items-center justify-between gap-3 transition-colors group"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
                         isIN 
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
                           : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                       }`}>
                         {isIN ? 'NSE' : 'US'}
                       </span>
-                      <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors">
-                        {item.symbol.replace('.NS', '')}
-                      </span>
+                      <div className="flex flex-col min-w-0 overflow-hidden">
+                        <span className="font-semibold text-sm text-zinc-100 group-hover:text-blue-400 transition-colors truncate">
+                          {cleanSymbol}
+                        </span>
+                        <span className="text-xs text-zinc-400 truncate max-w-[280px] sm:max-w-md font-normal">
+                          {item.name}
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-xs text-zinc-400 truncate ml-3 max-w-[160px] sm:max-w-[240px] text-right font-normal">
-                      {item.name}
+                    <span className="text-[11px] text-zinc-500 font-mono shrink-0 hidden sm:inline-block">
+                      {isIN ? '₹ INR' : '$ USD'}
                     </span>
                   </div>
                 );

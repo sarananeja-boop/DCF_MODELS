@@ -310,19 +310,44 @@ export default function App() {
           </div>
         )}
 
-        {/* Error Banner */}
+        {/* Error Banner with Retry Escape Hatch */}
         {error && (
-          <div className="bg-red-950/50 border-l-4 border-red-500 text-red-100 p-4 mx-6 mt-6 flex justify-between items-center rounded-lg shadow-md z-40">
-            <div>
-              <p className="font-bold">Analysis Failed</p>
-              <p className="text-sm text-red-300">{error}</p>
+          <div className="bg-red-950/70 border border-red-500/50 text-red-100 p-4 mx-6 mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 rounded-xl shadow-xl z-40 animate-in fade-in duration-200">
+            <div className="flex items-start gap-3">
+              <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400 mt-0.5">
+                <FiX className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-red-200">Valuation Attempt Incomplete</p>
+                <p className="text-xs sm:text-sm text-red-300/90 leading-relaxed mt-0.5">{error}</p>
+              </div>
             </div>
-            <button onClick={() => setError(null)} className="text-red-300 hover:text-white px-2">Dismiss</button>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              {ticker && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    handleAnalyze({}, false, ticker, market);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                >
+                  Retry {ticker}
+                </button>
+              )}
+              <button 
+                type="button"
+                onClick={() => setError(null)} 
+                className="text-xs text-red-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-red-800/60 hover:bg-red-900/40 transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Landing Page (Designed for low bounce rate & instant delight) */}
-        {!analysisData && !loading && !error && (
+        {/* Landing Page (Remains visible even if a previous search timed out) */}
+        {!analysisData && !loading && (
           <div className="flex-1 flex flex-col items-center overflow-y-auto px-4 py-12 sm:px-6 relative">
             {/* Subtle background glow */}
             <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-blue-600/10 blur-[140px] rounded-full pointer-events-none"></div>
