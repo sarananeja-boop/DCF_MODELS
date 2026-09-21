@@ -319,13 +319,17 @@ def analyze(req: AnalyzeRequest):
             # Standard FCFF + WACC Pipeline for Non-Financials
             wacc_data = compute_wacc(stock_data, metrics, market_profile)
 
-            start_growth = (
-                overrides.revenue_growth
-                if overrides.revenue_growth is not None
-                else metrics.get("avg_rev_growth", 0.10)
-            )
-            
             avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
+            
+            # Default starting growth: floor at terminal_growth for profitable companies
+            # to avoid projecting negative growth caused by post-peak commodity normalization
+            hist_growth = metrics.get("avg_rev_growth", 0.10)
+            if overrides.revenue_growth is not None:
+                start_growth = overrides.revenue_growth
+            elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
+                start_growth = terminal_growth
+            else:
+                start_growth = hist_growth
             if avg_ebit_margin < 0 and overrides.ebit_margin is None:
                 target_margin = 0.0
                 current_margin = avg_ebit_margin
