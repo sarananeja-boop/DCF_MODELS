@@ -71,7 +71,16 @@ export default function App() {
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
   useEffect(() => sessionStorage.setItem('vl_aiSummary', aiSummary), [aiSummary]);
-  useEffect(() => sessionStorage.setItem('vl_ticker', ticker), [ticker]);
+  
+  // Only persist verified tickers when analysisData exists to avoid reload loops on invalid queries
+  useEffect(() => {
+    if (analysisData?.company?.ticker) {
+      sessionStorage.setItem('vl_ticker', analysisData.company.ticker);
+    } else if (!loading) {
+      sessionStorage.removeItem('vl_ticker');
+    }
+  }, [analysisData, loading]);
+
   useEffect(() => sessionStorage.setItem('vl_market', market), [market]);
   useEffect(() => sessionStorage.setItem('vl_overrides', JSON.stringify(overrides)), [overrides]);
 
@@ -94,10 +103,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Auto-refresh on page reload (Cmd+R)
+  // Auto-refresh on page reload (Cmd+R) ONLY if there was an active valid valuation
   useEffect(() => {
     const savedTicker = sessionStorage.getItem('vl_ticker');
-    if (savedTicker && !analysisData) {
+    const savedData = sessionStorage.getItem('vl_analysisData');
+    
+    if (savedTicker && savedData && !analysisData) {
       const savedMarket = sessionStorage.getItem('vl_market') || 'auto';
       const savedOverrides = sessionStorage.getItem('vl_overrides') ? JSON.parse(sessionStorage.getItem('vl_overrides')) : {};
       
@@ -111,10 +122,34 @@ export default function App() {
         setAnalysisData(response.data);
       }).catch(err => {
         console.error("Auto-refresh failed:", err);
+        sessionStorage.removeItem('vl_ticker');
+        sessionStorage.removeItem('vl_analysisData');
       }).finally(() => {
         setLoading(false);
       });
+    } else if (!savedData) {
+      sessionStorage.removeItem('vl_ticker');
     }
+  }, []);
+
+  // Browser Back/Forward navigation support (SPA navigation without exiting site)
+  useEffect(() => {
+    if (!window.history.state) {
+      const initialView = analysisData ? 'analysis' : 'home';
+      window.history.replaceState({ view: initialView, ticker: analysisData?.company?.ticker || '' }, '');
+    }
+
+    const onPopState = (e) => {
+      const state = e.state;
+      if (!state || state.view === 'home' || !state.ticker) {
+        handleGoHome(false);
+      } else if (state.view === 'analysis' && state.ticker) {
+        handleAnalyze({}, false, state.ticker, state.market || 'auto');
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const handleAnalyze = async (overrideParams = null, isNewSearch = false, explicitTicker = null, explicitMarket = null) => {
@@ -166,7 +201,17 @@ export default function App() {
       setAnalysisData(response.data);
       setTicker(targetTicker);
       setMarket(targetMarket);
+      sessionStorage.setItem('vl_ticker', response.data.company.ticker);
       toast.success(`Analysis for ${response.data.company.ticker} completed`);
+      
+      // Update browser history so Back button returns to search instead of exiting website
+      try {
+        window.history.pushState(
+          { view: 'analysis', ticker: response.data.company.ticker, market: targetMarket },
+          '',
+          `?ticker=${encodeURIComponent(response.data.company.ticker)}`
+        );
+      } catch (_) {}
     } catch (err) {
       if (axios.isCancel(err) || err.name === 'CanceledError') {
         toast('Valuation request cancelled', { icon: 'ℹ️' });
@@ -175,13 +220,23 @@ export default function App() {
       let errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message;
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep on Render. Please retry in 10 seconds.';
+      } else if (
+        errorMsg?.includes('did not return critical data') ||
+        errorMsg?.includes('Cannot build a DCF') ||
+        errorMsg?.includes('not found') ||
+        errorMsg?.includes('No data found')
+      ) {
+        errorMsg = `Ticker '${targetTicker}' was not found on NSE, BSE, or US exchanges. Please check for typos or select a company from the dropdown suggestions.`;
       } else if (!errorMsg) {
         errorMsg = 'An error occurred during valuation analysis';
       }
+      // Never leave invalid tickers in session storage
+      sessionStorage.removeItem('vl_ticker');
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
       setLoading(false);
+      setLoadingTimer(0);
     }
   };
 
@@ -199,13 +254,21 @@ export default function App() {
     handleAnalyze({}, true, quickTicker, quickMarket);
   };
 
-  const handleGoHome = () => {
+  const handleGoHome = (updateHistory = true) => {
     setAnalysisData(null);
     setError(null);
     setTicker('');
     setOverrides({});
     setAiSummary('');
     setActiveTab('overview');
+    sessionStorage.removeItem('vl_analysisData');
+    sessionStorage.removeItem('vl_ticker');
+    sessionStorage.removeItem('vl_overrides');
+    if (updateHistory) {
+      try {
+        window.history.pushState({ view: 'home' }, '', window.location.pathname);
+      } catch (_) {}
+    }
   };
 
   const handleFetchAISummary = async () => {

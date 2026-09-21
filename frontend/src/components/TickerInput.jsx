@@ -108,7 +108,7 @@ export default function TickerInput({
 
     setSearching(true);
     try {
-      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 3500 });
+      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 12000 });
       const remoteResults = response.data.results || [];
       
       // Merge remote results with local matches, avoiding duplicates
@@ -150,7 +150,10 @@ export default function TickerInput({
     if (localMatches.length > 0) {
       setSuggestions(localMatches);
       setShowDropdown(true);
-    } else if (val.trim().length < 2) {
+    } else if (val.trim().length >= 2) {
+      setSuggestions([]);
+      setShowDropdown(true);
+    } else {
       setSuggestions([]);
       setShowDropdown(false);
     }
@@ -195,7 +198,7 @@ export default function TickerInput({
               type="text"
               value={query}
               onChange={handleInputChange}
-              onFocus={() => { if(suggestions.length > 0) setShowDropdown(true); }}
+              onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
               className="w-full bg-zinc-950/80 border border-zinc-700/80 hover:border-zinc-600 focus:border-blue-500 rounded-xl py-3 px-4 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase font-medium tracking-wide transition-all shadow-inner"
               placeholder="e.g. AAPL, Reliance, HINDUNILVR, NVDA..."
               autoComplete="off"
@@ -210,41 +213,70 @@ export default function TickerInput({
             )}
           </div>
           
-          {/* Instant 0ms Autocomplete Dropdown */}
-          {showDropdown && suggestions.length > 0 && (
+          {/* Instant 0ms Autocomplete Dropdown with Reassuring Status */}
+          {showDropdown && query.trim().length >= 2 && (
             <div className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl max-h-80 overflow-y-auto overflow-x-hidden divide-y divide-zinc-800/60 backdrop-blur-xl">
-              {suggestions.map((item, idx) => {
-                const isIN = item.market === 'IN' || item.symbol.endsWith('.NS');
-                const cleanSymbol = item.symbol.replace('.NS', '').replace('.BO', '');
-                return (
-                  <div 
-                    key={idx}
-                    onClick={() => handleSelectSuggestion(item.symbol, item.name, item.market)}
-                    className="px-4 py-2.5 hover:bg-zinc-800/90 cursor-pointer flex items-center justify-between gap-3 transition-colors group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                        isIN 
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
-                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                      }`}>
-                        {isIN ? 'NSE' : 'US'}
-                      </span>
-                      <div className="flex flex-col min-w-0 overflow-hidden">
-                        <span className="font-semibold text-sm text-zinc-100 group-hover:text-blue-400 transition-colors truncate">
-                          {cleanSymbol}
-                        </span>
-                        <span className="text-xs text-zinc-400 truncate max-w-[280px] sm:max-w-md font-normal">
-                          {item.name}
+              {suggestions.length > 0 ? (
+                <>
+                  {suggestions.map((item, idx) => {
+                    const isIN = item.market === 'IN' || item.symbol.endsWith('.NS');
+                    const cleanSymbol = item.symbol.replace('.NS', '').replace('.BO', '');
+                    return (
+                      <div 
+                        key={idx}
+                        onClick={() => handleSelectSuggestion(item.symbol, item.name, item.market)}
+                        className="px-4 py-2.5 hover:bg-zinc-800/90 cursor-pointer flex items-center justify-between gap-3 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                            isIN 
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                              : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          }`}>
+                            {isIN ? 'NSE' : 'US'}
+                          </span>
+                          <div className="flex flex-col min-w-0 overflow-hidden">
+                            <span className="font-semibold text-sm text-zinc-100 group-hover:text-blue-400 transition-colors truncate">
+                              {cleanSymbol}
+                            </span>
+                            <span className="text-xs text-zinc-400 truncate max-w-[280px] sm:max-w-md font-normal">
+                              {item.name}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[11px] text-zinc-500 font-mono shrink-0 hidden sm:inline-block">
+                          {isIN ? '₹ INR' : '$ USD'}
                         </span>
                       </div>
+                    );
+                  })}
+                  {searching && (
+                    <div className="px-4 py-2 bg-zinc-950/60 text-[11px] text-zinc-400 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full border-2 border-blue-400/20 border-t-blue-400 animate-spin shrink-0"></span>
+                      <span>Fetching live global database... (may take up to 1 min on first search)</span>
                     </div>
-                    <span className="text-[11px] text-zinc-500 font-mono shrink-0 hidden sm:inline-block">
-                      {isIN ? '₹ INR' : '$ USD'}
-                    </span>
-                  </div>
-                );
-              })}
+                  )}
+                </>
+              ) : searching ? (
+                <div className="px-5 py-6 text-center flex flex-col items-center justify-center gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-blue-500/20 border-t-blue-500 animate-spin mb-1"></div>
+                  <p className="font-semibold text-xs text-zinc-200">
+                    Fetching company names from market database...
+                  </p>
+                  <p className="text-[11px] text-zinc-400 max-w-xs leading-relaxed">
+                    Connecting to live exchange servers. On your first visit, fetching all company names may take up to 1 minute while the valuation cloud warms up. Please wait...
+                  </p>
+                </div>
+              ) : (
+                <div className="px-5 py-5 text-center flex flex-col items-center justify-center gap-1.5">
+                  <p className="font-semibold text-xs text-zinc-300">
+                    No matching company found for "{query}"
+                  </p>
+                  <p className="text-[11px] text-zinc-400 max-w-sm leading-relaxed">
+                    Press <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono text-[10px] text-zinc-200">Enter</kbd> or click <strong>Run Valuation</strong> to query Yahoo Finance directly by ticker symbol (e.g. AAPL or RELIANCE).
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
