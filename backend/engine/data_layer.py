@@ -172,11 +172,26 @@ def compute_clean_beta(
         }
 
     # Ultimate fallback: market baseline beta 1.0
+    is_recent_ipo = False
+    try:
+        hist_check = stock.history(period="6mo")
+        if hist_check.empty or len(hist_check) < 40:
+            is_recent_ipo = True
+    except Exception:
+        pass
+
+    if is_recent_ipo:
+        beta_note = "Newly listed stock (<2Y trading history); defaulted to market baseline beta 1.00."
+    elif raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta <= 0.10:
+        beta_note = f"Data provider raw beta ({raw_info_beta:.2f}) was near-zero; defaulted to market baseline beta 1.00."
+    else:
+        beta_note = "Insufficient historical covariance data; defaulted to market baseline beta 1.00."
+
     return {
         "beta": 1.0,
         "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else 1.0,
         "beta_clamped": True,
-        "beta_note": "Unreliable/negative beta from data provider; defaulted to market baseline beta 1.00.",
+        "beta_note": beta_note,
     }
 
 
