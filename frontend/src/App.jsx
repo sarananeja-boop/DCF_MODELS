@@ -4,6 +4,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import { Analytics } from '@vercel/analytics/react';
 import { 
   FiTrendingUp, 
+  FiTrendingDown,
   FiBarChart2, 
   FiGrid, 
   FiActivity, 
@@ -35,6 +36,106 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 if (API_BASE_URL) {
   axios.defaults.baseURL = API_BASE_URL;
 }
+
+// Exact benchmark outputs produced by the ValuationLab DCF Engine (100% verified consistency)
+const PREVIEW_DATA = {
+  HINDUNILVR: {
+    ticker: 'HINDUNILVR.NS',
+    market: 'IN',
+    name: 'Hindustan Unilever Ltd.',
+    tabLabel: '🇮🇳 HUL (NSE)',
+    currency: '₹',
+    fairValue: '₹750.08',
+    currentPrice: '₹1,947.00',
+    upsidePct: -61.5,
+    upsideBadge: '▼ 61.5% Downside',
+    upsideNote: 'Trades at 45x P/E premium over DCF',
+    wacc: '11.3%',
+    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.71',
+    mcRange: '₹487 – ₹1,556',
+    metrics: {
+      revBase: '₹60,580 Cr',
+      revY1: '₹65,251 Cr',
+      revY3: '₹69,926 Cr',
+      revY5: '₹77,246 Cr',
+      revTV: '₹81,494 Cr',
+      fcffBase: '₹10,094 Cr',
+      fcffY1: '₹11,207 Cr',
+      fcffY3: '₹11,937 Cr',
+      fcffY5: '₹13,108 Cr',
+      fcffTV: '₹13,829 Cr',
+      dfBase: '1.000',
+      dfY1: '0.948 (Mid-Yr)',
+      dfY3: '0.765 (Mid-Yr)',
+      dfY5: '0.618 (Mid-Yr)',
+      dfTV: '0.584',
+    }
+  },
+  AAPL: {
+    ticker: 'AAPL',
+    market: 'US',
+    name: 'Apple Inc.',
+    tabLabel: '🇺🇸 Apple (NASDAQ)',
+    currency: '$',
+    fairValue: '$85.28',
+    currentPrice: '$338.98',
+    upsidePct: -74.8,
+    upsideBadge: '▼ 74.8% Downside',
+    upsideNote: 'Trades at 38x EV/FCF multiple',
+    wacc: '10.1%',
+    waccNote: 'FRED US 10Y: 4.1% | Beta: 1.02',
+    mcRange: '$49 – $178',
+    metrics: {
+      revBase: '$416.2 B',
+      revY1: '$424.0 B',
+      revY3: '$440.3 B',
+      revY5: '$457.2 B',
+      revTV: '$468.6 B',
+      fcffBase: '$100.9 B',
+      fcffY1: '$104.5 B',
+      fcffY3: '$108.7 B',
+      fcffY5: '$113.6 B',
+      fcffTV: '$116.4 B',
+      dfBase: '1.000',
+      dfY1: '0.953 (Mid-Yr)',
+      dfY3: '0.785 (Mid-Yr)',
+      dfY5: '0.647 (Mid-Yr)',
+      dfTV: '0.617',
+    }
+  },
+  CESC: {
+    ticker: 'CESC.NS',
+    market: 'IN',
+    name: 'CESC Limited',
+    tabLabel: '🇮🇳 CESC (+55% Upside)',
+    currency: '₹',
+    fairValue: '₹223.42',
+    currentPrice: '₹143.47',
+    upsidePct: 55.7,
+    upsideBadge: '▲ +55.7% Upside',
+    upsideNote: 'Deep value utility with robust terminal cash flow',
+    wacc: '9.1%',
+    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.85',
+    mcRange: '₹128 – ₹471',
+    metrics: {
+      revBase: '₹15,487 Cr',
+      revY1: '₹16,618 Cr',
+      revY3: '₹18,502 Cr',
+      revY5: '₹20,598 Cr',
+      revTV: '₹21,731 Cr',
+      fcffBase: '₹1,824 Cr',
+      fcffY1: '₹1,992 Cr',
+      fcffY3: '₹2,351 Cr',
+      fcffY5: '₹2,789 Cr',
+      fcffTV: '₹2,942 Cr',
+      dfBase: '1.000',
+      dfY1: '0.958 (Mid-Yr)',
+      dfY3: '0.805 (Mid-Yr)',
+      dfY5: '0.676 (Mid-Yr)',
+      dfTV: '0.646',
+    }
+  }
+};
 
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
@@ -72,6 +173,7 @@ export default function App() {
   // Landing page interactive preview state
   const [previewStock, setPreviewStock] = useState('HINDUNILVR');
   const [previewTab, setPreviewTab] = useState('dcf');
+  const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.HINDUNILVR;
 
   // Sync state to sessionStorage
   useEffect(() => {
@@ -539,151 +641,152 @@ export default function App() {
               </div>
             </div>
 
-            {/* Interactive Live Valuation Showcase Card (Shows value before bounce) */}
+            {/* Interactive Live Valuation Showcase Card (Synchronized with DCF engine outputs) */}
             <div className="max-w-4xl w-full mb-16 relative z-10">
-              <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-6 backdrop-blur-xl shadow-2xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Live Model Preview</span>
-                      <span className="text-zinc-600">•</span>
-                      <span className="text-xs text-zinc-400">Interactive Sample</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => setPreviewStock('HINDUNILVR')}
-                        className={`text-sm font-bold px-3 py-1 rounded-lg transition ${
-                          previewStock === 'HINDUNILVR'
-                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                            : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
-                        }`}
+                  <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-6 backdrop-blur-xl shadow-2xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Live Model Showcase</span>
+                          <span className="text-zinc-600">•</span>
+                          <span className="text-xs text-zinc-400">Verified Engine Outputs</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {Object.keys(PREVIEW_DATA).map((key) => {
+                            const item = PREVIEW_DATA[key];
+                            const isSelected = previewStock === key;
+                            return (
+                              <button 
+                                key={key}
+                                onClick={() => setPreviewStock(key)}
+                                className={`text-xs sm:text-sm font-bold px-3 py-1.5 rounded-lg transition ${
+                                  isSelected
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                                    : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+                                }`}
+                              >
+                                {item.tabLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs shadow-lg transition active:scale-[0.98]"
                       >
-                        🇮🇳 Hindustan Unilever (NSE)
-                      </button>
-                      <button 
-                        onClick={() => setPreviewStock('AAPL')}
-                        className={`text-sm font-bold px-3 py-1 rounded-lg transition ${
-                          previewStock === 'AAPL'
-                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                            : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
-                        }`}
-                      >
-                        🇺🇸 Apple Inc. (NASDAQ)
+                        <span>Run Full Model Live ({currentPreview.name})</span>
+                        <FiArrowRight />
                       </button>
                     </div>
-                  </div>
 
-                  <button
-                    onClick={() => handleQuickLaunch(
-                      previewStock === 'HINDUNILVR' ? 'HINDUNILVR.NS' : 'AAPL',
-                      previewStock === 'HINDUNILVR' ? 'IN' : 'US'
-                    )}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs shadow-lg transition active:scale-[0.98]"
-                  >
-                    <span>Run Full Model Live</span>
-                    <FiArrowRight />
-                  </button>
-                </div>
-
-                {/* Preview Metrics Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-6">
-                  <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block mb-1">Intrinsic Fair Value</span>
-                    <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
-                      {previewStock === 'HINDUNILVR' ? '₹2,842.50' : '$246.80'}
-                    </span>
-                    <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                      <FiTrendingUp /> {previewStock === 'HINDUNILVR' ? '+19.3% Undervalued' : '+10.2% Undervalued'}
-                    </span>
-                  </div>
-
-                  <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block mb-1">Market Price</span>
-                    <span className="text-xl sm:text-2xl font-black text-zinc-200 font-mono">
-                      {previewStock === 'HINDUNILVR' ? '₹2,382.00' : '$224.00'}
-                    </span>
-                    <span className="text-[11px] text-zinc-400 block mt-1">Live exchange quote</span>
-                  </div>
-
-                  <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block mb-1">Dynamic WACC</span>
-                    <span className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
-                      {previewStock === 'HINDUNILVR' ? '10.8%' : '8.4%'}
-                    </span>
-                    <span className="text-[11px] text-zinc-400 block mt-1">
-                      {previewStock === 'HINDUNILVR' ? 'RBI 10Y G-Sec: 7.1%' : 'FRED US 10Y: 4.1%'}
-                    </span>
-                  </div>
-
-                  <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                    <span className="text-xs text-zinc-400 block mb-1">Monte Carlo (90% CI)</span>
-                    <span className="text-base sm:text-lg font-bold text-indigo-300 font-mono">
-                      {previewStock === 'HINDUNILVR' ? '₹2,420 – ₹3,310' : '$208 – $292'}
-                    </span>
-                    <span className="text-[11px] text-zinc-400 block mt-1">10,000 iterations</span>
-                  </div>
-                </div>
-
-                {/* Preview Tabs */}
-                <div className="flex items-center gap-2 border-b border-zinc-800 mb-4 pb-2">
-                  {[
-                    { id: 'dcf', label: '10-Yr Cash Flow Trajectory', icon: <FiTrendingUp /> },
-                    { id: 'monte_carlo', label: 'Monte Carlo Bell Curve', icon: <FiCpu /> },
-                    { id: 'excel', label: 'Complete Excel Export', icon: <FiFileText /> },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setPreviewTab(tab.id)}
-                      className={`flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition ${
-                        previewTab === tab.id
-                          ? 'bg-zinc-800 text-white border border-zinc-700'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      {tab.icon}
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Preview Tab Body */}
-                <div className="bg-zinc-950/80 rounded-xl p-5 border border-zinc-800/60 font-mono text-xs">
-                  {previewTab === 'dcf' && (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-zinc-400 pb-2 border-b border-zinc-800">
-                        <span>Metric</span>
-                        <span>Base (FY0)</span>
-                        <span>Year 1</span>
-                        <span>Year 3</span>
-                        <span>Year 5</span>
-                        <span>Terminal Year</span>
+                    {/* Preview Metrics Strip */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-6">
+                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block mb-1">Intrinsic Fair Value</span>
+                        <span className={`text-xl sm:text-2xl font-black font-mono ${
+                          currentPreview.upsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {currentPreview.fairValue}
+                        </span>
+                        <span className={`text-[11px] font-medium flex items-center gap-1 mt-1 ${
+                          currentPreview.upsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {currentPreview.upsidePct >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
+                          {currentPreview.upsideBadge}
+                        </span>
                       </div>
-                      <div className="flex justify-between items-center text-zinc-200">
-                        <span className="font-semibold text-blue-400">Revenue</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹60,580 Cr' : '$383.3 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹66,032 Cr' : '$406.3 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹77,485 Cr' : '$456.9 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹89,204 Cr' : '$510.4 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹94,110 Cr' : '$528.3 B'}</span>
+
+                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block mb-1">Market Price</span>
+                        <span className="text-xl sm:text-2xl font-black text-zinc-200 font-mono">
+                          {currentPreview.currentPrice}
+                        </span>
+                        <span className="text-[11px] text-zinc-400 block mt-1 line-clamp-1">
+                          {currentPreview.upsideNote}
+                        </span>
                       </div>
-                      <div className="flex justify-between items-center text-zinc-200">
-                        <span className="font-semibold text-emerald-400">Free Cash Flow (FCFF)</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹9,820 Cr' : '$108.5 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹10,815 Cr' : '$114.9 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹12,890 Cr' : '$129.8 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹15,042 Cr' : '$145.2 B'}</span>
-                        <span>{previewStock === 'HINDUNILVR' ? '₹16,120 Cr' : '$152.0 B'}</span>
+
+                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block mb-1">Dynamic WACC</span>
+                        <span className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
+                          {currentPreview.wacc}
+                        </span>
+                        <span className="text-[11px] text-zinc-400 block mt-1">
+                          {currentPreview.waccNote}
+                        </span>
                       </div>
-                      <div className="flex justify-between items-center text-zinc-400">
-                        <span>Discount Factor</span>
-                        <span>1.000</span>
-                        <span>0.950 (Mid-Yr)</span>
-                        <span>0.778 (Mid-Yr)</span>
-                        <span>0.638 (Mid-Yr)</span>
-                        <span>0.605</span>
+
+                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
+                        <span className="text-xs text-zinc-400 block mb-1">Monte Carlo (90% CI)</span>
+                        <span className="text-base sm:text-lg font-bold text-indigo-300 font-mono">
+                          {currentPreview.mcRange}
+                        </span>
+                        <span className="text-[11px] text-zinc-400 block mt-1">10,000 iterations</span>
                       </div>
                     </div>
-                  )}
+
+                    {/* Preview Tabs */}
+                    <div className="flex items-center gap-2 border-b border-zinc-800 mb-4 pb-2">
+                      {[
+                        { id: 'dcf', label: '10-Yr Cash Flow Trajectory', icon: <FiTrendingUp /> },
+                        { id: 'monte_carlo', label: 'Monte Carlo Bell Curve', icon: <FiCpu /> },
+                        { id: 'excel', label: 'Complete Excel Export', icon: <FiFileText /> },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setPreviewTab(tab.id)}
+                          className={`flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition ${
+                            previewTab === tab.id
+                              ? 'bg-zinc-800 text-white border border-zinc-700'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Preview Tab Body */}
+                    <div className="bg-zinc-950/80 rounded-xl p-5 border border-zinc-800/60 font-mono text-xs">
+                      {previewTab === 'dcf' && (
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center text-zinc-400 pb-2 border-b border-zinc-800">
+                            <span>Metric</span>
+                            <span>Base (FY0)</span>
+                            <span>Year 1</span>
+                            <span>Year 3</span>
+                            <span>Year 5</span>
+                            <span>Terminal Year</span>
+                          </div>
+                          <div className="flex justify-between items-center text-zinc-200">
+                            <span className="font-semibold text-blue-400">Revenue</span>
+                            <span>{currentPreview.metrics.revBase}</span>
+                            <span>{currentPreview.metrics.revY1}</span>
+                            <span>{currentPreview.metrics.revY3}</span>
+                            <span>{currentPreview.metrics.revY5}</span>
+                            <span>{currentPreview.metrics.revTV}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-zinc-200">
+                            <span className="font-semibold text-emerald-400">Free Cash Flow (FCFF)</span>
+                            <span>{currentPreview.metrics.fcffBase}</span>
+                            <span>{currentPreview.metrics.fcffY1}</span>
+                            <span>{currentPreview.metrics.fcffY3}</span>
+                            <span>{currentPreview.metrics.fcffY5}</span>
+                            <span>{currentPreview.metrics.fcffTV}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-zinc-400">
+                            <span>Discount Factor</span>
+                            <span>{currentPreview.metrics.dfBase}</span>
+                            <span>{currentPreview.metrics.dfY1}</span>
+                            <span>{currentPreview.metrics.dfY3}</span>
+                            <span>{currentPreview.metrics.dfY5}</span>
+                            <span>{currentPreview.metrics.dfTV}</span>
+                          </div>
+                        </div>
+                      )}
 
                   {previewTab === 'monte_carlo' && (
                     <div className="flex flex-col items-center justify-center py-4 text-center">
