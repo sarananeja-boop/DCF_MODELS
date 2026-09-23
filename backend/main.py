@@ -238,12 +238,24 @@ def analyze(req: AnalyzeRequest):
         # 5. Dual Engine Routing: Banking & Financial Services vs Non-Financial Corporations
         is_financial = stock_data.get("is_financial", False)
 
-        default_terminal_g = market_profile.get("terminal_growth", 0.055 if market == "IN" else 0.025)
-        terminal_growth = (
-            overrides.terminal_growth
-            if overrides.terminal_growth is not None
-            else default_terminal_g
-        )
+        if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
+            from engine.data_layer import classify_sector_dynamics
+            is_ext, is_cyc = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"))
+            stock_data["is_extractive"] = is_ext
+            stock_data["is_cyclical"] = is_cyc
+            
+        is_extractive = stock_data.get("is_extractive", False)
+        is_cyclical = stock_data.get("is_cyclical", False)
+
+        default_terminal_g = market_profile.get("terminal_growth", 0.050 if market == "IN" else 0.025)
+        if overrides.terminal_growth is not None:
+            terminal_growth = overrides.terminal_growth
+        elif is_extractive:
+            # Physical reservoir depletion / transition cap (2.5% max for finite extractive assets)
+            terminal_growth = min(default_terminal_g, 0.025)
+        else:
+            terminal_growth = default_terminal_g
+
         projection_years = (
             overrides.projection_years
             if overrides.projection_years is not None
@@ -332,15 +344,19 @@ def analyze(req: AnalyzeRequest):
 
             avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
             
-            # Default starting growth: floor at terminal_growth for profitable companies
-            # to avoid projecting negative growth caused by post-peak commodity normalization
+            # Default starting growth:
             hist_growth = metrics.get("avg_rev_growth", 0.10)
             if overrides.revenue_growth is not None:
                 start_growth = overrides.revenue_growth
+            elif is_cyclical:
+                # For cyclical commodity companies, recent revenue contraction reflects commodity price cooling.
+                # Rather than forcing an artificial 5% growth floor, use a conservative normalized 2.0% - 3.5% growth.
+                start_growth = min(0.035, max(0.02, hist_growth)) if hist_growth > 0 else 0.025
             elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
                 start_growth = terminal_growth
             else:
                 start_growth = hist_growth
+
             # Determine latest and historical margin trajectory
             ebit_margins_hist = metrics.get("ebit_margins", [])
             latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
@@ -348,6 +364,11 @@ def analyze(req: AnalyzeRequest):
             if overrides.ebit_margin is not None:
                 target_margin = overrides.ebit_margin
                 current_margin = latest_margin if abs(latest_margin - target_margin) > 0.005 else None
+            elif is_cyclical:
+                # For cyclical / commodity businesses, margins must mean-revert to the multi-year cycle average
+                # Avoid locking peak-cycle margins from commodity price spikes into perpetuity
+                target_margin = avg_ebit_margin
+                current_margin = latest_margin if abs(latest_margin - target_margin) > 0.01 else None
             else:
                 if latest_margin > 0:
                     if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
@@ -433,7 +454,18 @@ def analyze(req: AnalyzeRequest):
         terminal_value_valid = dcf_result.get("terminal_value_valid", True)
         mc_valid = mc_result.get("actual_iterations", 0) > 0
         
-        verdict = generate_verdict(current_price, mc_result.get("stats", {}), terminal_value_valid=terminal_value_valid, mc_valid=mc_valid)
+        # Assess if company is in deep distress (ICR < 1.0 with high leverage, or zero equity value)
+        icr = metrics.get("interest_coverage", 999.0)
+        wd = wacc_data.get("weight_debt", 0.0)
+        is_distressed_firm = bool((icr < 1.0 and wd > 0.60) or (dcf_result.get("equity_value", 1.0) <= 0))
+
+        verdict = generate_verdict(
+            current_price=current_price,
+            mc_stats=mc_result.get("stats", {}),
+            terminal_value_valid=terminal_value_valid,
+            mc_valid=mc_valid,
+            is_distressed=is_distressed_firm,
+        )
 
         # 12. Trends
         trends = compute_trends(stock_data, metrics)
@@ -467,6 +499,7 @@ def analyze(req: AnalyzeRequest):
                 "raw_beta": stock_data.get("raw_beta"),
                 "beta_clamped": stock_data.get("beta_clamped", False),
                 "beta_note": stock_data.get("beta_note", ""),
+                "is_illiquid": stock_data.get("is_illiquid", False),
             },
             "macro": {
                 "risk_free_rate": market_profile.get("risk_free_rate"),
@@ -503,9 +536,17 @@ def analyze(req: AnalyzeRequest):
                 "ke_floored": wacc_data.get("ke_floored", False),
                 "ke_note": wacc_data.get("ke_note"),
                 "cost_of_debt": wacc_data.get("cost_of_debt"),
+                "pretax_cost_of_debt": wacc_data.get("pretax_cost_of_debt"),
                 "weight_equity": wacc_data.get("weight_equity"),
                 "weight_debt": wacc_data.get("weight_debt"),
                 "wacc": wacc_data.get("wacc"),
+                "raw_wacc": wacc_data.get("raw_wacc"),
+                "min_wacc": wacc_data.get("min_wacc"),
+                "wacc_floored": wacc_data.get("wacc_floored", False),
+                "wacc_note": wacc_data.get("wacc_note"),
+                "synthetic_rating": wacc_data.get("synthetic_rating"),
+                "default_spread": wacc_data.get("default_spread"),
+                "interest_coverage": wacc_data.get("interest_coverage"),
                 "total_debt": wacc_data.get("total_debt"),
                 "operational_debt": wacc_data.get("operational_debt", 0.0),
                 "total_cash": metrics.get("cash_and_equivalents"),
@@ -548,11 +589,27 @@ def analyze(req: AnalyzeRequest):
                 "raw_beta": stock_data.get("raw_beta"),
                 "beta_clamped": stock_data.get("beta_clamped", False),
                 "beta_note": stock_data.get("beta_note", ""),
+                "is_illiquid": stock_data.get("is_illiquid", False),
                 "ke_floored": wacc_data.get("ke_floored", False),
                 "raw_ke": wacc_data.get("raw_cost_of_equity"),
                 "ke_note": wacc_data.get("ke_note"),
+                "wacc_floored": wacc_data.get("wacc_floored", False),
+                "raw_wacc": wacc_data.get("raw_wacc"),
+                "min_wacc": wacc_data.get("min_wacc"),
+                "wacc_note": wacc_data.get("wacc_note"),
+                "synthetic_rating": wacc_data.get("synthetic_rating"),
+                "default_spread": wacc_data.get("default_spread"),
+                "interest_coverage": wacc_data.get("interest_coverage"),
                 "terminal_growth_capped": dcf_result.get("terminal_growth_capped", False),
                 "effective_terminal_growth": dcf_result.get("effective_terminal_growth", terminal_growth),
+                "tv_share_of_ev": dcf_result.get("tv_share_of_ev"),
+                "tv_share_flag": dcf_result.get("tv_share_flag", False),
+                "tv_share_note": dcf_result.get("tv_share_note"),
+                "is_extractive": stock_data.get("is_extractive", False),
+                "is_cyclical": stock_data.get("is_cyclical", False),
+                "exit_implied_price": dcf_result.get("exit_implied_price"),
+                "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
+                "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
                 "historical_fcf_negative": False,
                 "terminal_ufcf_positive": bool(dcf_result.get("terminal_value_valid", True)),
                 "terminal_value_valid": dcf_result.get("terminal_value_valid", True),

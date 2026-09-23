@@ -68,8 +68,61 @@ def safe_get(df: pd.DataFrame, column: str, default: float = 0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Benchmark Returns & Clean Beta Calculation
 # ---------------------------------------------------------------------------
+# Benchmark Returns & Clean Beta Calculation
+# ---------------------------------------------------------------------------
 _BENCHMARK_CACHE: Dict[str, tuple] = {}
 _BENCHMARK_CACHE_TTL_SECONDS: int = 3600  # 1 hour TTL matching market_config.py
+
+# Damodaran Industry Unlevered Betas (Emerging Markets & Global benchmarks)
+INDUSTRY_UNLEVERED_BETAS: Dict[str, float] = {
+    "utilities": 0.48,
+    "power": 0.48,
+    "electric": 0.48,
+    "water": 0.48,
+    "gas": 0.52,
+    "consumer staples": 0.58,
+    "fmcg": 0.58,
+    "food": 0.58,
+    "beverage": 0.60,
+    "tobacco": 0.62,
+    "healthcare": 0.68,
+    "pharmaceuticals": 0.68,
+    "biotechnology": 0.75,
+    "telecom": 0.65,
+    "telecommunications": 0.65,
+    "auto & truck dealerships": 0.72,
+    "dealership": 0.72,
+    "retail": 0.70,
+    "auto": 0.85,
+    "automotive": 0.85,
+    "auto parts": 0.82,
+    "technology": 0.95,
+    "software": 0.95,
+    "information technology": 0.95,
+    "industrials": 0.82,
+    "capital goods": 0.82,
+    "engineering": 0.80,
+    "materials": 0.85,
+    "chemicals": 0.85,
+    "metals & mining": 0.88,
+    "steel": 0.88,
+    "energy": 0.80,
+    "oil & gas": 0.80,
+    "real estate": 0.68,
+    "consumer cyclical": 0.82,
+    "consumer discretionary": 0.82,
+    "financial": 0.45,
+    "default": 0.75,
+}
+
+
+def get_industry_unlevered_beta(sector: Optional[str] = None, industry: Optional[str] = None) -> float:
+    """Retrieve Damodaran unlevered industry beta matching sector or industry keywords."""
+    text = f"{sector or ''} {industry or ''}".lower()
+    for key, val in INDUSTRY_UNLEVERED_BETAS.items():
+        if key in text:
+            return val
+    return INDUSTRY_UNLEVERED_BETAS["default"]
 
 
 def _get_benchmark_returns(benchmark: str) -> Optional[pd.Series]:
@@ -95,23 +148,80 @@ def compute_clean_beta(
     stock: yf.Ticker,
     ticker: str,
     market: str,
-    raw_info_beta: Optional[float] = None
+    raw_info_beta: Optional[float] = None,
+    sector: Optional[str] = None,
+    industry: Optional[str] = None,
+    de_ratio: Optional[float] = None,
+    tax_rate: float = 0.2517,
+    tradeable: Optional[bool] = None,
 ) -> dict:
-    """Compute a Blume-adjusted beta against the local benchmark.
+    """Compute a risk-reflective beta against domestic benchmark or bottom-up industry unlevered beta.
 
-    Addresses international distortion where Yahoo Finance beta is calculated
-    against the US S&P 500 (^GSPC in USD), producing negative or near-zero betas
-    for Indian/international equities.
+    Detects trading illiquidity, trading halts, or zero-volume days to prevent
+    the 'zero-beta trap' where un-traded stocks produce an artificially low beta.
     
     Returns a dict with:
-      - beta: Blume-adjusted beta for WACC/Ke calculations.
+      - beta: Risk-reflective beta for WACC/Ke calculations.
       - raw_beta: Unadjusted covariance beta (or info beta).
-      - beta_clamped: True if an abnormal/negative beta triggered a safety floor.
-      - beta_note: Explanation of methodology or clamp reasons.
+      - beta_clamped: True if an abnormal/negative beta triggered adjustment.
+      - beta_note: Explanation of methodology.
+      - is_illiquid: True if trading illiquidity/halt was detected.
     """
     benchmark = "^NSEI" if market.upper() == "IN" else "^GSPC"
     
-    # Check if regression against domestic benchmark is feasible
+    # 1. Trading liquidity & volume verification
+    # When >30% of days have 0 volume, or prices are frozen, regression beta is an artifact of non-trading.
+    is_illiquid = False
+    zero_vol_pct = 0.0
+    unique_prices = 999
+    
+    try:
+        hist_1y = stock.history(period="1y", interval="1d")
+        if not hist_1y.empty and len(hist_1y) >= 20:
+            zero_vols = int((hist_1y["Volume"] == 0).sum())
+            zero_vol_pct = float(zero_vols / len(hist_1y))
+            unique_prices = int(hist_1y["Close"].nunique())
+            if tradeable is False or zero_vol_pct > 0.30 or unique_prices < 15:
+                is_illiquid = True
+    except Exception as e:
+        logger.warning("Liquidity check failed for %s: %s", ticker, e)
+
+    if tradeable is False:
+        is_illiquid = True
+
+    # If illiquid / halted, apply bottom-up industry unlevered beta relevered at company D/E
+    if is_illiquid:
+        beta_u = get_industry_unlevered_beta(sector, industry)
+        eff_de = min(2.5, max(0.0, float(de_ratio))) if de_ratio is not None else 0.5
+        # Hamada equation: beta_L = beta_u * [1 + (1 - T) * D/E]
+        relevered_beta = beta_u * (1.0 + (1.0 - tax_rate) * eff_de)
+        # Apply Blume adjustment towards market mean 1.0
+        blume_beta = (2.0 / 3.0) * relevered_beta + (1.0 / 3.0) * 1.0
+        # Bound between 0.70 and 2.20
+        blume_beta = float(np.clip(blume_beta, 0.70, 2.20))
+        
+        reason = "Trading illiquidity/halt detected"
+        if zero_vol_pct > 0.30:
+            reason += f" ({zero_vol_pct*100:.1f}% zero-volume days)"
+        elif tradeable is False:
+            reason += " (exchange tradeable=False)"
+        elif unique_prices < 15:
+            reason += f" (only {unique_prices} unique price points in 1Y)"
+            
+        note = (
+            f"{reason}. Raw regression beta is an artifact of non-trading. "
+            f"Applied bottom-up industry unlevered beta ({beta_u:.2f}) "
+            f"relevered at D/E {eff_de:.2f} (adj: {blume_beta:.2f})."
+        )
+        return {
+            "beta": float(blume_beta),
+            "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else float(relevered_beta),
+            "beta_clamped": True,
+            "beta_note": note,
+            "is_illiquid": True,
+        }
+
+    # 2. Check if regression against domestic benchmark is feasible for actively traded stocks
     try:
         hist = stock.history(period="2y", interval="1wk")
         if not hist.empty and "Close" in hist:
@@ -128,20 +238,19 @@ def compute_clean_beta(
                         beta_clamped = False
                         clamp_reason = None
                         
-                        # Only clamp if raw beta is negative or implausibly close to zero (<= 0.10)
-                        # Does NOT blanket-clamp genuine defensive low-beta stocks (0.3 - 0.5)
+                        # Only clamp if raw beta is negative or implausibly close to zero (<= 0.15)
                         eff_raw = calc_raw
-                        if calc_raw <= 0.10:
-                            eff_raw = 0.20
+                        if calc_raw <= 0.15:
+                            beta_u = get_industry_unlevered_beta(sector, industry)
+                            eff_de = min(2.5, max(0.0, float(de_ratio))) if de_ratio is not None else 0.5
+                            eff_raw = beta_u * (1.0 + (1.0 - tax_rate) * eff_de)
                             beta_clamped = True
-                            clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was negative or near-zero; floored raw beta to 0.20."
+                            clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was near-zero; substituted bottom-up unlevered beta {beta_u:.2f} (relevered: {eff_raw:.2f})."
                         elif calc_raw > 2.80:
                             eff_raw = 2.80
                             beta_clamped = True
                             clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was exceptionally volatile; capped raw beta to 2.80."
 
-                        # Blume's adjustment (standard at Bloomberg / Merrill Lynch):
-                        # Regresses beta towards market mean (1.0)
                         blume_beta = (2.0 / 3.0) * eff_raw + (1.0 / 3.0) * 1.0
 
                         note = (
@@ -156,12 +265,13 @@ def compute_clean_beta(
                             "raw_beta": float(calc_raw),
                             "beta_clamped": beta_clamped,
                             "beta_note": note,
+                            "is_illiquid": False,
                         }
     except Exception as exc:
         logger.warning("Local benchmark beta calculation failed for %s: %s", ticker, exc)
 
-    # Fallback to Yahoo Finance info beta if valid
-    if raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta > 0.10:
+    # 3. Fallback to Yahoo Finance info beta if valid
+    if raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta > 0.15:
         eff_info = min(2.80, raw_info_beta)
         blume_beta = (2.0 / 3.0) * eff_info + (1.0 / 3.0) * 1.0
         return {
@@ -169,29 +279,22 @@ def compute_clean_beta(
             "raw_beta": float(raw_info_beta),
             "beta_clamped": False,
             "beta_note": f"Blume-adjusted Yahoo Finance beta (raw: {raw_info_beta:.2f} → adj: {blume_beta:.2f})",
+            "is_illiquid": False,
         }
 
-    # Ultimate fallback: market baseline beta 1.0
-    is_recent_ipo = False
-    try:
-        hist_check = stock.history(period="6mo")
-        if hist_check.empty or len(hist_check) < 40:
-            is_recent_ipo = True
-    except Exception:
-        pass
-
-    if is_recent_ipo:
-        beta_note = "Newly listed stock (<2Y trading history); defaulted to market baseline beta 1.00."
-    elif raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta <= 0.10:
-        beta_note = f"Data provider raw beta ({raw_info_beta:.2f}) was near-zero; defaulted to market baseline beta 1.00."
-    else:
-        beta_note = "Insufficient historical covariance data; defaulted to market baseline beta 1.00."
+    # 4. Ultimate fallback: bottom-up industry unlevered beta relevered
+    beta_u = get_industry_unlevered_beta(sector, industry)
+    eff_de = min(2.5, max(0.0, float(de_ratio))) if de_ratio is not None else 0.5
+    eff_raw = beta_u * (1.0 + (1.0 - tax_rate) * eff_de)
+    blume_beta = (2.0 / 3.0) * eff_raw + (1.0 / 3.0) * 1.0
+    blume_beta = float(np.clip(blume_beta, 0.70, 2.20))
 
     return {
-        "beta": 1.0,
-        "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else 1.0,
+        "beta": float(blume_beta),
+        "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else float(eff_raw),
         "beta_clamped": True,
-        "beta_note": beta_note,
+        "beta_note": f"Insufficient historical covariance; applied bottom-up industry unlevered beta ({beta_u:.2f}, relevered: {blume_beta:.2f}).",
+        "is_illiquid": False,
     }
 
 
@@ -210,6 +313,34 @@ def _copy_stock_data(d: dict) -> dict:
     if "cash_flow" in cp and isinstance(cp["cash_flow"], pd.DataFrame):
         cp["cash_flow"] = cp["cash_flow"].copy()
     return cp
+
+def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[str] = None) -> Tuple[bool, bool]:
+    """
+    Classifies company into (is_extractive, is_cyclical).
+    - is_extractive: Oil & Gas exploration/drilling/upstream/integrated, Thermal Coal, Mining & Minerals.
+      Assets suffer from physical depletion; CapEx is required just to sustain reserves and
+      perpetual volume growth cannot exceed physical/transition constraints.
+    - is_cyclical: Extractive PLUS Basic Materials (Steel, Aluminum, Metals, Chemicals, Refining).
+      Earnings fluctuate with global commodity pricing; margins must mean-revert to multi-year cycle averages.
+    """
+    sec = sector or ""
+    ind = industry or ""
+    text = (sec + " " + ind).lower()
+    
+    extractive_keywords = [
+        "oil & gas", "oil and gas", "thermal coal", "coal", "integrated oil", "drilling",
+        "exploration & production", "upstream", "crude", "petroleum", "mining"
+    ]
+    is_extractive = any(k in text for k in extractive_keywords)
+    
+    cyclical_keywords = extractive_keywords + [
+        "basic materials", "steel", "aluminum", "aluminium", "metals", "chemicals", 
+        "commodity chemicals", "iron", "fertilizer", "refining", "paper & forest"
+    ]
+    is_cyclical = any(k in text for k in cyclical_keywords)
+    
+    return is_extractive, is_cyclical
+
 
 def fetch_stock_data(ticker: str, market: str) -> dict:
     """Fetch and validate financial data for *ticker* from Yahoo Finance.
@@ -298,8 +429,30 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
             f"   Cannot build a DCF without these denominators."
         )
 
-    beta_info = compute_clean_beta(stock, yf_ticker, market, raw_info_beta=info.get("beta"))
     market_cap = float(current_price) * float(shares_out)
+
+    # Estimate debt and D/E ratio for bottom-up beta relevering
+    approx_debt = 0.0
+    if not balance_sheet.empty:
+        for debt_col in ["Total Debt", "Long Term Debt And Capital Lease Obligation", "Long Term Debt"]:
+            if debt_col in balance_sheet.columns:
+                d_vals = balance_sheet[debt_col].dropna()
+                if len(d_vals) > 0 and float(d_vals.iloc[0]) > 0:
+                    approx_debt = float(d_vals.iloc[0])
+                    break
+    de_ratio = (approx_debt / market_cap) if market_cap > 0 else 0.0
+
+    beta_info = compute_clean_beta(
+        stock=stock,
+        ticker=yf_ticker,
+        market=market,
+        raw_info_beta=info.get("beta"),
+        sector=info.get("sector"),
+        industry=info.get("industry"),
+        de_ratio=de_ratio,
+        tax_rate=profile.get("tax_rate", 0.2517 if market.upper() == "IN" else 0.21),
+        tradeable=info.get("tradeable"),
+    )
 
     # -----------------------------------------------------------------------
     # Automated Statement Unit Scale Reconciliation
@@ -362,6 +515,30 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     except Exception as e:
         logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
 
+    # Cross-Currency Reconciler (e.g. ADR-linked Indian firms like INFY where statements are in USD while trading in INR)
+    try:
+        fin_currency = str(info.get("financialCurrency") or "").upper()
+        trade_currency = str(info.get("currency") or "").upper()
+        if fin_currency == "USD" and trade_currency == "INR":
+            try:
+                usdinr_ticker = yf.Ticker("USDINR=X")
+                fx_rate = float(usdinr_ticker.fast_info.get("last_price") or 86.5)
+            except Exception:
+                fx_rate = 86.5
+
+            logger.info(
+                "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
+                "Converting financial statements to %s using FX rate %.2f",
+                yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
+            )
+            if not income_stmt.empty:
+                income_stmt = income_stmt * fx_rate
+            if not balance_sheet.empty:
+                balance_sheet = balance_sheet * fx_rate
+            if not cash_flow.empty:
+                cash_flow = cash_flow * fx_rate
+    except Exception as e:
+        logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
 
     company_name = info.get("shortName") or info.get("longName") or yf_ticker
     sector = info.get("sector")
@@ -413,12 +590,17 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
             if debt_vals[-1] / rev_vals[-1] > 3.0:
                 is_financial = True
 
+    is_extractive, is_cyclical = classify_sector_dynamics(sector, industry)
+
     result = {
         "ticker": yf_ticker,
         "name": company_name,
+        "market": market,
         "sector": sector,
         "industry": industry,
         "is_financial": is_financial,
+        "is_extractive": is_extractive,
+        "is_cyclical": is_cyclical,
         "current_price": float(current_price),
         "shares_outstanding": float(shares_out),
         "market_cap": market_cap,
@@ -426,6 +608,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "raw_beta": float(beta_info["raw_beta"]),
         "beta_clamped": bool(beta_info["beta_clamped"]),
         "beta_note": str(beta_info["beta_note"]),
+        "is_illiquid": bool(beta_info.get("is_illiquid", False)),
         "income_stmt": income_stmt,
         "balance_sheet": balance_sheet,
         "cash_flow": cash_flow,
@@ -610,6 +793,12 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                 interest_expense = float(ie_vals.iloc[0])
                 break
 
+    last_ebit = float(ebit[-1]) if len(ebit) > 0 else 0.0
+    if interest_expense > 0:
+        interest_coverage = float(last_ebit / interest_expense)
+    else:
+        interest_coverage = 999.0  # Zero interest / debt free
+
     n_years = len(revenue)
 
     def _extract_series(df, col_candidates, default=0.0):
@@ -715,6 +904,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "total_debt": total_debt,
         "cash_and_equivalents": cash_and_equivalents,
         "interest_expense": interest_expense,
+        "interest_coverage": float(interest_coverage),
         # Full 3-statement models
         "statements": statements,
     }

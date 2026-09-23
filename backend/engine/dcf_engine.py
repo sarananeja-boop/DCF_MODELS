@@ -21,6 +21,78 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Damodaran Synthetic Credit Rating Tables (Continuous Interpolation)
+# ---------------------------------------------------------------------------
+
+# Smaller firms: Market Cap < $5 Billion (~40,000 Cr INR)
+DAMODARAN_SMALL_FIRM_RATINGS = [
+    (12.50, "AAA", 0.0067),
+    (9.50,  "AA",  0.0082),
+    (7.50,  "A+",  0.0103),
+    (6.00,  "A",   0.0114),
+    (4.50,  "A-",  0.0129),
+    (4.00,  "BBB", 0.0159),
+    (3.50,  "BB+", 0.0193),
+    (3.00,  "BB",  0.0232),
+    (2.50,  "BB-", 0.0281),
+    (2.00,  "B+",  0.0347),
+    (1.50,  "B",   0.0446),
+    (1.25,  "B-",  0.0540),
+    (0.80,  "CCC", 0.0716),
+    (0.50,  "CC",  0.0918),
+    (0.00,  "D",   0.1150),
+    (-999.0,"D",   0.1150),
+]
+
+# Large firms: Market Cap >= $5 Billion (~40,000 Cr INR)
+DAMODARAN_LARGE_FIRM_RATINGS = [
+    (8.50,  "AAA", 0.0067),
+    (6.50,  "AA",  0.0082),
+    (5.50,  "A+",  0.0103),
+    (4.25,  "A",   0.0114),
+    (3.00,  "A-",  0.0129),
+    (2.50,  "BBB", 0.0159),
+    (2.25,  "BB+", 0.0193),
+    (2.00,  "BB",  0.0232),
+    (1.75,  "BB-", 0.0281),
+    (1.50,  "B+",  0.0347),
+    (1.25,  "B",   0.0446),
+    (0.80,  "B-",  0.0540),
+    (0.65,  "CCC", 0.0716),
+    (0.20,  "CC",  0.0918),
+    (0.00,  "D",   0.1150),
+    (-999.0,"D",   0.1150),
+]
+
+
+def get_synthetic_rating_and_spread(
+    interest_coverage: float,
+    market_cap: float,
+    currency: str = "USD"
+) -> tuple[str, float]:
+    """Computes Damodaran synthetic credit rating and continuous default spread over Rf.
+    
+    Uses piecewise linear interpolation (np.interp) to eliminate step-function cliff jumps.
+    """
+    is_large = (market_cap >= 400000000000.0) if currency == "INR" else (market_cap >= 5000000000.0)
+    table = DAMODARAN_LARGE_FIRM_RATINGS if is_large else DAMODARAN_SMALL_FIRM_RATINGS
+    
+    # Strictly increasing x for np.interp
+    xp = [r[0] for r in reversed(table)]
+    yp = [r[2] for r in reversed(table)]
+    
+    spread = float(np.interp(interest_coverage, xp, yp))
+    
+    rating = "D"
+    for thresh, label, _ in table:
+        if interest_coverage >= thresh:
+            rating = label
+            break
+            
+    return rating, spread
+
+
+# ---------------------------------------------------------------------------
 # WACC
 # ---------------------------------------------------------------------------
 
@@ -31,36 +103,54 @@ def compute_wacc(
 ) -> dict:
     """Compute the Weighted Average Cost of Capital (WACC).
 
-    Mirrors notebook Step 4A–4C.
-
-    * **Cost of Equity** via CAPM: ``K_E = R_f + β × (R_m − R_f)``
-    * **Cost of Debt**: ``Interest Expense / Total Debt`` (fallback 4 %).
-    * **Capital weights**: market-value equity vs book-value debt.
-    * **WACC**: ``W_E × K_E + W_D × K_D × (1 − T)``
-
-    Args:
-        stock_data:     Dict from :func:`data_layer.fetch_stock_data`.
-        metrics:        Dict from :func:`data_layer.compute_historical_metrics`.
-        market_profile: Dict from :func:`market_config.get_market_profile`.
-
-    Returns:
-        Dict with: ``cost_of_equity``, ``cost_of_debt``, ``weight_equity``,
-        ``weight_debt``, ``wacc``, ``total_debt``.
+    Features:
+      * Excludes financials from leverage and credit gates (routes to FCFE/DDM).
+      * Continuous Damodaran Synthetic Credit Rating (small vs large firms) based on ICR.
+      * No country spread double counting: Rf is local 10Y sovereign yield.
+      * Marginal interest tax shield capped at EBIT (tax shield = 0 if EBIT <= 0).
+      * Safety Net Floor: minimum 1.5% spread over sovereign 10Y yield with full diagnostic flagging.
     """
     risk_free_rate: float = market_profile["risk_free_rate"]
     market_return: float = market_profile["market_return"]
     tax_rate: float = market_profile["tax_rate"]
+    currency: str = market_profile.get("currency", "USD")
+
+    # Point 1: Exclude financials from non-financial leverage and credit gates
+    if stock_data.get("is_financial", False):
+        beta: float = stock_data.get("beta", 1.0)
+        ke: float = risk_free_rate + beta * (market_return - risk_free_rate)
+        return {
+            "cost_of_equity": float(ke),
+            "raw_cost_of_equity": float(ke),
+            "ke_floored": False,
+            "ke_note": None,
+            "cost_of_debt": 0.0,
+            "pretax_cost_of_debt": 0.0,
+            "synthetic_rating": "N/A (Financial)",
+            "default_spread": 0.0,
+            "interest_coverage": 999.0,
+            "weight_equity": 1.0,
+            "weight_debt": 0.0,
+            "wacc": float(ke),
+            "raw_wacc": float(ke),
+            "min_wacc": float(risk_free_rate + 0.015),
+            "wacc_floored": False,
+            "wacc_note": None,
+            "total_debt": 0.0,
+            "is_financial": True,
+        }
 
     beta: float = stock_data["beta"]
     market_cap: float = stock_data["market_cap"]
     total_debt: float = metrics["total_debt"]
     interest_expense: float = metrics["interest_expense"]
 
+    hist_ebit = metrics.get("ebit", [])
+    last_ebit = float(hist_ebit[-1]) if len(hist_ebit) > 0 else 0.0
+
     # 4A – CAPM → Cost of Equity
     raw_cost_of_equity: float = risk_free_rate + beta * (market_return - risk_free_rate)
     
-    # Fundamental economic guard: Cost of equity must reflect an equity risk premium
-    # Common equity is strictly riskier than sovereign debt (Rf). Minimum floor Rf + 1.5%
     ke_min = risk_free_rate + 0.015
     ke_floored = False
     ke_note = None
@@ -71,11 +161,37 @@ def compute_wacc(
     else:
         cost_of_equity = raw_cost_of_equity
 
-    # 4B – Cost of Debt
-    if total_debt > 0 and interest_expense != 0:
-        cost_of_debt = abs(interest_expense / total_debt)
+    # 4B – Cost of Debt with Damodaran Synthetic Rating & Continuous Spreads
+    if interest_expense > 0:
+        interest_coverage = float(last_ebit / interest_expense)
     else:
-        cost_of_debt = 0.04  # fallback
+        interest_coverage = 999.0
+
+    synthetic_rating, default_spread = get_synthetic_rating_and_spread(
+        interest_coverage, market_cap, currency=currency
+    )
+
+    # Point 2: Rf already embeds sovereign default spread (G-Sec/Treasury). Kd = Rf + Company Default Spread.
+    synthetic_kd = risk_free_rate + default_spread
+
+    if total_debt > 0 and interest_expense > 0:
+        hist_kd = abs(interest_expense / total_debt)
+        if interest_coverage < 3.0:
+            cost_of_debt = max(hist_kd, synthetic_kd)
+        else:
+            cost_of_debt = min(hist_kd, synthetic_kd) if hist_kd >= 0.04 else synthetic_kd
+    else:
+        cost_of_debt = synthetic_kd if total_debt > 0 else 0.04
+
+    # Point 6: Cap interest tax shield at usable EBIT (using marginal statutory rate)
+    marginal_tax_rate = tax_rate
+    if total_debt > 0:
+        usable_interest = max(0.0, min(interest_expense, max(0.0, last_ebit)))
+        usable_tax_shield = marginal_tax_rate * usable_interest
+        effective_kd_after_tax = cost_of_debt - (usable_tax_shield / total_debt)
+        effective_kd_after_tax = float(np.clip(effective_kd_after_tax, 0.02, cost_of_debt))
+    else:
+        effective_kd_after_tax = cost_of_debt * (1.0 - marginal_tax_rate)
 
     # 4C – Capital structure weights
     total_capital = market_cap + total_debt
@@ -86,17 +202,42 @@ def compute_wacc(
         weight_equity = 1.0
         weight_debt = 0.0
 
-    wacc = (weight_equity * cost_of_equity) + (weight_debt * cost_of_debt * (1 - tax_rate))
+    raw_wacc = (weight_equity * cost_of_equity) + (weight_debt * effective_kd_after_tax)
+
+    # Point 5 / Safety Net Floor: minimum 1.5% spread over sovereign 10Y yield
+    min_wacc_spread = 0.015
+    min_wacc = risk_free_rate + min_wacc_spread
+    wacc_floored = False
+    wacc_note = None
+
+    if raw_wacc < min_wacc:
+        wacc = min_wacc
+        wacc_floored = True
+        market_label = "10Y G-Sec" if currency == "INR" else "10Y Treasury"
+        wacc_note = (
+            f"WACC safety floor applied at {min_wacc*100:.1f}% (minimum 1.5% spread over sovereign {market_label} yield). "
+            f"Raw unconstrained WACC was {raw_wacc*100:.1f}%. Inputs may warrant review."
+        )
+    else:
+        wacc = raw_wacc
 
     return {
         "cost_of_equity": float(cost_of_equity),
         "raw_cost_of_equity": float(raw_cost_of_equity),
         "ke_floored": ke_floored,
         "ke_note": ke_note,
-        "cost_of_debt": float(cost_of_debt),
+        "cost_of_debt": float(effective_kd_after_tax),
+        "pretax_cost_of_debt": float(cost_of_debt),
+        "synthetic_rating": synthetic_rating,
+        "default_spread": float(default_spread),
+        "interest_coverage": float(interest_coverage),
         "weight_equity": float(weight_equity),
         "weight_debt": float(weight_debt),
         "wacc": float(wacc),
+        "raw_wacc": float(raw_wacc),
+        "min_wacc": float(min_wacc),
+        "wacc_floored": wacc_floored,
+        "wacc_note": wacc_note,
         "total_debt": float(total_debt),
     }
 
@@ -138,6 +279,12 @@ def run_dcf(
     cash_equiv: float = metrics["cash_and_equivalents"]
     shares_out: float = stock_data["shares_outstanding"]
 
+    is_extractive = stock_data.get("is_extractive", False)
+    is_cyclical = stock_data.get("is_cyclical", False)
+    if not is_extractive and not is_cyclical:
+        from engine.data_layer import classify_sector_dynamics
+        is_extractive, is_cyclical = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"))
+
     # Explicit tax rate priority: passed arg -> stock_data._tax_rate -> market fallback
     if tax_rate is None:
         tax_rate = stock_data.get("_tax_rate", 0.2517 if stock_data.get("market") == "IN" else 0.21)
@@ -160,8 +307,18 @@ def run_dcf(
         margin_schedule = np.array([ebit_margin] * projection_years)
 
     # In corporate finance / Damodaran framework, CapEx% converges towards steady-state
-    # maintenance CapEx: D&A * (1 + terminal_growth)
-    steady_state_capex_pct = avg_dna_pct * (1.0 + terminal_growth)
+    # maintenance CapEx: D&A * (1 + terminal_growth).
+    # However, for extractive / depleting sectors (oil & gas upstream, thermal coal, mining),
+    # physical reserves deplete continuously. Sustaining production requires real exploration and drilling CapEx,
+    # which cannot drop below historical sustaining CapEx (avg_capex_pct).
+    base_steady_state = avg_dna_pct * (1.0 + terminal_growth)
+    if is_extractive:
+        steady_state_capex_pct = max(base_steady_state, avg_capex_pct)
+    elif is_cyclical:
+        steady_state_capex_pct = max(base_steady_state, avg_capex_pct * 0.85)
+    else:
+        steady_state_capex_pct = base_steady_state
+
     capex_schedule = np.linspace(avg_capex_pct, steady_state_capex_pct, projection_years)
 
     for yr in range(projection_years):
@@ -218,12 +375,44 @@ def run_dcf(
     # Economic competition bounds sustainable long-term ROIC
     sustainable_roic = max(discount_rate, min(hist_roic, 0.25))
     terminal_reinv_rate = min(0.85, max(0.15, terminal_growth / sustainable_roic))
-    
+
+    # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
+    if is_extractive and margin_schedule[-1] > 0:
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - avg_dna_pct) / margin_schedule[-1])
+        terminal_reinv_rate = min(0.85, max(terminal_reinv_rate, net_capex_reinv))
+    elif is_cyclical and margin_schedule[-1] > 0:
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - avg_dna_pct) / margin_schedule[-1])
+        terminal_reinv_rate = min(0.85, max(terminal_reinv_rate, net_capex_reinv * 0.85))
+
+    # Point 5: Tighten terminal growth rule.
+    # Cap terminal growth at long-term GDP/inflation cap (5.0% for India, 2.5% for US)
+    # Extractive / finite commodity constraint:
+    # Perpetual growth for depleting fossil reserves (crude oil, coal) cannot assume macro GDP growth.
+    # Cap at long-term volume/inflation ceiling (2.5% max)
+    if is_extractive:
+        max_g_allowed = 0.025
+    else:
+        is_india = (stock_data.get("market") == "IN")
+        max_g_allowed = 0.050 if is_india else 0.025
+    clamped_terminal_growth = min(terminal_growth, max_g_allowed)
+
     # Terminal NOPAT in Year N+1
-    terminal_nopat = proj_rev[-1] * (1 + terminal_growth) * margin_schedule[-1] * (1 - tax_rate)
+    terminal_nopat = proj_rev[-1] * (1 + clamped_terminal_growth) * margin_schedule[-1] * (1 - tax_rate)
     terminal_ufcf = terminal_nopat * (1 - terminal_reinv_rate)
     
-    if discount_rate <= terminal_growth:
+    # Enforce minimum spread: WACC - g >= 0.025 (2.5% minimum spread)
+    min_spread = 0.025
+    if discount_rate - clamped_terminal_growth < min_spread:
+        effective_terminal_growth = max(0.01, discount_rate - min_spread)
+        terminal_growth_capped = True
+        terminal_value_note = (
+            f"Terminal growth capped at {effective_terminal_growth*100:.1f}% to preserve minimum "
+            f"{min_spread*100:.1f}% spread below WACC ({discount_rate*100:.1f}%)."
+        )
+    else:
+        effective_terminal_growth = clamped_terminal_growth
+
+    if discount_rate <= effective_terminal_growth:
         terminal_value = None
         pv_terminal_value = 0.0
         terminal_value_valid = False
@@ -234,17 +423,8 @@ def run_dcf(
         terminal_value_valid = False
         terminal_value_note = "Terminal UFCF is negative under current assumptions."
     else:
-        # Protect against denominator compression (WACC - g < 2.0%) which causes explosive valuations
-        spread = discount_rate - terminal_growth
-        if spread < 0.020:
-            effective_terminal_growth = discount_rate - 0.020
-            terminal_growth_capped = True
-            terminal_value_note = f"Terminal growth capped at {effective_terminal_growth*100:.1f}% to preserve minimum 2.0% WACC spread."
-            terminal_value = (terminal_ufcf * (1.0 + effective_terminal_growth)) / 0.020
-        else:
-            terminal_value = (terminal_ufcf * (1.0 + terminal_growth)) / spread
-
-        # In HUL FINAL MODEL.xlsx (D29 = D24 * J10), TV is discounted using the final forecast period factor
+        spread = discount_rate - effective_terminal_growth
+        terminal_value = (terminal_ufcf * (1.0 + effective_terminal_growth)) / spread
         pv_terminal_value = terminal_value / discount_factors[-1]
 
     # EV → Equity bridge
@@ -254,9 +434,46 @@ def run_dcf(
     # Implied price per share floored at 0.0
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
+    # ------------------------------------------------------------------
+    # Exit Multiple Valuation Cross-Check (Damodaran & Institutional standard)
+    # ------------------------------------------------------------------
+    terminal_ebitda = proj_rev[-1] * (1.0 + effective_terminal_growth) * (margin_schedule[-1] + avg_dna_pct)
+    implied_exit_multiple = (terminal_value / terminal_ebitda) if (terminal_value and terminal_ebitda > 0) else None
+
+    # Benchmark exit multiples by sector profile
+    if is_extractive:
+        benchmark_exit_mult = 4.5
+    elif is_cyclical:
+        benchmark_exit_mult = 5.5
+    elif stock_data.get("is_financial", False):
+        benchmark_exit_mult = 8.0
+    else:
+        benchmark_exit_mult = 10.0
+
+    exit_terminal_value = terminal_ebitda * benchmark_exit_mult if terminal_ebitda > 0 else 0.0
+    pv_exit_tv = exit_terminal_value / discount_factors[-1] if len(discount_factors) > 0 else 0.0
+    exit_ev = pv_ufcf + pv_exit_tv
+    exit_equity = exit_ev + cash_equiv - total_debt
+    exit_implied_price = max(0.0, exit_equity / shares_out) if shares_out > 0 else 0.0
+
+    # Point 5: Terminal Value Share of Enterprise Value (>75% flagged)
+    tv_share_of_ev = float(pv_terminal_value / enterprise_val) if enterprise_val > 0 else 0.0
+    tv_share_flag = bool(tv_share_of_ev > 0.75)
+    tv_share_note = None
+    if tv_share_flag:
+        tv_share_note = (
+            f"Terminal Value accounts for {tv_share_of_ev*100:.1f}% of Enterprise Value (>75% threshold). "
+            f"Model valuation is heavily dependent on perpetual assumptions."
+        )
+
     return {
         "implied_price": float(implied_price),
         "enterprise_value": float(enterprise_val),
+        "exit_implied_price": float(exit_implied_price),
+        "benchmark_exit_multiple": float(benchmark_exit_mult),
+        "implied_exit_multiple": float(implied_exit_multiple) if implied_exit_multiple is not None else None,
+        "is_extractive": is_extractive,
+        "is_cyclical": is_cyclical,
         "projected_revenue": [float(r) for r in proj_rev],
         "projected_ufcf": [float(u) for u in proj_ufcf],
         "projected_nopat": [float(n) for n in proj_nopat],
@@ -276,6 +493,9 @@ def run_dcf(
         "terminal_value_note": terminal_value_note,
         "terminal_growth_capped": terminal_growth_capped,
         "effective_terminal_growth": float(effective_terminal_growth),
+        "tv_share_of_ev": float(tv_share_of_ev),
+        "tv_share_flag": tv_share_flag,
+        "tv_share_note": tv_share_note,
         "normalized_nwc_to_revenue": float(normalized_nwc_to_revenue),
         "tax_rate": float(tax_rate),
         "terminal_growth": float(terminal_growth),

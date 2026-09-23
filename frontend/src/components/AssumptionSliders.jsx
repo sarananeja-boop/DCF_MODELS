@@ -189,6 +189,11 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
                 <span>Beta: {data.market_data.beta.toFixed(2)}</span>
               )}
             </div>
+            {data.diagnostics?.wacc_floored && (
+              <span className="text-amber-300 text-[10px] bg-amber-950/60 p-1.5 rounded border border-amber-500/30">
+                ⚠️ {data.diagnostics.wacc_note}
+              </span>
+            )}
             {data.diagnostics?.ke_floored && (
               <span className="text-amber-400/90 text-[10px] bg-amber-950/40 p-1 rounded border border-amber-500/20">
                 {data.diagnostics.ke_note}

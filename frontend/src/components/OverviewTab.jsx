@@ -113,6 +113,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             {isPositive ? <FiTrendingUp className="mr-1" /> : <FiTrendingDown className="mr-1" />}
             {isPositive ? '▲' : '▼'} {Math.abs(dcfUpside * 100).toFixed(1)}% {isPositive ? 'Upside' : 'Downside'}
           </div>
+          {data.diagnostics?.tv_share_flag && (
+            <div className="mt-1.5 text-[10px] text-amber-400 font-mono bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/20" title={data.diagnostics.tv_share_note}>
+              ⚠️ TV accounts for {(data.diagnostics.tv_share_of_ev * 100).toFixed(0)}% of EV
+            </div>
+          )}
         </div>
 
         {/* Monte Carlo Median */}
@@ -142,7 +147,14 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
 
       {/* 2. Company Info Card */}
       <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
-        <h3 className="text-lg font-semibold text-white mb-4">Company Details</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-white">Company Details</h3>
+          {market_data?.is_illiquid && (
+            <span className="text-[11px] font-mono text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded">
+              ⚠️ Thinly Traded / Non-Trading
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <div className="text-xs text-slate-400">Name</div>
@@ -228,6 +240,21 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
             </div>
           </div>
+
+          {!isFinancial && wacc_details?.synthetic_rating && wacc_details?.synthetic_rating !== 'N/A' && (
+            <div className="mt-3 pt-2.5 border-t border-zinc-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Synthetic Credit Rating</span>
+              <span className="font-mono text-amber-400 font-semibold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
+                {wacc_details.synthetic_rating} (+{(wacc_details.default_spread * 100).toFixed(1)}% spread)
+              </span>
+            </div>
+          )}
+
+          {wacc_details?.wacc_floored && (
+            <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/30 rounded text-[11px] text-amber-300/90 leading-tight">
+              {wacc_details.wacc_note}
+            </div>
+          )}
 
           {isFinancial && (
             <div className="mt-4 pt-3 border-t border-zinc-800 text-[11px] text-slate-400 leading-relaxed">

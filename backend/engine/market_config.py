@@ -44,7 +44,7 @@ MARKET_PROFILES: Dict[str, dict] = {
         "risk_free_rate": 0.071,           # fallback / default
         "market_return": 0.13,
         "tax_rate": 0.2517,                # 22% basic + 10% surcharge + 4% cess
-        "terminal_growth": 0.055,          # India long-term nominal growth (sustainable < Rf 7.1%)
+        "terminal_growth": 0.050,          # India long-term sustainable growth (5.0% < Rf 7.1%)
         "gdp_growth": 0.065,               # India real GDP growth trend (~6.5%)
         "currency": "INR",
         "symbol": "₹",

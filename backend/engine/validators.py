@@ -55,7 +55,10 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
         "market_multiple": float(market_multiple) if market_multiple is not None else None,
         "model_multiple": float(model_multiple) if model_multiple is not None else None,
         "multiple_gap_pct": float(multiple_gap_pct),
-        "status": status
+        "status": status,
+        "exit_implied_price": dcf_result.get("exit_implied_price"),
+        "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
+        "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
     }
 
 
@@ -106,27 +109,52 @@ def validate_bank_valuation(
     }
 
 
-def generate_verdict(current_price: float, mc_stats: Dict[str, float], terminal_value_valid: bool = True, mc_valid: bool = True) -> Dict[str, Any]:
+def generate_verdict(
+    current_price: float,
+    mc_stats: Dict[str, float],
+    terminal_value_valid: bool = True,
+    mc_valid: bool = True,
+    is_distressed: bool = False,
+) -> Dict[str, Any]:
     """
-    Generates a BUY/SELL/HOLD verdict based on Monte Carlo percentiles.
+    Generates a BUY/SELL/HOLD or DCF UNRELIABLE / DISTRESSED verdict based on Monte Carlo percentiles.
     """
     p5 = mc_stats.get('p5')
     p25 = mc_stats.get('p25')
     median = mc_stats.get('median')
     p75 = mc_stats.get('p75')
     p95 = mc_stats.get('p95')
+    zero_price_pct = mc_stats.get('zero_price_pct', 0.0)
 
     import math
     def is_invalid(val):
         return val is None or math.isnan(val) or math.isinf(val) or val < 0.0
 
+    # Point 7: Change verdict and label for high distress / equity wipeout names
+    # Equity in a distressed firm behaves like an option; truncated DCF is unreliable
+    distressed_firm = is_distressed or (zero_price_pct > 0.20) or (p25 is not None and p25 <= 0.0) or (median == 0.0 and mc_valid)
+    if distressed_firm:
+        distressed_upside = -100.0 if (is_invalid(median) or median == 0.0) else float(((median / current_price) - 1) * 100 if current_price > 0 else 0.0)
+        return {
+            "verdict": "DCF UNRELIABLE / DISTRESSED",
+            "description": (
+                f"Severe financial distress or equity wipeout detected ({zero_price_pct*100:.1f}% equity wipeout simulations). "
+                "Equity in a distressed firm behaves like an option; truncated-at-zero DCF is an unreliable basis for a fair-value call."
+            ),
+            "upside_pct": float(distressed_upside),
+            "is_distressed": True,
+        }
+
     if not terminal_value_valid or not mc_valid or is_invalid(p5) or is_invalid(p95) or is_invalid(median) or median == 0.0:
         return {
             "verdict": "N/A",
             "description": "Valuation assumptions do not currently support a valid terminal value or sufficient valid simulations.",
-            "upside_pct": 0.0
+            "upside_pct": 0.0,
+            "is_distressed": False,
         }
     
+    upside_pct = ((median / current_price) - 1) * 100 if current_price > 0 else 0.0
+
     if current_price < p5:
         verdict = "STRONG BUY"
         description = "Trades below the 5th-percentile downside estimate."
@@ -143,10 +171,9 @@ def generate_verdict(current_price: float, mc_stats: Dict[str, float], terminal_
         verdict = "HOLD / FAIR VALUE"
         description = "Trades within the interquartile range of simulated outcomes."
         
-    upside_pct = ((median / current_price) - 1) * 100 if current_price > 0 else 0.0
-    
     return {
         "verdict": verdict,
         "description": description,
-        "upside_pct": float(upside_pct)
+        "upside_pct": float(upside_pct),
+        "is_distressed": False,
     }
