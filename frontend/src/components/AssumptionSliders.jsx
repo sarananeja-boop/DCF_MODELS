@@ -18,7 +18,7 @@ export default function AssumptionSliders({ data, onOverride, loading }) {
   // Always use the true historical baseline as default (never the applied override)
   const defaultMargin = isFinancial
     ? (data.historicals.avg_roe ?? 0.14)
-    : (data.historicals.avg_ebit_margin ?? 0.20);
+    : (data.diagnostics?.target_ebit_margin ?? data.historicals.avg_ebit_margin ?? 0.20);
   
   const defaultWacc = isFinancial
     ? (data.wacc.cost_of_equity || data.wacc.wacc || 0.10)

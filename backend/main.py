@@ -90,7 +90,7 @@ class AnalyzeRequest(BaseModel):
     )
     overrides: Optional[Overrides] = None
     monte_carlo_iterations: int = Field(
-        10000, ge=100, le=100000, description="Number of MC iterations"
+        2000, ge=100, le=100000, description="Number of MC iterations"
     )
 
 
@@ -341,15 +341,28 @@ def analyze(req: AnalyzeRequest):
                 start_growth = terminal_growth
             else:
                 start_growth = hist_growth
-            if avg_ebit_margin < 0 and overrides.ebit_margin is None:
-                target_margin = 0.0
-                current_margin = avg_ebit_margin
-            elif avg_ebit_margin < 0 and overrides.ebit_margin is not None:
+            # Determine latest and historical margin trajectory
+            ebit_margins_hist = metrics.get("ebit_margins", [])
+            latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
+            
+            if overrides.ebit_margin is not None:
                 target_margin = overrides.ebit_margin
-                current_margin = avg_ebit_margin
+                current_margin = latest_margin if abs(latest_margin - target_margin) > 0.005 else None
             else:
-                target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else avg_ebit_margin
-                current_margin = None
+                if latest_margin > 0:
+                    if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
+                        # Turnaround / rapid expansion (e.g. DASH, UBER)
+                        # Latest margin is positive and expanding: target mature margin is at least max(latest_margin * 1.5, 0.12)
+                        target_margin = max(latest_margin * 1.5, 0.12) if latest_margin < 0.12 else latest_margin
+                        current_margin = latest_margin
+                    else:
+                        # Steady mature profitable company
+                        target_margin = avg_ebit_margin
+                        current_margin = latest_margin if abs(latest_margin - target_margin) > 0.02 else None
+                else:
+                    # Currently loss-making: Damodaran turnaround convergence towards sustainable 10% target
+                    current_margin = latest_margin
+                    target_margin = 0.10
 
             discount_rate = (
                 overrides.wacc

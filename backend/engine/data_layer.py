@@ -196,8 +196,20 @@ def compute_clean_beta(
 
 
 # ---------------------------------------------------------------------------
-# Data fetching
+# In-memory cache for raw financial data (avoids repetitive Yahoo Finance calls)
 # ---------------------------------------------------------------------------
+_STOCK_DATA_CACHE: Dict[str, tuple] = {}
+_STOCK_DATA_CACHE_TTL_SECONDS: int = 900  # 15 minutes
+
+def _copy_stock_data(d: dict) -> dict:
+    cp = dict(d)
+    if "income_stmt" in cp and isinstance(cp["income_stmt"], pd.DataFrame):
+        cp["income_stmt"] = cp["income_stmt"].copy()
+    if "balance_sheet" in cp and isinstance(cp["balance_sheet"], pd.DataFrame):
+        cp["balance_sheet"] = cp["balance_sheet"].copy()
+    if "cash_flow" in cp and isinstance(cp["cash_flow"], pd.DataFrame):
+        cp["cash_flow"] = cp["cash_flow"].copy()
+    return cp
 
 def fetch_stock_data(ticker: str, market: str) -> dict:
     """Fetch and validate financial data for *ticker* from Yahoo Finance.
@@ -217,6 +229,14 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     Raises:
         ValueError: If ``currentPrice`` or ``sharesOutstanding`` are missing.
     """
+    cache_key = f"{ticker.strip().upper()}:{market.strip().upper()}"
+    now = time.time()
+    if cache_key in _STOCK_DATA_CACHE:
+        cached_data, cached_ts = _STOCK_DATA_CACHE[cache_key]
+        if now - cached_ts < _STOCK_DATA_CACHE_TTL_SECONDS:
+            logger.info("Serving %s from in-memory cache", cache_key)
+            return _copy_stock_data(cached_data)
+
     from .market_config import MARKET_PROFILES
 
     profile = MARKET_PROFILES.get(market.upper(), MARKET_PROFILES["US"])
@@ -356,7 +376,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "capital markets", "asset management", "consumer finance"]):
         is_financial = True
 
-    return {
+    result = {
         "ticker": yf_ticker,
         "name": company_name,
         "sector": sector,
@@ -374,6 +394,8 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "cash_flow": cash_flow,
         "info": info,
     }
+    _STOCK_DATA_CACHE[cache_key] = (_copy_stock_data(result), time.time())
+    return result
 
 
 # ---------------------------------------------------------------------------
