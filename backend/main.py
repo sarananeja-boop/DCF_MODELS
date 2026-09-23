@@ -90,7 +90,7 @@ class AnalyzeRequest(BaseModel):
     )
     overrides: Optional[Overrides] = None
     monte_carlo_iterations: int = Field(
-        2000, ge=100, le=100000, description="Number of MC iterations"
+        10000, ge=100, le=100000, description="Number of MC iterations"
     )
 
 

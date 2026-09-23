@@ -367,14 +367,51 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     sector = info.get("sector")
     industry = info.get("industry")
 
-    # Banking & Financial Services Detection (Banks, NBFCs, Insurance, Capital Markets)
+    # Banking & Financial Services Detection (Banks, NBFCs, Insurance, Capital Markets, Lending Institutions)
     is_financial = False
     sec_lower = (sector or "").lower()
     ind_lower = (industry or "").lower()
-    if any(k in sec_lower for k in ["financial", "banking"]):
+    name_lower = (company_name or "").lower()
+    clean_sym = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
+
+    KNOWN_FINANCIALS = {
+        "IREDA", "PFC", "REC", "IRFC", "HUDCO", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", 
+        "KOTAKBANK", "BAJFINANCE", "BAJAJFINSV", "CHOLAFIN", "MUTHOOTFIN", "MANAPPURAM", 
+        "SHRIRAMFIN", "M&MFIN", "JIOFIN", "POONAWALLA", "AAVAS", "CANFINHOME", "HOMEFIRST", 
+        "CREDITACC", "IDFCFIRSTB", "BANDHANBNK", "FEDERALBNK", "INDUSINDBK", "AUBANK", "PNB", 
+        "BANKBARODA", "UNIONBANK", "CANBK", "INDIANB", "MAHABANK", "UCOBANK", "CENTRALBK", 
+        "IOB", "J&KBANK", "KARURVYSYA", "SOUTHBANK", "CSBBANK", "DCBBANK", "CITYUNIONB", 
+        "EQUITASBNK", "UJJIVANSFB", "SURYODAY", "ESAFSFB", "SBICARD", "ICICIGI", "HDFCLIFE", 
+        "SBILIFE", "ICICIPRULI", "LICI", "GICRE", "NIACL", "STARHEALTH", "ISEC", "ANGELONE", 
+        "MOTILALOFS", "GEOJITFSL", "5PAISA", "MCX", "BSE", "CDSL", "CAMSLTD", "KFINTECH", 
+        "NAM-INDIA", "HDFCAMC", "UTIAMC", "JPM", "BAC", "WFC", "C", "GS", "MS", "AXP", 
+        "COF", "USB", "PNC", "TFC", "SCHW", "BK", "BLK", "FITB", "MTB", "KEY", "CFG", 
+        "HBAN", "RF", "SYF", "DFS", "SOFI", "AFRM"
+    }
+
+    # 1. Known Ticker Check
+    if clean_sym in KNOWN_FINANCIALS:
         is_financial = True
-    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "capital markets", "asset management", "consumer finance"]):
+    # 2. Sector / Industry Metadata
+    elif any(k in sec_lower for k in ["financial", "banking"]):
         is_financial = True
+    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "capital markets", "asset management", "consumer finance", "financial", "specialty finance"]):
+        is_financial = True
+    # 3. Company Name Keywords
+    elif any(kw in name_lower for kw in [
+        "bank", "finance", "financial", "credit", "housing finance", 
+        "development agency", "energy development agency", "capital", "insurance", 
+        "securities", "finvest", "leasing", "fincorp", "asset management"
+    ]):
+        is_financial = True
+    # 4. Financial Statement Structural Signals (handles empty info metadata from Yahoo Finance)
+    elif "Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns:
+        # Check if interest is primary revenue source or extreme financial leverage exists
+        debt_vals = safe_get(balance_sheet, "Total Debt", 0)
+        rev_vals = safe_get(income_stmt, "Total Revenue", 0)
+        if len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0:
+            if debt_vals[-1] / rev_vals[-1] > 3.0:
+                is_financial = True
 
     result = {
         "ticker": yf_ticker,

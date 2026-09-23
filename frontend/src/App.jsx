@@ -167,7 +167,7 @@ export default function App() {
     const saved = sessionStorage.getItem('vl_overrides');
     return saved ? JSON.parse(saved) : {};
   });
-  const [monteCarloIterations, setMonteCarloIterations] = useState(2000);
+  const [monteCarloIterations, setMonteCarloIterations] = useState(10000);
   const [resetKey, setResetKey] = useState(0);
   const [showMethodology, setShowMethodology] = useState(false);
 
