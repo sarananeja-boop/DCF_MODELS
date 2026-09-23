@@ -184,6 +184,23 @@ export default function TickerInput({
     const cleanQuery = query.trim().toUpperCase();
     if (cleanQuery) {
       setShowDropdown(false);
+      
+      // Smart Auto-Resolution:
+      // If user typed a clean symbol without suffix (e.g. "VBL", "RELIANCE") that matches our universe, resolve to full symbol & market
+      const localMatches = filterLocal(cleanQuery);
+      const topMatch = suggestions.find(s => 
+        s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
+        s.symbol.toUpperCase() === cleanQuery
+      ) || localMatches.find(s => 
+        s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
+        s.symbol.toUpperCase() === cleanQuery
+      );
+
+      if (topMatch) {
+        handleSelectSuggestion(topMatch.symbol, topMatch.name, topMatch.market);
+        return;
+      }
+
       onAnalyze({}, true, cleanQuery, market);
     }
   };

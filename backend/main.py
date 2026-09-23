@@ -215,8 +215,19 @@ def analyze(req: AnalyzeRequest):
             market = req.market.upper().strip()
         logger.info("Analyzing %s in market %s", ticker, market)
 
-        # 2. Fetch stock data
-        stock_data = fetch_stock_data(ticker, market)
+        # 2. Fetch stock data with auto-fallback for Indian stocks queried without .NS
+        try:
+            stock_data = fetch_stock_data(ticker, market)
+        except ValueError as e:
+            if req.market.lower() == "auto" and market == "US" and "." not in ticker:
+                logger.info("Ticker %s failed in US market, attempting Indian market (.NS)...", ticker)
+                try:
+                    stock_data = fetch_stock_data(ticker, "IN")
+                    market = "IN"
+                except Exception:
+                    raise e
+            else:
+                raise e
 
         # 3. Historical metrics
         metrics = compute_historical_metrics(stock_data)

@@ -336,7 +336,7 @@ export default function App() {
         overrides: safeOverrides,
         monte_carlo_iterations: monteCarloIterations
       }, { 
-        timeout: 45000,
+        timeout: 75000,
         signal: controller.signal
       });
       
