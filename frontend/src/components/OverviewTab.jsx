@@ -96,10 +96,20 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       {/* 1. Top Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Current Price */}
-        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
-          <div className="text-sm text-slate-400 mb-1">Current Price</div>
-          <div className="text-3xl font-bold text-white">
-            {symbol}{formatNumber(market_data?.current_price)}
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 flex flex-col justify-between">
+          <div>
+            <div className="text-sm text-slate-400 mb-1">Current Price</div>
+            <div className="text-3xl font-bold text-white">
+              {symbol}{formatNumber(market_data?.current_price)}
+            </div>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              Mkt Cap: <span className="text-slate-200 font-medium">{formatCurrency(market_data?.market_cap || (market_data?.shares_outstanding || 0) * (market_data?.current_price || 0), symbol, true)}</span>
+            </span>
+            <span className="text-[11px] font-mono text-slate-400 bg-zinc-900/80 px-1.5 py-0.5 rounded border border-zinc-700/60">
+              {company?.currency || 'USD'}
+            </span>
           </div>
         </div>
 
