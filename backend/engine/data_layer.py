@@ -187,6 +187,16 @@ def compute_clean_beta(
     """
     benchmark = "^NSEI" if market.upper() == "IN" else "^GSPC"
     
+    # Safe float parsing of info beta
+    safe_info_beta = None
+    if raw_info_beta is not None:
+        try:
+            val = float(raw_info_beta)
+            if not np.isnan(val):
+                safe_info_beta = val
+        except (ValueError, TypeError):
+            safe_info_beta = None
+
     # 1. Trading liquidity & volume verification
     # When >30% of days have 0 volume, or prices are frozen, regression beta is an artifact of non-trading.
     is_illiquid = False
@@ -200,13 +210,11 @@ def compute_clean_beta(
             zero_vols = int((hist_1y["Volume"] == 0).sum())
             zero_vol_pct = float(zero_vols / len(hist_1y))
             unique_prices = int(hist_1y["Close"].nunique())
-            if tradeable is False or zero_vol_pct > 0.30 or unique_prices < 15:
+            # Real trading liquidity: true illiquidity is when >30% of days have zero volume or prices are frozen (<15 unique prices)
+            if zero_vol_pct > 0.30 or unique_prices < 15:
                 is_illiquid = True
     except Exception as e:
         logger.warning("Liquidity check failed for %s: %s", ticker, e)
-
-    if tradeable is False:
-        is_illiquid = True
 
     # If illiquid / halted, apply bottom-up industry unlevered beta relevered at company D/E
     if is_illiquid:
@@ -234,7 +242,7 @@ def compute_clean_beta(
         )
         return {
             "beta": float(blume_beta),
-            "raw_beta": float(raw_info_beta) if (raw_info_beta is not None and not np.isnan(raw_info_beta)) else float(relevered_beta),
+            "raw_beta": float(safe_info_beta) if safe_info_beta is not None else float(relevered_beta),
             "beta_clamped": True,
             "beta_note": note,
             "is_illiquid": True,
@@ -290,14 +298,14 @@ def compute_clean_beta(
         logger.warning("Local benchmark beta calculation failed for %s: %s", ticker, exc)
 
     # 3. Fallback to Yahoo Finance info beta if valid
-    if raw_info_beta is not None and not np.isnan(raw_info_beta) and raw_info_beta > 0.15:
-        eff_info = min(2.80, raw_info_beta)
+    if safe_info_beta is not None and safe_info_beta > 0.15:
+        eff_info = min(2.80, safe_info_beta)
         blume_beta = (2.0 / 3.0) * eff_info + (1.0 / 3.0) * 1.0
         return {
             "beta": float(blume_beta),
-            "raw_beta": float(raw_info_beta),
+            "raw_beta": float(safe_info_beta),
             "beta_clamped": False,
-            "beta_note": f"Blume-adjusted Yahoo Finance beta (raw: {raw_info_beta:.2f} → adj: {blume_beta:.2f})",
+            "beta_note": f"Blume-adjusted Yahoo Finance beta (raw: {safe_info_beta:.2f} → adj: {blume_beta:.2f})",
             "is_illiquid": False,
         }
 

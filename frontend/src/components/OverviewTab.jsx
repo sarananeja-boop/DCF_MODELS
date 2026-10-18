@@ -227,182 +227,176 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         {/* 3. Cost of Capital / WACC Breakdown Card */}
-        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                {isFinancial ? 'Cost of Capital (FIG Framework)' : 'WACC Breakdown'}
-              </h3>
-              {isFinancial && (
-                <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded">
-                  100% Equity Basis (FCFE)
-                </span>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
-                <div 
-                  className="bg-blue-500 h-full" 
-                  style={{ width: `${(wacc_details?.weight_equity || 0) * 100}%` }}
-                ></div>
-                <div 
-                  className="bg-amber-500 h-full" 
-                  style={{ width: `${(wacc_details?.weight_debt || 0) * 100}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between text-xs mt-1 text-slate-400">
-                <span>{isFinancial ? 'Equity (Capital Base) 100%' : `Equity ${formatPercent(wacc_details?.weight_equity)}`}</span>
-                <span>{isFinancial ? 'Debt: Operational Inventory' : `Debt ${formatPercent(wacc_details?.weight_debt)}`}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-y-4 gap-x-2">
-              <div>
-                <div className="text-xs text-slate-400">Cost of Equity (Ke)</div>
-                <div className="font-medium text-emerald-400 font-mono">{formatPercent(wacc_details?.cost_of_equity)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-400">
-                  {isFinancial ? 'Valuation Basis' : 'Cost of Debt (after tax)'}
-                </div>
-                <div className="font-medium text-slate-200">
-                  {isFinancial ? 'Direct FCFE / DDM' : formatPercent(wacc_details?.cost_of_debt)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-400">
-                  {isFinancial ? 'Discount Rate (Ke)' : 'WACC'}
-                </div>
-                <div className="font-medium text-lg text-accent-blue font-mono">{formatPercent(wacc_details?.wacc)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-400">
-                  {isFinancial ? 'Deposits & Borrowings' : 'Total Debt'}
-                </div>
-                <div className="font-medium text-slate-200">
-                  {isFinancial 
-                    ? (wacc_details?.operational_debt ? formatCurrency(wacc_details.operational_debt, symbol, true) : 'Operational Inventory')
-                    : formatCurrency(wacc_details?.total_debt, symbol, true)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-zinc-800">
-            {!isFinancial && wacc_details?.synthetic_rating && wacc_details?.synthetic_rating !== 'N/A' && (
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400">Synthetic Credit Rating</span>
-                <span className="font-mono text-amber-400 font-semibold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
-                  {wacc_details.synthetic_rating} (+{(wacc_details.default_spread * 100).toFixed(1)}% spread)
-                </span>
-              </div>
-            )}
-
-            {wacc_details?.wacc_floored && (
-              <div className="p-2 bg-amber-950/40 border border-amber-500/30 rounded text-[11px] text-amber-300/90 leading-tight">
-                {wacc_details.wacc_note}
-              </div>
-            )}
-
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-white">
+              {isFinancial ? 'Cost of Capital (FIG Framework)' : 'WACC Breakdown'}
+            </h3>
             {isFinancial && (
-              <div className="text-[11px] text-slate-400 leading-relaxed">
-                <span className="text-slate-300 font-medium">Why 100% Equity?</span> For banks and NBFCs, customer deposits and borrowings are operating raw materials (used to create loans), not capital structure debt. FCFE cash flows are net of interest, so discounting uses 100% Cost of Equity (Ke).
-              </div>
+              <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded">
+                100% Equity Basis (FCFE)
+              </span>
             )}
           </div>
+
+          <div className="mb-4">
+            <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
+              <div 
+                className="bg-blue-500 h-full" 
+                style={{ width: `${(wacc_details?.weight_equity || 0) * 100}%` }}
+              ></div>
+              <div 
+                className="bg-amber-500 h-full" 
+                style={{ width: `${(wacc_details?.weight_debt || 0) * 100}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-xs mt-1 text-slate-400">
+              <span>{isFinancial ? 'Equity (Capital Base) 100%' : `Equity ${formatPercent(wacc_details?.weight_equity)}`}</span>
+              <span>{isFinancial ? 'Debt: Operational Inventory' : `Debt ${formatPercent(wacc_details?.weight_debt)}`}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-y-4 gap-x-2">
+            <div>
+              <div className="text-xs text-slate-400">Cost of Equity (Ke)</div>
+              <div className="font-medium text-emerald-400 font-mono">{formatPercent(wacc_details?.cost_of_equity)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Valuation Basis' : 'Cost of Debt (after tax)'}
+              </div>
+              <div className="font-medium text-slate-200">
+                {isFinancial ? 'Direct FCFE / DDM' : formatPercent(wacc_details?.cost_of_debt)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Discount Rate (Ke)' : 'WACC'}
+              </div>
+              <div className="font-medium text-lg text-accent-blue font-mono">{formatPercent(wacc_details?.wacc)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400">
+                {isFinancial ? 'Deposits & Borrowings' : 'Total Debt'}
+              </div>
+              <div className="font-medium text-slate-200">
+                {isFinancial 
+                  ? (wacc_details?.operational_debt ? formatCurrency(wacc_details.operational_debt, symbol, true) : 'Operational Inventory')
+                  : formatCurrency(wacc_details?.total_debt, symbol, true)}
+              </div>
+            </div>
+          </div>
+
+          {!isFinancial && wacc_details?.synthetic_rating && wacc_details?.synthetic_rating !== 'N/A' && (
+            <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Synthetic Credit Rating</span>
+              <span className="font-mono text-amber-400 font-semibold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
+                {wacc_details.synthetic_rating} (+{(wacc_details.default_spread * 100).toFixed(1)}% spread)
+              </span>
+            </div>
+          )}
+
+          {wacc_details?.wacc_floored && (
+            <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/30 rounded text-[11px] text-amber-300/90 leading-tight">
+              {wacc_details.wacc_note}
+            </div>
+          )}
+
+          {isFinancial && (
+            <div className="mt-4 pt-3 border-t border-zinc-800 text-[11px] text-slate-400 leading-relaxed">
+              <span className="text-slate-300 font-medium">Why 100% Equity?</span> For banks and NBFCs, customer deposits and borrowings are operating raw materials (used to create loans), not capital structure debt. FCFE cash flows are net of interest, so discounting uses 100% Cost of Equity (Ke).
+            </div>
+          )}
         </div>
 
         {/* 4. Validation Card */}
-        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                {isFinancial ? 'Model Validation (P/B Framework)' : 'Model Validation'}
-              </h3>
-              {renderValidationBadge()}
-            </div>
-            
-            <div className="space-y-3">
-              {isFinancial ? (
-                <>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Market P/B Multiple</div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {validation?.market_multiple !== null && validation?.market_multiple !== undefined 
-                        ? `${formatNumber(validation.market_multiple)}x` 
-                        : 'N/A'}
-                    </div>
+        <div className="bg-zinc-800/80 rounded-xl p-5 shadow-lg border border-zinc-800">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-white">
+              {isFinancial ? 'Model Validation (P/B Framework)' : 'Model Validation'}
+            </h3>
+            {renderValidationBadge()}
+          </div>
+          
+          <div className="space-y-3">
+            {isFinancial ? (
+              <>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Market P/B Multiple</div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {validation?.market_multiple !== null && validation?.market_multiple !== undefined 
+                      ? `${formatNumber(validation.market_multiple)}x` 
+                      : 'N/A'}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Model Implied P/B</div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {validation?.model_multiple !== null && validation?.model_multiple !== undefined 
-                        ? `${formatNumber(validation.model_multiple)}x` 
-                        : 'N/A'}
-                    </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Model Implied P/B</div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {validation?.model_multiple !== null && validation?.model_multiple !== undefined 
+                      ? `${formatNumber(validation.model_multiple)}x` 
+                      : 'N/A'}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Justified P/B (Residual ROE)</div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {validation?.justified_pb !== null && validation?.justified_pb !== undefined 
-                        ? `${formatNumber(validation.justified_pb)}x` 
-                        : 'N/A'}
-                    </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Justified P/B (Residual ROE)</div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {validation?.justified_pb !== null && validation?.justified_pb !== undefined 
+                      ? `${formatNumber(validation.justified_pb)}x` 
+                      : 'N/A'}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Book Value Per Share (BVPS)</div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {symbol}{formatNumber(validation?.bvps)}
-                    </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Book Value Per Share (BVPS)</div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {symbol}{formatNumber(validation?.bvps)}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Valuation Gap</div>
-                    <div className={`font-medium font-mono ${validation?.gap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {validation?.gap >= 0 ? '+' : ''}{formatPercent(validation?.gap)}
-                    </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Valuation Gap</div>
+                  <div className={`font-medium font-mono ${validation?.gap >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {validation?.gap >= 0 ? '+' : ''}{formatPercent(validation?.gap)}
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">
-                      {validation?.metric_used === 'ev_revenue' ? 'Market EV/Revenue' : 'Market EV/EBITDA'}
-                    </div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {validation?.market_multiple !== null && validation?.market_multiple !== undefined ? `${formatNumber(validation.market_multiple)}x` : 'N/A'}
-                    </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">
+                    {validation?.metric_used === 'ev_revenue' ? 'Market EV/Revenue' : 'Market EV/EBITDA'}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">
-                      {validation?.metric_used === 'ev_revenue' ? 'Model EV/Revenue' : 'Model EV/EBITDA'}
-                    </div>
-                    <div className="font-medium font-mono text-slate-200">
-                      {validation?.model_multiple !== null && validation?.model_multiple !== undefined ? `${formatNumber(validation.model_multiple)}x` : 'N/A'}
-                    </div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {validation?.market_multiple !== null && validation?.market_multiple !== undefined ? `${formatNumber(validation.market_multiple)}x` : 'N/A'}
                   </div>
-                  <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <div className="text-sm text-slate-400">Gap</div>
-                    <div className={`font-medium font-mono ${(validation?.multiple_gap_pct || 0) < 0.5 ? 'text-green-400' : 'text-amber-400'}`}>
-                      {formatPercent(validation?.multiple_gap_pct)}
-                    </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">
+                    {validation?.metric_used === 'ev_revenue' ? 'Model EV/Revenue' : 'Model EV/EBITDA'}
                   </div>
-                  {validation?.metric_used === 'ev_revenue' && (
-                    <div className="text-xs text-blue-400 bg-blue-500/10 p-2.5 rounded-lg flex items-start border border-blue-500/20">
-                      <span>Negative EBITDA detected. Model validation safely fell back to top-line EV/Revenue cross-check.</span>
-                    </div>
-                  )}
-                  {validation?.warning && (
-                    <div className="text-xs text-amber-400 bg-amber-500/10 p-2.5 rounded-lg flex items-start border border-amber-500/20">
-                      <FiAlertTriangle className="mr-2 mt-0.5 flex-shrink-0" />
-                      <span>{validation.warning}</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                  <div className="font-medium font-mono text-slate-200">
+                    {validation?.model_multiple !== null && validation?.model_multiple !== undefined ? `${formatNumber(validation.model_multiple)}x` : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                  <div className="text-sm text-slate-400">Gap</div>
+                  <div className={`font-medium font-mono ${(validation?.multiple_gap_pct || 0) < 0.5 ? 'text-green-400' : 'text-amber-400'}`}>
+                    {formatPercent(validation?.multiple_gap_pct)}
+                  </div>
+                </div>
+                {validation?.metric_used === 'ev_revenue' && (
+                  <div className="text-xs text-blue-400 bg-blue-500/10 p-2.5 rounded-lg flex items-start border border-blue-500/20">
+                    <span>Negative EBITDA detected. Model validation safely fell back to top-line EV/Revenue cross-check.</span>
+                  </div>
+                )}
+                {validation?.warning && (
+                  <div className="text-xs text-amber-400 bg-amber-500/10 p-2.5 rounded-lg flex items-start border border-amber-500/20">
+                    <FiAlertTriangle className="mr-2 mt-0.5 flex-shrink-0" />
+                    <span>{validation.warning}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Dynamic Status Interpretation Banner */}
