@@ -144,6 +144,7 @@ export default function App() {
   });
   const [loading, setLoading] = useState(false);
   const [loadingTimer, setLoadingTimer] = useState(0);
+  const [serverAwake, setServerAwake] = useState(false);
   const [error, setError] = useState(null);
   const abortControllerRef = useRef(null);
   const activeRequestIdRef = useRef(0);
@@ -199,7 +200,7 @@ export default function App() {
 
   // Pre-warm backend container immediately upon page load to eliminate cold start friction
   useEffect(() => {
-    axios.get('/api/health').catch(() => {});
+    axios.get('/api/health').then(() => setServerAwake(true)).catch(() => {});
   }, []);
 
   // Timer for loading screen to give reassuring feedback during cold starts
@@ -346,6 +347,7 @@ export default function App() {
       }
 
       valuationCacheRef.current.set(cacheKey, response.data);
+      setServerAwake(true);
       setAnalysisData(response.data);
       setTicker(targetTicker);
       setMarket(targetMarket);
@@ -611,15 +613,15 @@ export default function App() {
               Valuing {ticker || 'Company'}...
             </h2>
             <p className="text-zinc-400 max-w-md text-sm leading-relaxed mb-4 min-h-[40px] flex items-center justify-center">
-              {loadingTimer < 4
-                ? 'Connecting to valuation engine & fetching SEC/BSE filings...'
-                : loadingTimer < 10
-                ? 'Extracting multi-year financials, computing WACC & projecting cash flows...'
-                : loadingTimer < 20
-                ? 'Waking up cloud valuation engine (~15-25s on first request)...'
-                : 'Finalizing 10,000 Monte Carlo simulation runs & confidence intervals...'}
+              {loadingTimer < 2
+                ? 'Fetching live SEC/NSE financial statements & market data...'
+                : loadingTimer < 5
+                ? 'Computing CAPM WACC, 5-year FCFF & 10,000 Monte Carlo simulations...'
+                : !serverAwake && loadingTimer >= 8
+                ? 'Waking up cloud valuation engine (~15-25s on cold start)...'
+                : 'Finalizing sensitivity matrices & valuation diagnostics...'}
             </p>
-            {loadingTimer >= 4 && (
+            {!serverAwake && loadingTimer >= 8 && (
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs mb-6 animate-pulse">
                 <span>⚡ Cloud server warming up from idle sleep</span>
               </div>

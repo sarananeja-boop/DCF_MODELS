@@ -56,21 +56,19 @@ MARKET_PROFILES: Dict[str, dict] = {
 }
 
 # ---------------------------------------------------------------------------
-# In-memory cache for live risk-free rates  {market: (value, timestamp)}
+# In-memory cache for live risk-free rates  {market: (value, timestamp, ttl)}
 # ---------------------------------------------------------------------------
 _rfr_cache: Dict[str, tuple] = {}
 _CACHE_TTL_SECONDS: int = 3600  # 1 hour
+_FAILURE_TTL_SECONDS: int = 600  # 10 minutes negative cache on FRED failure
 
 
 def get_live_risk_free_rate(market: str) -> float:
     """Fetch the latest risk-free rate from the FRED API.
 
-    Uses the ``fredapi`` library. The FRED API key is read from the
-    ``FRED_API_KEY`` environment variable (loaded from ``backend/.env``).
-
-    Results are cached for 1 hour to avoid excessive API calls.  If the
-    FRED request fails for *any* reason, hardcoded fallback values are
-    returned (US → 0.042, IN → 0.071).
+    Queries the FRED JSON endpoint for the latest observations (limit=10, desc)
+    with a strict 3-second timeout instead of downloading the full 60-year XML
+    history. Results are cached for 1 hour (or 10 minutes on fallback).
 
     Args:
         market: ``'US'`` or ``'IN'``.
@@ -86,38 +84,59 @@ def get_live_risk_free_rate(market: str) -> float:
 
     # ---- check cache ----
     if market in _rfr_cache:
-        cached_value, cached_ts = _rfr_cache[market]
-        if time.time() - cached_ts < _CACHE_TTL_SECONDS:
+        entry = _rfr_cache[market]
+        cached_value, cached_ts = entry[0], entry[1]
+        ttl = entry[2] if len(entry) > 2 else _CACHE_TTL_SECONDS
+        if time.time() - cached_ts < ttl:
             return cached_value
 
-    # ---- attempt FRED fetch ----
+    # ---- attempt lightweight FRED JSON fetch ----
     try:
-        from fredapi import Fred  # type: ignore
+        import httpx
 
         api_key = os.getenv("FRED_API_KEY")
         if not api_key:
             raise RuntimeError("FRED_API_KEY not set in environment")
 
-        fred = Fred(api_key=api_key)
-        series = fred.get_series(profile["fred_series"])
+        resp = httpx.get(
+            "https://api.stlouisfed.org/fred/series/observations",
+            params={
+                "series_id": profile["fred_series"],
+                "api_key": api_key,
+                "file_type": "json",
+                "sort_order": "desc",
+                "limit": 10,
+            },
+            timeout=3.0,
+        )
+        resp.raise_for_status()
+        observations = resp.json().get("observations", [])
+        valid_vals = [
+            float(o["value"])
+            for o in observations
+            if o.get("value") not in (None, ".", "")
+        ]
+        if not valid_vals:
+            raise ValueError(f"No valid observations returned for {profile['fred_series']}")
 
-        # Latest non-NaN observation, FRED returns percentages → decimal
-        latest = series.dropna().iloc[-1]
-        rfr = float(latest) / 100.0
+        rfr = float(valid_vals[0]) / 100.0
 
-        # Cache the result
-        _rfr_cache[market] = (rfr, time.time())
+        # Cache the result for 1 hour
+        _rfr_cache[market] = (rfr, time.time(), _CACHE_TTL_SECONDS)
         logger.info("Fetched live RFR for %s from FRED: %.4f", market, rfr)
         return rfr
 
     except Exception as exc:
+        fallback = profile["rfr_fallback"]
+        _rfr_cache[market] = (fallback, time.time(), _FAILURE_TTL_SECONDS)
         logger.warning(
-            "FRED fetch failed for %s (%s). Using fallback RFR %.4f.",
+            "FRED fetch failed for %s (%s). Caching fallback RFR %.4f for %ds.",
             market,
             exc,
-            profile["rfr_fallback"],
+            fallback,
+            _FAILURE_TTL_SECONDS,
         )
-        return profile["rfr_fallback"]
+        return fallback
 
 
 def get_market_profile(market: str) -> dict:

@@ -125,6 +125,22 @@ def get_industry_unlevered_beta(sector: Optional[str] = None, industry: Optional
     return INDUSTRY_UNLEVERED_BETAS["default"]
 
 
+_YF_SESSION = None
+_YF_SESSION_LOCK = __import__("threading").Lock()
+_FX_CACHE: Dict[str, tuple] = {}
+
+
+def get_yf_session():
+    """Return a shared, thread-safe curl_cffi session so Yahoo cookies/crumbs persist across requests."""
+    global _YF_SESSION
+    if _YF_SESSION is None:
+        with _YF_SESSION_LOCK:
+            if _YF_SESSION is None:
+                from curl_cffi import requests as cffi_requests
+                _YF_SESSION = cffi_requests.Session(impersonate="chrome")
+    return _YF_SESSION
+
+
 def _get_benchmark_returns(benchmark: str) -> Optional[pd.Series]:
     """Fetch and cache 2-year weekly returns for market benchmark."""
     now = time.time()
@@ -133,7 +149,7 @@ def _get_benchmark_returns(benchmark: str) -> Optional[pd.Series]:
         if now - ts < _BENCHMARK_CACHE_TTL_SECONDS:
             return series
     try:
-        b = yf.Ticker(benchmark)
+        b = yf.Ticker(benchmark, session=get_yf_session())
         hist = b.history(period="2y", interval="1wk")
         if not hist.empty and "Close" in hist:
             returns = hist["Close"].pct_change().dropna()
@@ -154,6 +170,8 @@ def compute_clean_beta(
     de_ratio: Optional[float] = None,
     tax_rate: float = 0.2517,
     tradeable: Optional[bool] = None,
+    hist_1y: Optional[pd.DataFrame] = None,
+    hist_2y: Optional[pd.DataFrame] = None,
 ) -> dict:
     """Compute a risk-reflective beta against domestic benchmark or bottom-up industry unlevered beta.
 
@@ -176,8 +194,9 @@ def compute_clean_beta(
     unique_prices = 999
     
     try:
-        hist_1y = stock.history(period="1y", interval="1d")
-        if not hist_1y.empty and len(hist_1y) >= 20:
+        if hist_1y is None:
+            hist_1y = stock.history(period="1y", interval="1d")
+        if hist_1y is not None and not hist_1y.empty and len(hist_1y) >= 20:
             zero_vols = int((hist_1y["Volume"] == 0).sum())
             zero_vol_pct = float(zero_vols / len(hist_1y))
             unique_prices = int(hist_1y["Close"].nunique())
@@ -223,8 +242,8 @@ def compute_clean_beta(
 
     # 2. Check if regression against domestic benchmark is feasible for actively traded stocks
     try:
-        hist = stock.history(period="2y", interval="1wk")
-        if not hist.empty and "Close" in hist:
+        hist = hist_2y if hist_2y is not None else stock.history(period="2y", interval="1wk")
+        if hist is not None and not hist.empty and "Close" in hist:
             df_asset = hist["Close"].pct_change().dropna()
             df_bench = _get_benchmark_returns(benchmark)
             if df_bench is not None and not df_bench.empty:
@@ -378,47 +397,86 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     if suffix and not yf_ticker.upper().endswith(suffix.upper()):
         yf_ticker = yf_ticker + suffix
 
-    from curl_cffi import requests as cffi_requests
-    session = cffi_requests.Session(impersonate="chrome")
-    
+    session = get_yf_session()
     logger.info("Fetching data for %s (yfinance ticker: %s)", ticker, yf_ticker)
     stock = yf.Ticker(yf_ticker, session=session)
+    benchmark = "^NSEI" if market.upper() == "IN" else "^GSPC"
 
-    # Financial statements – .T transposes columns-as-years to rows-as-years
-    income_stmt: pd.DataFrame = stock.financials.T
-    balance_sheet: pd.DataFrame = stock.balance_sheet.T
-    cash_flow: pd.DataFrame = stock.cashflow.T
+    from concurrent.futures import ThreadPoolExecutor
 
-    # 1. Retrieve price & shares via fast_info (fast, direct chart API, no crumb required)
-    current_price = None
-    shares_out = None
-    try:
-        fast = stock.fast_info
-        current_price = getattr(fast, "last_price", None) or fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
-        shares_out = getattr(fast, "shares", None) or fast.get("shares")
-        if shares_out is None and fast.get("marketCap") and current_price:
-            shares_out = float(fast.get("marketCap")) / float(current_price)
-    except Exception:
-        pass
+    def _fetch_fin():
+        return yf.Ticker(yf_ticker, session=session).financials.T
 
-    # 2. Query stock.info for sector, industry, denominators and metadata
-    info: dict = {}
-    try:
-        info = stock.info or {}
-    except Exception as e:
-        logger.warning("Could not fetch stock.info for %s: %s", yf_ticker, e)
+    def _fetch_bs():
+        return yf.Ticker(yf_ticker, session=session).balance_sheet.T
+
+    def _fetch_cf():
+        return yf.Ticker(yf_ticker, session=session).cashflow.T
+
+    def _fetch_fast():
+        price, shares = None, None
+        try:
+            fast = yf.Ticker(yf_ticker, session=session).fast_info
+            price = getattr(fast, "last_price", None) or fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
+            shares = getattr(fast, "shares", None) or fast.get("shares")
+            if shares is None and fast.get("marketCap") and price:
+                shares = float(fast.get("marketCap")) / float(price)
+        except Exception:
+            pass
+        return price, shares
+
+    def _fetch_info():
+        try:
+            return yf.Ticker(yf_ticker, session=session).info or {}
+        except Exception as e:
+            logger.warning("Could not fetch stock.info for %s: %s", yf_ticker, e)
+            return {}
+
+    def _fetch_h1y():
+        try:
+            return yf.Ticker(yf_ticker, session=session).history(period="1y", interval="1d")
+        except Exception:
+            return pd.DataFrame()
+
+    def _fetch_h2y():
+        try:
+            return yf.Ticker(yf_ticker, session=session).history(period="2y", interval="1wk")
+        except Exception:
+            return pd.DataFrame()
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        fut_fin = pool.submit(_fetch_fin)
+        fut_bs = pool.submit(_fetch_bs)
+        fut_cf = pool.submit(_fetch_cf)
+        fut_fast = pool.submit(_fetch_fast)
+        fut_info = pool.submit(_fetch_info)
+        fut_h1y = pool.submit(_fetch_h1y)
+        fut_h2y = pool.submit(_fetch_h2y)
+        fut_bench = pool.submit(_get_benchmark_returns, benchmark)
+
+        income_stmt: pd.DataFrame = fut_fin.result()
+        balance_sheet: pd.DataFrame = fut_bs.result()
+        cash_flow: pd.DataFrame = fut_cf.result()
+        current_price, shares_out = fut_fast.result()
+        info: dict = fut_info.result()
+        hist_1y: pd.DataFrame = fut_h1y.result()
+        hist_2y: pd.DataFrame = fut_h2y.result()
+        _ = fut_bench.result()
 
     if current_price is None:
         current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
     if shares_out is None:
         shares_out = info.get("sharesOutstanding")
 
-    # 3. Last-resort fallback for price via 5-day history
+    # 3. Last-resort fallback for price via already-fetched 1Y daily history (or 5-day history)
     if current_price is None:
         try:
-            hist = stock.history(period="5d")
-            if not hist.empty:
-                current_price = float(hist["Close"].iloc[-1])
+            if hist_1y is not None and not hist_1y.empty and "Close" in hist_1y:
+                current_price = float(hist_1y["Close"].dropna().iloc[-1])
+            else:
+                hist = stock.history(period="5d")
+                if not hist.empty:
+                    current_price = float(hist["Close"].iloc[-1])
         except Exception:
             pass
 
@@ -452,6 +510,8 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         de_ratio=de_ratio,
         tax_rate=profile.get("tax_rate", 0.2517 if market.upper() == "IN" else 0.21),
         tradeable=info.get("tradeable"),
+        hist_1y=hist_1y,
+        hist_2y=hist_2y,
     )
 
     # -----------------------------------------------------------------------
@@ -520,11 +580,16 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         fin_currency = str(info.get("financialCurrency") or "").upper()
         trade_currency = str(info.get("currency") or "").upper()
         if fin_currency == "USD" and trade_currency == "INR":
-            try:
-                usdinr_ticker = yf.Ticker("USDINR=X")
-                fx_rate = float(usdinr_ticker.fast_info.get("last_price") or 86.5)
-            except Exception:
-                fx_rate = 86.5
+            cached_fx = _FX_CACHE.get("USDINR")
+            if cached_fx and (time.time() - cached_fx[1] < _BENCHMARK_CACHE_TTL_SECONDS):
+                fx_rate = cached_fx[0]
+            else:
+                try:
+                    usdinr_ticker = yf.Ticker("USDINR=X", session=get_yf_session())
+                    fx_rate = float(usdinr_ticker.fast_info.get("last_price") or 86.5)
+                    _FX_CACHE["USDINR"] = (fx_rate, time.time())
+                except Exception:
+                    fx_rate = 86.5
 
             logger.info(
                 "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
@@ -810,10 +875,12 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                 return [float(x) for x in series]
         return [default] * n_years
 
-    # Full structured 3-statements matching HUL FINAL MODEL.xlsx
+    # Full structured 3-statements matching HUL FINAL MODEL.xlsx (plus Banking specifics)
     statements = {
         "income_statement": {
             "Revenues / Net Sales": revenue.tolist(),
+            "Interest Income": _extract_series(income_stmt, ["Interest Income", "Interest Income Non Operating"]),
+            "Net Interest Income (NII)": net_interest_income.tolist(),
             "Cost of Goods Sold (COGS)": _extract_series(income_stmt, ["Cost Of Revenue", "Reconciled Cost Of Revenue"]),
             "Gross Profit": _extract_series(income_stmt, ["Gross Profit"]),
             "Selling, General & Admin (SG&A)": _extract_series(income_stmt, ["Selling General And Administration", "Operating Expense"]),
@@ -840,11 +907,15 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             "Fixed Assets (Net PPE)": _extract_series(balance_sheet, ["Net PPE", "Properties"]),
             "Capital Work in Progress (CWIP)": _extract_series(balance_sheet, ["Construction In Progress"]),
             "Investments": _extract_series(balance_sheet, ["Investmentin Financial Assets", "Long Term Equity Investment", "Available For Sale Securities"]),
+            "Investments & Financial Assets": _extract_series(balance_sheet, ["Investments And Advances", "Investmentin Financial Assets", "Available For Sale Securities"]),
             "Other Non-Current Assets": _extract_series(balance_sheet, ["Other Non Current Assets"]),
             "Total Non-Current Assets": _extract_series(balance_sheet, ["Total Non Current Assets"]),
             "Receivables": _extract_series(balance_sheet, ["Accounts Receivable", "Gross Accounts Receivable"]),
+            "Loans, Advances & Receivables": _extract_series(balance_sheet, ["Receivables", "Accounts Receivable", "Gross Accounts Receivable"]),
+            "Intangible Assets & Goodwill": _extract_series(balance_sheet, ["Goodwill And Other Intangible Assets", "Goodwill"]),
             "Inventory": _extract_series(balance_sheet, ["Inventory", "Finished Goods"]),
             "Cash & Bank Balances": _extract_series(balance_sheet, ["Cash And Cash Equivalents", "Cash Financial"]),
+            "Cash & Central Bank Balances": _extract_series(balance_sheet, ["Cash Cash Equivalents And Federal Funds Sold", "Cash And Cash Equivalents", "Cash Financial"]),
             "Short-Term Investments": _extract_series(balance_sheet, ["Other Short Term Investments", "Cash Cash Equivalents And Short Term Investments"]),
             "Total Current Assets": _extract_series(balance_sheet, ["Current Assets"]),
             "Total Assets": _extract_series(balance_sheet, ["Total Assets"]),

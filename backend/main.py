@@ -12,8 +12,11 @@ from typing import Optional, Dict, Any, List
 
 import numpy as np
 from dotenv import load_dotenv
+import time
+import threading
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -21,7 +24,12 @@ from pydantic import BaseModel, Field
 # Engine imports (built in parallel – see engine/ package)
 # ---------------------------------------------------------------------------
 from engine.market_config import detect_market, get_market_profile
-from engine.data_layer import fetch_stock_data, compute_historical_metrics
+from engine.data_layer import (
+    fetch_stock_data,
+    compute_historical_metrics,
+    get_yf_session,
+    _get_benchmark_returns,
+)
 from engine.dcf_engine import compute_wacc, run_dcf
 from engine.monte_carlo import run_monte_carlo
 from engine.sensitivity import (
@@ -41,6 +49,11 @@ from engine.bank_engine import (
 # Local modules
 from ai.summary_generator import generate_valuation_summary
 from export.excel_export import generate_excel_report
+
+_ORIG_FETCH_STOCK_DATA = fetch_stock_data
+_ANALYZE_RESPONSE_CACHE: Dict[tuple, tuple] = {}
+_ANALYZE_CACHE_TTL_SECONDS: int = 900  # 15 minutes
+_ANALYZE_CACHE_MAX_SIZE: int = 200
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -69,6 +82,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+def _warmup_background() -> None:
+    """Pre-warm FRED risk-free rates, Yahoo crumb/session, and benchmark returns in the background."""
+    try:
+        get_market_profile("US")
+        get_market_profile("IN")
+        _get_benchmark_returns("^GSPC")
+        _get_benchmark_returns("^NSEI")
+        logger.info("Background warm-up of macro rates and Yahoo benchmarks completed.")
+    except Exception as exc:
+        logger.debug("Background warm-up non-fatal error: %s", exc)
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    threading.Thread(target=_warmup_background, daemon=True).start()
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Pydantic Models
@@ -166,9 +197,10 @@ def _downsample(arr: Any, max_points: int = 2000) -> List[float]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-@app.get("/api/health")
+@app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
-    """Simple liveness probe."""
+    """Simple liveness probe (supports both GET and HEAD for UptimeRobot)."""
     return {"status": "healthy", "service": "dcf-valuation-api"}
 
 
@@ -213,6 +245,23 @@ def analyze(req: AnalyzeRequest):
             market = detect_market(ticker)
         else:
             market = req.market.upper().strip()
+
+        cache_key = (
+            ticker,
+            req.market.strip().upper(),
+            req.monte_carlo_iterations,
+            overrides.revenue_growth,
+            overrides.ebit_margin,
+            overrides.wacc,
+            overrides.terminal_growth,
+            overrides.projection_years,
+        )
+        if fetch_stock_data is _ORIG_FETCH_STOCK_DATA and cache_key in _ANALYZE_RESPONSE_CACHE:
+            cached_resp, cached_ts = _ANALYZE_RESPONSE_CACHE[cache_key]
+            if time.time() - cached_ts < _ANALYZE_CACHE_TTL_SECONDS:
+                logger.info("Serving full analysis for %s from response cache", ticker)
+                return cached_resp
+
         logger.info("Analyzing %s in market %s", ticker, market)
 
         # 2. Fetch stock data with auto-fallback for Indian stocks queried without .NS
@@ -519,6 +568,16 @@ def analyze(req: AnalyzeRequest):
                 "delta_nwc": metrics.get("delta_nwc"),
                 "rev_growth": metrics.get("rev_growth"),
                 "ebit_margins": metrics.get("ebit_margins"),
+                "net_income": metrics.get("net_income"),
+                "net_interest_income": metrics.get("net_interest_income"),
+                "pretax_income": metrics.get("pretax_income"),
+                "book_value": metrics.get("book_value"),
+                "dividends_paid": metrics.get("dividends_paid"),
+                "avg_roe": metrics.get("avg_roe"),
+                "std_roe": metrics.get("std_roe"),
+                "avg_payout": metrics.get("avg_payout"),
+                "avg_ni_growth": metrics.get("avg_ni_growth"),
+                "std_ni_growth": metrics.get("std_ni_growth"),
                 "avg_rev_growth": metrics.get("avg_rev_growth"),
                 "std_rev_growth": metrics.get("std_rev_growth"),
                 "avg_ebit_margin": metrics.get("avg_ebit_margin"),
@@ -570,7 +629,7 @@ def analyze(req: AnalyzeRequest):
                 "histogram": mc_histogram,
                 "scatter": mc_scatter,
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
-                "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])],
+                "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])[:2500]],
             },
             "sensitivity": {
                 "growth_wacc": sens_growth_wacc,
@@ -632,6 +691,11 @@ def analyze(req: AnalyzeRequest):
 
         # Convert every numpy type to native Python before serialization
         response = _numpy_to_python(response)
+        if fetch_stock_data is _ORIG_FETCH_STOCK_DATA:
+            if len(_ANALYZE_RESPONSE_CACHE) >= _ANALYZE_CACHE_MAX_SIZE:
+                oldest_key = next(iter(_ANALYZE_RESPONSE_CACHE))
+                _ANALYZE_RESPONSE_CACHE.pop(oldest_key, None)
+            _ANALYZE_RESPONSE_CACHE[cache_key] = (response, time.time())
         return response
 
     except HTTPException:
@@ -711,7 +775,6 @@ if __name__ == "__main__":
         reload=True,
     )
 
-import requests
 _search_cache = {}
 
 @app.get("/api/search")
@@ -721,9 +784,8 @@ def search_ticker(q: str):
         return {"results": _search_cache[q_norm]}
 
     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=8&newsCount=0"
-    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        r = requests.get(url, headers=headers, timeout=4)
+        r = get_yf_session().get(url, timeout=4)
         data = r.json()
         results = [
             {"symbol": quote['symbol'], "name": quote.get('shortname', quote.get('longname', ''))}

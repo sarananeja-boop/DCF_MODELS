@@ -321,7 +321,7 @@ def run_bank_monte_carlo(
     ke_mean = base_ke if base_ke is not None else float(ke_data["cost_of_equity"])
     ke_std = 0.015
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(42)
     sim_growth = rng.normal(g_mean, max(0.01, g_std), iterations)
     sim_roe = rng.normal(roe_mean, max(0.01, roe_std), iterations)
     sim_ke = rng.normal(ke_mean, ke_std, iterations)
@@ -331,33 +331,90 @@ def run_bank_monte_carlo(
     sim_roe = np.clip(sim_roe, 0.05, 0.35)
     sim_ke = np.clip(sim_ke, terminal_growth + 0.005, 0.25)
 
-    sim_prices: List[float] = []
-    valid_count = 0
+    n = len(sim_growth)
+    shares_out = float(stock_data.get("shares_outstanding", 1.0))
 
-    for i in range(iterations):
-        res = run_bank_valuation(
-            start_growth=float(sim_growth[i]),
-            target_roe=float(sim_roe[i]),
-            cost_of_equity=float(sim_ke[i]),
-            metrics=metrics,
-            stock_data=stock_data,
-            market_profile=market_profile,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            use_mid_year=True,
+    net_income_hist = metrics.get("net_income", [])
+    valid_ni = [float(x) for x in net_income_hist if x > 0]
+    if valid_ni:
+        base_net_income = valid_ni[-1]
+    else:
+        last_rev = metrics.get("last_revenue", 1e9)
+        base_net_income = last_rev * 0.15
+
+    bve_hist = metrics.get("book_value", [])
+    valid_bve = [float(x) for x in bve_hist if x > 0]
+    if valid_bve:
+        base_bve = valid_bve[-1]
+    else:
+        info_bv = stock_data.get("info", {}).get("bookValue")
+        if info_bv and info_bv > 0:
+            base_bve = float(info_bv) * shares_out
+        else:
+            base_bve = base_net_income / 0.14
+
+    calc_roe = base_net_income / base_bve if base_bve > 0 else 0.14
+    info_roe = stock_data.get("info", {}).get("returnOnEquity")
+    if info_roe and not np.isnan(info_roe) and info_roe > 0:
+        b_roe = float(info_roe)
+    else:
+        b_roe = calc_roe
+    b_roe = max(0.05, min(0.35, b_roe))
+
+    target_roe_arr = np.clip(sim_roe, 0.05, 0.35)
+    growth_schedule = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+    roe_schedule = np.linspace(b_roe, target_roe_arr, projection_years, axis=1)
+
+    discount_periods = np.arange(projection_years, dtype=float) + 0.5
+    discount_factors = (1.0 + sim_ke[:, None]) ** discount_periods[None, :]
+
+    cur_ni = np.full(n, base_net_income, dtype=float)
+    pv_fcfe = np.zeros(n, dtype=float)
+    for yr in range(projection_years):
+        g = growth_schedule[:, yr]
+        roe = roe_schedule[:, yr]
+        cur_ni = cur_ni * (1.0 + g)
+        retention_b = np.where(
+            roe > 0,
+            np.minimum(0.95, np.maximum(0.05, g / np.where(roe > 0, roe, 1.0))),
+            0.50,
         )
-        p = res.get("implied_price", 0.0)
-        if p > 0 and not np.isnan(p):
-            sim_prices.append(p)
-            valid_count += 1
+        fcfe = cur_ni * (1.0 - retention_b)
+        pv_fcfe += fcfe / discount_factors[:, yr]
 
-    sim_arr = np.array(sim_prices) if sim_prices else np.array([0.0])
+    term_roe = roe_schedule[:, -1]
+    valid_tv = sim_ke > terminal_growth
+    spread = sim_ke - terminal_growth
+    narrow = valid_tv & (spread < 0.020)
+    eff_g = np.where(narrow, sim_ke - 0.020, terminal_growth)
+    eff_spread = np.where(narrow, 0.020, np.where(valid_tv, spread, 1.0))
+    term_retention = np.where(
+        term_roe > 0,
+        np.minimum(0.95, np.maximum(0.05, eff_g / np.where(term_roe > 0, term_roe, 1.0))),
+        0.50,
+    )
+    term_ni = cur_ni * (1.0 + eff_g)
+    term_fcfe = term_ni * (1.0 - term_retention)
+    terminal_value = np.where(valid_tv, term_fcfe / eff_spread, 0.0)
+    pv_terminal_value = terminal_value / discount_factors[:, -1]
+
+    equity_value = pv_fcfe + pv_terminal_value
+    all_prices = np.maximum(0.0, equity_value / shares_out) if shares_out > 0 else np.zeros(n)
+
+    valid_mask = (all_prices > 0) & (~np.isnan(all_prices))
+    sim_arr = all_prices[valid_mask]
+    sim_prices = sim_arr.tolist()
+    valid_count = int(len(sim_arr))
+    if valid_count == 0:
+        sim_arr = np.array([0.0])
+
     current_price = float(stock_data.get("current_price", 1.0))
 
     stats = {
         "mean": float(np.mean(sim_arr)),
         "median": float(np.median(sim_arr)),
         "std": float(np.std(sim_arr)),
+        "std_dev": float(np.std(sim_arr)),
         "p5": float(np.percentile(sim_arr, 5)),
         "p10": float(np.percentile(sim_arr, 10)),
         "p25": float(np.percentile(sim_arr, 25)),

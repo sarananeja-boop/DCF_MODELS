@@ -6,10 +6,19 @@ const MonteCarloTab = ({ data }) => {
   const { monte_carlo, market_data, company } = data;
   if (!monte_carlo) return null;
 
-  const { stats, histogram, scatter_data } = monte_carlo;
+  const { stats, histogram } = monte_carlo;
+  const rawScatter = monte_carlo.scatter_data || monte_carlo.scatter;
+  const scatter_data = rawScatter
+    ? {
+        growth: rawScatter.growth || rawScatter.sim_growth,
+        margin: rawScatter.margin || rawScatter.sim_margin,
+        wacc: rawScatter.wacc || rawScatter.sim_wacc,
+      }
+    : null;
   const currency = company?.currency || 'USD';
   const currentPrice = market_data?.current_price || 0;
-  const iterations = monte_carlo.inputs?.iterations || 10000;
+  const iterations = monte_carlo.actual_iterations || monte_carlo.inputs?.iterations || 10000;
+  const histCorrGm = monte_carlo.hist_corr_gm ?? monte_carlo.inputs?.hist_corr_gm ?? 0;
 
   const formatCurrency = (val) => {
     if (val == null) return '-';
@@ -197,7 +206,7 @@ const MonteCarloTab = ({ data }) => {
               ]}
               layout={{
                 ...darkLayout,
-                title: `Growth vs Margin (ρ = ${monte_carlo.inputs?.hist_corr_gm?.toFixed(2) || '0.00'})`,
+                title: `Growth vs Margin (ρ = ${Number(histCorrGm).toFixed(2)})`,
                 xaxis: { ...darkLayout.xaxis, title: 'Growth Rate', tickformat: '.1%' },
                 yaxis: { ...darkLayout.yaxis, title: 'Operating Margin', tickformat: '.1%' },
                 margin: { l: 50, r: 20, t: 40, b: 40 }

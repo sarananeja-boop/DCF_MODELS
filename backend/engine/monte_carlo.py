@@ -18,9 +18,8 @@ import logging
 from typing import Dict, Optional
 
 import numpy as np
-from scipy.stats import t as t_dist
 
-from .dcf_engine import run_dcf
+from .dcf_engine import run_dcf, run_dcf_batch
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +114,7 @@ def run_monte_carlo(
     np.random.seed(42)
     oversample = iterations * 3
 
-    independent_draws = t_dist.rvs(df=5, size=(num_vars, oversample))
+    independent_draws = np.random.standard_t(5, size=(num_vars, oversample))
     correlated_draws = L @ independent_draws
 
     # Means and standard deviations (exact values from the refined notebook)
@@ -204,32 +203,23 @@ def run_monte_carlo(
         )
 
     # ------------------------------------------------------------------
-    # 5D – Run DCF for every valid iteration
+    # 5D – Run DCF across all valid iterations (vectorized)
     # ------------------------------------------------------------------
-    # Inject tax_rate into stock_data for run_dcf
     stock_data_sim = dict(stock_data)
     stock_data_sim["_tax_rate"] = tax_rate
 
-    simulated_prices = np.empty(actual_n)
-    simulated_evs = np.empty(actual_n)
-    simulated_raw_equity = np.empty(actual_n)
-
-    for i in range(actual_n):
-        result = run_dcf(
-            start_growth=sim_growth[i],
-            ebit_margin=sim_margin[i],
-            discount_rate=sim_wacc[i],
-            metrics=metrics,
-            wacc_data=wacc_data,
-            stock_data=stock_data_sim,
-            terminal_growth=terminal_growth,
-            projection_years=projection_years,
-            tax_rate=tax_rate,
-            use_mid_year=True,
-        )
-        simulated_prices[i] = result["implied_price"]
-        simulated_evs[i] = result["enterprise_value"]
-        simulated_raw_equity[i] = result["equity_value"]
+    simulated_prices, simulated_evs, simulated_raw_equity = run_dcf_batch(
+        sim_growth=sim_growth,
+        sim_margin=sim_margin,
+        sim_wacc=sim_wacc,
+        metrics=metrics,
+        wacc_data=wacc_data,
+        stock_data=stock_data_sim,
+        terminal_growth=terminal_growth,
+        projection_years=projection_years,
+        tax_rate=tax_rate,
+        use_mid_year=True,
+    )
 
     # ------------------------------------------------------------------
     # 5E – Statistics

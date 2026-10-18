@@ -501,3 +501,156 @@ def run_dcf(
         "terminal_growth": float(terminal_growth),
         "use_mid_year": use_mid_year,
     }
+
+
+def run_dcf_batch(
+    sim_growth: np.ndarray,
+    sim_margin: np.ndarray,
+    sim_wacc: np.ndarray,
+    metrics: dict,
+    wacc_data: dict,
+    stock_data: dict,
+    terminal_growth: float = 0.025,
+    projection_years: int = 5,
+    tax_rate: Optional[float] = None,
+    use_mid_year: bool = True,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorized multi-stage DCF evaluation across all Monte Carlo draws simultaneously.
+
+    Mathematically identical to calling ``run_dcf`` in a loop for each draw
+    (with ``current_margin=None``), returning ``(implied_prices, enterprise_values, equity_values)``.
+    """
+    n = len(sim_growth)
+    avg_dna_pct: float = float(metrics["avg_dna_pct"])
+    avg_capex_pct: float = float(metrics["avg_capex_pct"])
+    normalized_nwc_to_revenue: float = float(
+        metrics.get("normalized_nwc_to_revenue", metrics.get("avg_dnwc_pct", 0.0))
+    )
+    last_revenue: float = float(metrics["last_revenue"])
+    total_debt: float = float(wacc_data["total_debt"])
+    cash_equiv: float = float(metrics["cash_and_equivalents"])
+    shares_out: float = float(stock_data["shares_outstanding"])
+
+    is_extractive = stock_data.get("is_extractive", False)
+    is_cyclical = stock_data.get("is_cyclical", False)
+    if not is_extractive and not is_cyclical:
+        from engine.data_layer import classify_sector_dynamics
+        is_extractive, is_cyclical = classify_sector_dynamics(
+            stock_data.get("sector"), stock_data.get("industry")
+        )
+
+    if tax_rate is None:
+        tax_rate = stock_data.get(
+            "_tax_rate", 0.2517 if stock_data.get("market") == "IN" else 0.21
+        )
+
+    growth_schedule = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+
+    base_steady_state = avg_dna_pct * (1.0 + terminal_growth)
+    if is_extractive:
+        steady_state_capex_pct = max(base_steady_state, avg_capex_pct)
+    elif is_cyclical:
+        steady_state_capex_pct = max(base_steady_state, avg_capex_pct * 0.85)
+    else:
+        steady_state_capex_pct = base_steady_state
+    capex_schedule = np.linspace(avg_capex_pct, steady_state_capex_pct, projection_years)
+
+    if use_mid_year:
+        discount_periods = np.arange(projection_years, dtype=float) + 0.5
+    else:
+        discount_periods = np.arange(projection_years, dtype=float) + 1.0
+    discount_factors = (1.0 + sim_wacc[:, None]) ** discount_periods[None, :]
+
+    last_rev = np.full(n, last_revenue, dtype=float)
+    pv_ufcf = np.zeros(n, dtype=float)
+
+    for yr in range(projection_years):
+        g = growth_schedule[:, yr]
+        next_rev = last_rev * (1.0 + g)
+        nopat = next_rev * sim_margin * (1.0 - tax_rate)
+        dna_add = next_rev * avg_dna_pct
+        capex_sub = next_rev * capex_schedule[yr]
+        delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
+        ufcf = nopat + dna_add - capex_sub - delta_nwc
+        pv_ufcf += ufcf / discount_factors[:, yr]
+        last_rev = next_rev
+
+    bs = (
+        metrics.get("statements", {}).get("balance_sheet", {})
+        if isinstance(metrics.get("statements"), dict)
+        else {}
+    )
+    equity_series = bs.get("Total Stockholders' Equity", [0]) if isinstance(bs, dict) else [0]
+    equity_bv = equity_series[-1] if equity_series else 0.0
+    invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
+
+    hist_ebit = metrics.get("ebit", [])
+    if hist_ebit:
+        last_ebit = np.full(n, float(hist_ebit[-1]), dtype=float)
+    else:
+        last_ebit = last_rev * sim_margin
+    hist_nopat = last_ebit * (1.0 - tax_rate)
+    hist_roic = np.where(
+        (invested_capital > 0) & (hist_nopat > 0),
+        hist_nopat / invested_capital,
+        sim_wacc,
+    )
+    sustainable_roic = np.maximum(sim_wacc, np.minimum(hist_roic, 0.25))
+    terminal_reinv_rate = np.minimum(0.85, np.maximum(0.15, terminal_growth / sustainable_roic))
+
+    if is_extractive:
+        pos_m = sim_margin > 0
+        net_capex_reinv = np.where(
+            pos_m,
+            np.maximum(0.0, (steady_state_capex_pct - avg_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            0.0,
+        )
+        terminal_reinv_rate = np.where(
+            pos_m,
+            np.minimum(0.85, np.maximum(terminal_reinv_rate, net_capex_reinv)),
+            terminal_reinv_rate,
+        )
+    elif is_cyclical:
+        pos_m = sim_margin > 0
+        net_capex_reinv = np.where(
+            pos_m,
+            np.maximum(0.0, (steady_state_capex_pct - avg_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            0.0,
+        )
+        terminal_reinv_rate = np.where(
+            pos_m,
+            np.minimum(0.85, np.maximum(terminal_reinv_rate, net_capex_reinv * 0.85)),
+            terminal_reinv_rate,
+        )
+
+    if is_extractive:
+        max_g_allowed = 0.025
+    else:
+        is_india = stock_data.get("market") == "IN"
+        max_g_allowed = 0.050 if is_india else 0.025
+    clamped_terminal_growth = min(terminal_growth, max_g_allowed)
+
+    terminal_nopat = last_rev * (1.0 + clamped_terminal_growth) * sim_margin * (1.0 - tax_rate)
+    terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
+
+    min_spread = 0.025
+    effective_terminal_growth = np.where(
+        sim_wacc - clamped_terminal_growth < min_spread,
+        np.maximum(0.01, sim_wacc - min_spread),
+        clamped_terminal_growth,
+    )
+
+    valid_tv = (sim_wacc > effective_terminal_growth) & (terminal_ufcf > 0)
+    spread = np.where(valid_tv, sim_wacc - effective_terminal_growth, 1.0)
+    terminal_value = np.where(
+        valid_tv, (terminal_ufcf * (1.0 + effective_terminal_growth)) / spread, 0.0
+    )
+    pv_terminal_value = np.where(valid_tv, terminal_value / discount_factors[:, -1], 0.0)
+
+    enterprise_val = pv_ufcf + pv_terminal_value
+    equity_value = enterprise_val + cash_equiv - total_debt
+    implied_price = (
+        np.maximum(0.0, equity_value / shares_out) if shares_out > 0 else np.zeros(n)
+    )
+    return implied_price, enterprise_val, equity_value
+
