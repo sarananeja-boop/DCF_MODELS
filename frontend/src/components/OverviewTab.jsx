@@ -34,8 +34,8 @@ const formatNumber = (value) => {
 const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   if (!data) return <div className="p-8 text-center text-slate-400">No data available</div>;
 
-  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict } = data;
-  const isFinancial = Boolean(company?.is_financial || data.diagnostics?.is_financial || dcf_result?.is_financial);
+  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, macro } = data;
+  const isFinancial = Boolean(company?.is_financial || data?.diagnostics?.is_financial || dcf_result?.is_financial);
   const symbol = company?.currency === 'INR' ? '₹' : '$';
 
   const handleDownloadPDF = async () => {
