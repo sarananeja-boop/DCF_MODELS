@@ -20,7 +20,7 @@ const DCFModelTab = ({ data }) => {
       } else if (Math.abs(val) >= 1e5) {
         formattedVal = (val / 1e5).toFixed(2) + 'L';
       } else {
-        formattedVal = new Intl.NumberFormat('en-IN').format(val);
+        formattedVal = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
       }
     } else {
       if (Math.abs(val) >= 1e9) {
@@ -30,7 +30,7 @@ const DCFModelTab = ({ data }) => {
       } else if (Math.abs(val) >= 1e3) {
         formattedVal = (val / 1e3).toFixed(2) + 'K';
       } else {
-        formattedVal = new Intl.NumberFormat('en-US').format(val);
+        formattedVal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
       }
     }
     
