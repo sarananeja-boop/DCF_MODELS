@@ -291,9 +291,9 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 pt-3 border-t border-zinc-800">
             {!isFinancial && wacc_details?.synthetic_rating && wacc_details?.synthetic_rating !== 'N/A' && (
-              <div className="pt-2.5 border-t border-zinc-800 flex justify-between items-center text-xs">
+              <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400">Synthetic Credit Rating</span>
                 <span className="font-mono text-amber-400 font-semibold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
                   {wacc_details.synthetic_rating} (+{(wacc_details.default_spread * 100).toFixed(1)}% spread)
@@ -302,13 +302,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             )}
 
             {wacc_details?.wacc_floored && (
-              <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/30 rounded text-[11px] text-amber-300/90 leading-tight">
+              <div className="p-2 bg-amber-950/40 border border-amber-500/30 rounded text-[11px] text-amber-300/90 leading-tight">
                 {wacc_details.wacc_note}
               </div>
             )}
 
             {isFinancial && (
-              <div className="pt-3 border-t border-zinc-800 text-[11px] text-slate-400 leading-relaxed">
+              <div className="text-[11px] text-slate-400 leading-relaxed">
                 <span className="text-slate-300 font-medium">Why 100% Equity?</span> For banks and NBFCs, customer deposits and borrowings are operating raw materials (used to create loans), not capital structure debt. FCFE cash flows are net of interest, so discounting uses 100% Cost of Equity (Ke).
               </div>
             )}
@@ -405,16 +405,8 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
           </div>
 
-          {/* Explanatory & Status Note Section */}
-          <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2.5">
-            <div className="text-[11px] text-slate-400 leading-relaxed">
-              <span className="text-slate-300 font-medium">What is Model Validation?</span>{' '}
-              {isFinancial
-                ? 'For banks and financial institutions, traditional EV/EBITDA is economically meaningless because deposits are operational raw materials rather than capital debt. We cross-check the regulatory capital FCFE model against tangible Book Value (P/B) and Justified Gordon P/B derived from sustainable ROE.'
-                : `Model validation cross-checks our DCF intrinsic valuation against the prevailing market multiple (${validation?.metric_used === 'ev_revenue' ? 'EV/Revenue' : 'EV/EBITDA'}). It evaluates whether intrinsic cash-flow fair value aligns with market pricing or implies a fundamental re-rating.`}
-            </div>
-
-            {/* Dynamic Status Interpretation Banner */}
+          {/* Dynamic Status Interpretation Banner */}
+          <div className="mt-3">
             {validation?.status === 'PASS' && (
               <div className="p-2.5 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-xs text-emerald-300/90 flex items-start gap-2">
                 <FiCheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />

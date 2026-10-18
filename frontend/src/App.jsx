@@ -582,6 +582,11 @@ export default function App() {
                 <h4 className="font-semibold text-zinc-100 mb-1 text-sm">4. Monte Carlo Simulation</h4>
                 <p className="text-zinc-400">Executes 10,000 randomized simulation runs over WACC and terminal growth distributions to evaluate fair value variance and downside probability.</p>
               </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
+                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">5. Model Validation & Multiple Cross-Check</h4>
+                <p className="text-zinc-400">Cross-checks DCF implied Enterprise Value against prevailing market multiples (EV/EBITDA or EV/Revenue for non-financials, and Price-to-Book / P/B for banks) to test whether fundamental intrinsic cash flows align with market pricing or require market re-rating.</p>
+              </div>
             </div>
 
             <div className="px-6 py-3 border-t border-zinc-800/80 bg-zinc-950/50 flex justify-end">
