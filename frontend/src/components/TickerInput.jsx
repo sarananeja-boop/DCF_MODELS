@@ -2,12 +2,16 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
 import rawStocks from '../data/stocks.json';
 
-// Comprehensive 2,750+ equity database (NSE India & US Markets) for instant 0ms autocomplete
-const STOCK_UNIVERSE = rawStocks.map(item => ({
-  symbol: item.s,
-  name: item.n,
-  market: item.m
-}));
+// Comprehensive 3,100+ active equity database (NSE India & US Markets) for instant 0ms autocomplete
+const mapRawStocks = (list) =>
+  list.map((item) => ({
+    symbol: item.s,
+    name: item.n,
+    market: item.m,
+    aliases: (item.a || '').toLowerCase(),
+  }));
+
+let STOCK_UNIVERSE = mapRawStocks(rawStocks);
 
 export default function TickerInput({ 
   ticker, 
@@ -31,6 +35,44 @@ export default function TickerInput({
     setQuery(ticker);
   }, [ticker]);
 
+  // Auto-sync live ticker universe from backend (/api/universe) so corporate actions update automatically
+  useEffect(() => {
+    const CACHE_KEY = 'vl_universe_v2';
+    const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours
+    try {
+      const cachedRaw = localStorage.getItem(CACHE_KEY);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed && Array.isArray(parsed.stocks) && parsed.stocks.length > 1000) {
+          STOCK_UNIVERSE = mapRawStocks(parsed.stocks);
+          if (Date.now() - (parsed.ts || 0) < CACHE_TTL) {
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+
+    let cancelled = false;
+    axios
+      .get('/api/universe', { timeout: 10000 })
+      .then((res) => {
+        if (cancelled) return;
+        const stocks = res.data?.stocks;
+        if (Array.isArray(stocks) && stocks.length > 1000) {
+          STOCK_UNIVERSE = mapRawStocks(stocks);
+          searchCache.current.clear();
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), stocks }));
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Handle outside click to close dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -42,31 +84,45 @@ export default function TickerInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Instant 0ms client-side search across equities with smart relevance ranking
+  // Instant 0ms client-side search across active equities with alias & corporate-action resolution
   const filterLocal = (q) => {
     if (!q || q.trim().length < 1) return [];
     const lower = q.trim().toLowerCase();
-    const cleanLower = lower.replace(/\.(ns|bo)$/, '');
+    const cleanLower = lower.replace(/\.(ns|bo)$/, '').trim();
+    const queryTokens = cleanLower.split(/\s+/).filter(Boolean);
 
     const exactMatches = [];
+    const exactAliasMatches = [];
     const prefixSymbolMatches = [];
+    const namePrefixMatches = [];
     const containSymbolMatches = [];
-    const nameMatches = [];
+    const multiTokenAndAliasMatches = [];
 
     for (let i = 0; i < STOCK_UNIVERSE.length; i++) {
       const item = STOCK_UNIVERSE[i];
       const symClean = item.symbol.replace('.NS', '').replace('.BO', '').toLowerCase();
       const symFull = item.symbol.toLowerCase();
       const name = item.name.toLowerCase();
+      const aliases = item.aliases || '';
+      const aliasTokens = aliases ? aliases.split(/\s+/) : [];
 
       if (symClean === cleanLower || symFull === lower) {
         exactMatches.push(item);
+      } else if (aliasTokens.includes(cleanLower)) {
+        exactAliasMatches.push(item);
       } else if (symClean.startsWith(cleanLower) || symFull.startsWith(lower)) {
         prefixSymbolMatches.push(item);
+      } else if (name.startsWith(cleanLower) || name.includes(' ' + cleanLower)) {
+        namePrefixMatches.push(item);
+      } else if (aliases && (aliases.startsWith(cleanLower) || aliases.includes(' ' + cleanLower))) {
+        multiTokenAndAliasMatches.push(item);
+      } else if (
+        queryTokens.length > 1 &&
+        queryTokens.every((tok) => symClean.includes(tok) || name.includes(tok) || aliases.includes(tok))
+      ) {
+        multiTokenAndAliasMatches.push(item);
       } else if (symClean.includes(cleanLower) || symFull.includes(lower)) {
         containSymbolMatches.push(item);
-      } else if (name.startsWith(cleanLower) || name.includes(' ' + cleanLower)) {
-        nameMatches.push(item);
       }
     }
 
@@ -77,12 +133,20 @@ export default function TickerInput({
       return aLen - bLen;
     });
 
-    const combined = [...exactMatches, ...prefixSymbolMatches, ...containSymbolMatches, ...nameMatches];
-    const seen = new Set();
+    const combined = [
+      ...exactMatches,
+      ...exactAliasMatches,
+      ...prefixSymbolMatches,
+      ...namePrefixMatches,
+      ...multiTokenAndAliasMatches,
+      ...containSymbolMatches,
+    ];
+    const seenBase = new Set();
     const unique = [];
     for (const item of combined) {
-      if (!seen.has(item.symbol)) {
-        seen.add(item.symbol);
+      const baseKey = `${item.market}:${item.symbol.replace('.NS', '').replace('.BO', '')}`;
+      if (!seenBase.has(baseKey)) {
+        seenBase.add(baseKey);
         unique.push(item);
         if (unique.length >= 8) break;
       }
@@ -94,7 +158,7 @@ export default function TickerInput({
     if (!q || q.length < 2) return;
     
     // If local database already provides plenty of high-relevance matches, skip remote network call!
-    if (localMatches.length >= 6) {
+    if (localMatches.length >= 5) {
       return;
     }
 
@@ -111,17 +175,21 @@ export default function TickerInput({
       const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 12000 });
       const remoteResults = response.data.results || [];
       
-      // Merge remote results with local matches, avoiding duplicates
-      const seen = new Set(localMatches.map(m => m.symbol));
+      // Merge remote results with local matches, avoiding duplicates across .NS / .BO
+      const seenBase = new Set(
+        localMatches.map((m) => `${m.market}:${m.symbol.replace('.NS', '').replace('.BO', '')}`)
+      );
       const combined = [...localMatches];
       for (const item of remoteResults) {
-        if (!seen.has(item.symbol)) {
-          seen.add(item.symbol);
-          const isIN = item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO');
+        const isIN = item.market === 'IN' || item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO');
+        const mkt = isIN ? 'IN' : 'US';
+        const baseKey = `${mkt}:${item.symbol.replace('.NS', '').replace('.BO', '')}`;
+        if (!seenBase.has(baseKey)) {
+          seenBase.add(baseKey);
           combined.push({
             symbol: item.symbol,
             name: item.name,
-            market: isIN ? 'IN' : 'US'
+            market: mkt,
           });
         }
       }

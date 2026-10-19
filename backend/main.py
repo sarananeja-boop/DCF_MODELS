@@ -45,6 +45,12 @@ from engine.bank_engine import (
     generate_bank_sensitivity_grid,
     generate_bank_roe_sensitivity_grid,
 )
+from engine.ticker_universe import (
+    sync_live_universe,
+    get_universe_payload,
+    is_non_dcf_instrument,
+    resolve_ticker,
+)
 
 # Local modules
 from ai.summary_generator import generate_valuation_summary
@@ -86,13 +92,14 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 def _warmup_background() -> None:
-    """Pre-warm FRED risk-free rates, Yahoo crumb/session, and benchmark returns in the background."""
+    """Pre-warm FRED risk-free rates, Yahoo crumb/session, benchmark returns, and live ticker universe."""
     try:
+        sync_live_universe(force=False)
         get_market_profile("US")
         get_market_profile("IN")
         _get_benchmark_returns("^GSPC")
         _get_benchmark_returns("^NSEI")
-        logger.info("Background warm-up of macro rates and Yahoo benchmarks completed.")
+        logger.info("Background warm-up of macro rates, live ticker universe, and Yahoo benchmarks completed.")
     except Exception as exc:
         logger.debug("Background warm-up non-fatal error: %s", exc)
 
@@ -268,15 +275,32 @@ def analyze(req: AnalyzeRequest):
         try:
             stock_data = fetch_stock_data(ticker, market)
         except ValueError as e:
-            if req.market.lower() == "auto" and market == "US" and "." not in ticker:
+            if (
+                req.market.lower() == "auto"
+                and market == "US"
+                and "." not in ticker
+                and "not supported for DCF" not in str(e)
+            ):
                 logger.info("Ticker %s failed in US market, attempting Indian market (.NS)...", ticker)
                 try:
                     stock_data = fetch_stock_data(ticker, "IN")
                     market = "IN"
-                except Exception:
+                except Exception as in_exc:
+                    if "not supported for DCF" in str(in_exc):
+                        raise in_exc
                     raise e
             else:
                 raise e
+
+        # If ticker_universe resolved a legacy/renamed symbol or market, sync market & display ticker
+        if stock_data.get("market") in ("US", "IN"):
+            market = stock_data["market"]
+        if stock_data.get("redirect_note") and stock_data.get("ticker"):
+            resolved_sym = stock_data["ticker"]
+            if market == "IN" and not ticker.endswith((".NS", ".BO")):
+                ticker = resolved_sym.replace(".NS", "").replace(".BO", "")
+            else:
+                ticker = resolved_sym
 
         # 3. Historical metrics
         metrics = compute_historical_metrics(stock_data)
@@ -538,7 +562,9 @@ def analyze(req: AnalyzeRequest):
                 "sector": stock_data.get("sector"),
                 "industry": stock_data.get("industry"),
                 "is_financial": is_financial,
+                "is_capital_light_financial": stock_data.get("is_capital_light_financial", False),
                 "model_type": "BANKING_DDM" if is_financial else "STANDARD_FCFF",
+                "redirect_note": stock_data.get("redirect_note"),
             },
             "market_data": {
                 "current_price": current_price,
@@ -762,6 +788,105 @@ def export_excel(req: ExcelExportRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+_search_cache: Dict[str, List[Dict[str, str]]] = {}
+_ALLOWED_EXCHANGES = {"NSI", "BSE", "NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "PNK"}
+
+
+@app.get("/api/universe")
+def get_ticker_universe():
+    """Return the auto-synced active equity universe and corporate action redirect map."""
+    return get_universe_payload()
+
+
+@app.get("/api/search")
+def search_ticker(q: str):
+    q_norm = q.strip().upper()
+    if not q_norm:
+        return {"results": []}
+    if q_norm in _search_cache:
+        return {"results": _search_cache[q_norm]}
+
+    url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=15&newsCount=0"
+    try:
+        r = get_yf_session().get(url, timeout=4)
+        data = r.json()
+        raw_quotes = data.get("quotes", [])
+
+        # Sort so .NS comes before .BO for Indian equities to deduplicate cleanly
+        def _quote_priority(qt: Dict[str, Any]) -> int:
+            sym = str(qt.get("symbol", ""))
+            if sym.endswith(".NS"):
+                return 0
+            if "." not in sym:
+                return 1
+            if sym.endswith(".BO"):
+                return 2
+            return 3
+
+        raw_quotes.sort(key=_quote_priority)
+
+        results: List[Dict[str, str]] = []
+        seen_base: set = set()
+
+        # Check if query itself is a legacy/renamed ticker in our corporate action registry
+        for probe_mkt in ("IN", "US"):
+            res_sym, res_mkt, res_note = resolve_ticker(q_norm, probe_mkt)
+            if res_note:
+                base_k = f"{res_mkt}:{res_sym.replace('.NS', '').replace('.BO', '')}"
+                if base_k not in seen_base:
+                    seen_base.add(base_k)
+                    results.append({
+                        "symbol": res_sym,
+                        "name": res_note,
+                        "market": res_mkt,
+                    })
+
+        for quote in raw_quotes:
+            q_type = str(quote.get("quoteType", "")).upper()
+            if q_type != "EQUITY":
+                continue
+
+            raw_sym = str(quote.get("symbol", "")).strip().upper()
+            if not raw_sym:
+                continue
+
+            exch = str(quote.get("exchange", "")).upper()
+            # Restrict to Indian (.NS / .BO) and US exchanges
+            is_in = raw_sym.endswith((".NS", ".BO")) or exch in ("NSI", "BSE")
+            is_us = ("." not in raw_sym or raw_sym in ("BRK-B", "BRK.B", "BF-B", "BF.B")) and (
+                not exch or exch in _ALLOWED_EXCHANGES
+            )
+            if not (is_in or is_us):
+                continue
+
+            mkt = "IN" if is_in else "US"
+            resolved_sym, resolved_mkt, _ = resolve_ticker(raw_sym, mkt)
+            name = str(quote.get("longname") or quote.get("shortname") or resolved_sym).strip()
+
+            non_dcf, _, _ = is_non_dcf_instrument(resolved_sym, name, q_type)
+            if non_dcf:
+                continue
+
+            base_key = f"{resolved_mkt}:{resolved_sym.replace('.NS', '').replace('.BO', '')}"
+            if base_key in seen_base:
+                continue
+            seen_base.add(base_key)
+
+            results.append({
+                "symbol": resolved_sym,
+                "name": name,
+                "market": resolved_mkt,
+            })
+            if len(results) >= 8:
+                break
+
+        if results:
+            _search_cache[q_norm] = results
+        return {"results": results}
+    except Exception:
+        return {"results": []}
+
+
 # ---------------------------------------------------------------------------
 # Entrypoint for `python main.py`
 # ---------------------------------------------------------------------------
@@ -774,26 +899,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", 8000)),
         reload=True,
     )
-
-_search_cache = {}
-
-@app.get("/api/search")
-def search_ticker(q: str):
-    q_norm = q.strip().upper()
-    if q_norm in _search_cache:
-        return {"results": _search_cache[q_norm]}
-
-    url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=8&newsCount=0"
-    try:
-        r = get_yf_session().get(url, timeout=4)
-        data = r.json()
-        results = [
-            {"symbol": quote['symbol'], "name": quote.get('shortname', quote.get('longname', ''))}
-            for quote in data.get('quotes', [])
-            if quote.get('quoteType') in ['EQUITY', 'ETF']
-        ]
-        if results:
-            _search_cache[q_norm] = results
-        return {"results": results}
-    except Exception as e:
-        return {"results": []}

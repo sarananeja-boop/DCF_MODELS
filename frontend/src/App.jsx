@@ -346,21 +346,29 @@ export default function App() {
         return;
       }
 
+      const resolvedTicker = response.data?.company?.ticker || targetTicker;
+      const resolvedMarket = response.data?.company?.market || targetMarket;
+      const redirectNote = response.data?.company?.redirect_note;
+
       valuationCacheRef.current.set(cacheKey, response.data);
       setServerAwake(true);
       setAnalysisData(response.data);
-      setTicker(targetTicker);
-      setMarket(targetMarket);
-      sessionStorage.setItem('vl_ticker', response.data.company.ticker);
-      toast.success(`Analysis for ${response.data.company.ticker} completed`);
+      setTicker(resolvedTicker);
+      setMarket(resolvedMarket);
+      sessionStorage.setItem('vl_ticker', resolvedTicker);
+      if (redirectNote) {
+        toast.success(redirectNote, { duration: 6000 });
+      } else {
+        toast.success(`Analysis for ${resolvedTicker} completed`);
+      }
       
       // Update browser history only for new searches (not on popstate back/forward traversal)
       if (!isHistoryNav) {
         try {
           window.history.pushState(
-            { view: 'analysis', ticker: response.data.company.ticker, market: targetMarket },
+            { view: 'analysis', ticker: resolvedTicker, market: resolvedMarket },
             '',
-            `?ticker=${encodeURIComponent(response.data.company.ticker)}`
+            `?ticker=${encodeURIComponent(resolvedTicker)}`
           );
         } catch (_) {}
       }
@@ -378,6 +386,8 @@ export default function App() {
       let errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message;
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep on Render. Please retry in 10 seconds.';
+      } else if (errorMsg?.includes('not supported for DCF')) {
+        // Keep the specific ETF / Commodity ETF / Mutual Fund / REIT / InvIT explanation intact
       } else if (
         errorMsg?.includes('did not return critical data') ||
         errorMsg?.includes('Cannot build a DCF') ||
@@ -391,7 +401,7 @@ export default function App() {
       // Never leave invalid tickers in session storage
       sessionStorage.removeItem('vl_ticker');
       setError(errorMsg);
-      toast.error(errorMsg);
+      toast.error(errorMsg, { duration: 6000 });
     } finally {
       // Only the active request is allowed to reset the loading state
       if (currentReqId === activeRequestIdRef.current) {
@@ -1118,6 +1128,14 @@ export default function App() {
 
               {/* Tab Panes */}
               <div className="flex-1 overflow-y-auto p-6 bg-zinc-950">
+                {analysisData?.company?.redirect_note && (
+                  <div className="mb-4 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center gap-2">
+                    <span className="font-bold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 shrink-0">
+                      Corporate Action Auto-Redirect
+                    </span>
+                    <span>{analysisData.company.redirect_note}</span>
+                  </div>
+                )}
                 <ErrorBoundary>
                   {activeTab === 'overview' && (
                     <OverviewTab 

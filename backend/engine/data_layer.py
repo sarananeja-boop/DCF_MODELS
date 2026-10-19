@@ -387,6 +387,24 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     Raises:
         ValueError: If ``currentPrice`` or ``sharesOutstanding`` are missing.
     """
+    from .ticker_universe import (
+        resolve_ticker,
+        is_non_dcf_instrument,
+        is_capital_light_financial,
+        search_successor_via_yahoo,
+    )
+
+    resolved_sym, resolved_mkt, redirect_note = resolve_ticker(ticker, market)
+    if redirect_note:
+        logger.info("Corporate action auto-redirect: %s -> %s (%s)", ticker, resolved_sym, redirect_note)
+        ticker = resolved_sym
+        market = resolved_mkt
+
+    # Fast pre-check for known ETFs, Commodity ETFs, Mutual Funds, REITs & InvITs
+    pre_excl, _, pre_msg = is_non_dcf_instrument(symbol=ticker)
+    if pre_excl:
+        raise ValueError(pre_msg)
+
     cache_key = f"{ticker.strip().upper()}:{market.strip().upper()}"
     now = time.time()
     if cache_key in _STOCK_DATA_CACHE:
@@ -402,7 +420,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
 
     # Append suffix if not already present
     yf_ticker = ticker.strip()
-    if suffix and not yf_ticker.upper().endswith(suffix.upper()):
+    if suffix and not yf_ticker.upper().endswith(suffix.upper()) and not yf_ticker.upper().endswith(".BO"):
         yf_ticker = yf_ticker + suffix
 
     session = get_yf_session()
@@ -471,6 +489,17 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         hist_2y: pd.DataFrame = fut_h2y.result()
         _ = fut_bench.result()
 
+    # Gatekeeper: reject ETFs, Commodity Funds, Mutual Funds, Indices, REITs, InvITs with a clear domain message
+    is_excl, _, excl_msg = is_non_dcf_instrument(
+        symbol=yf_ticker,
+        name=info.get("shortName") or info.get("longName"),
+        quote_type=info.get("quoteType"),
+        sector=info.get("sector"),
+        industry=info.get("industry"),
+    )
+    if is_excl:
+        raise ValueError(excl_msg)
+
     if current_price is None:
         current_price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
     if shares_out is None:
@@ -489,6 +518,16 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
             pass
 
     if current_price is None or shares_out is None:
+        # Self-healing fallback: check if the ticker underwent a corporate action / rename on the exchange
+        if not redirect_note:
+            successor = search_successor_via_yahoo(yf_ticker, market, session)
+            if successor:
+                succ_sym, succ_mkt, succ_note = successor
+                logger.info("Auto-recovering dead ticker %s -> %s (%s)", yf_ticker, succ_sym, succ_note)
+                res = fetch_stock_data(succ_sym, succ_mkt)
+                res["redirect_note"] = succ_note
+                return res
+
         raise ValueError(
             f"Yahoo Finance did not return critical data for {yf_ticker}.\n"
             f"   currentPrice={current_price}, sharesOutstanding={shares_out}\n"
@@ -617,46 +656,48 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     sector = info.get("sector")
     industry = info.get("industry")
 
-    # Banking & Financial Services Detection (Banks, NBFCs, Insurance, Capital Markets, Lending Institutions)
+    # Banking & Balance-Sheet Financial Services Detection (Banks, NBFCs, Insurance, Lending Institutions)
+    # Note: Capital-light fee-based financial infrastructure (Exchanges like MCX/BSE, Depositories like CDSL,
+    # RTAs like CAMS/KFINTECH, Rating Agencies like CRISIL, and AMCs) are routed to Standard FCFF DCF.
+    is_cap_light_fin = is_capital_light_financial(yf_ticker, company_name, sector, industry)
     is_financial = False
     sec_lower = (sector or "").lower()
     ind_lower = (industry or "").lower()
     name_lower = (company_name or "").lower()
     clean_sym = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
 
-    KNOWN_FINANCIALS = {
+    KNOWN_BALANCE_SHEET_FINANCIALS = {
         "IREDA", "PFC", "REC", "IRFC", "HUDCO", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", 
-        "KOTAKBANK", "BAJFINANCE", "BAJAJFINSV", "CHOLAFIN", "MUTHOOTFIN", "MANAPPURAM", 
+        "KOTAKBANK", "BAJFINANCE", "BAJAJFINSV", "BAJAJHFL", "CHOLAFIN", "MUTHOOTFIN", "MANAPPURAM", 
         "SHRIRAMFIN", "M&MFIN", "JIOFIN", "POONAWALLA", "AAVAS", "CANFINHOME", "HOMEFIRST", 
         "CREDITACC", "IDFCFIRSTB", "BANDHANBNK", "FEDERALBNK", "INDUSINDBK", "AUBANK", "PNB", 
         "BANKBARODA", "UNIONBANK", "CANBK", "INDIANB", "MAHABANK", "UCOBANK", "CENTRALBK", 
         "IOB", "J&KBANK", "KARURVYSYA", "SOUTHBANK", "CSBBANK", "DCBBANK", "CITYUNIONB", 
         "EQUITASBNK", "UJJIVANSFB", "SURYODAY", "ESAFSFB", "SBICARD", "ICICIGI", "HDFCLIFE", 
-        "SBILIFE", "ICICIPRULI", "LICI", "GICRE", "NIACL", "STARHEALTH", "ISEC", "ANGELONE", 
-        "MOTILALOFS", "GEOJITFSL", "5PAISA", "MCX", "BSE", "CDSL", "CAMSLTD", "KFINTECH", 
-        "NAM-INDIA", "HDFCAMC", "UTIAMC", "JPM", "BAC", "WFC", "C", "GS", "MS", "AXP", 
-        "COF", "USB", "PNC", "TFC", "SCHW", "BK", "BLK", "FITB", "MTB", "KEY", "CFG", 
-        "HBAN", "RF", "SYF", "DFS", "SOFI", "AFRM"
+        "SBILIFE", "ICICIPRULI", "LICI", "GICRE", "NIACL", "STARHEALTH", "SAMMAANCAP", "LTF",
+        "TATACAP", "JPM", "BAC", "WFC", "C", "GS", "MS", "AXP", "COF", "USB", "PNC", "TFC",
+        "SCHW", "BK", "FITB", "MTB", "KEY", "CFG", "HBAN", "RF", "SYF", "DFS", "SOFI", "AFRM"
     }
 
-    # 1. Known Ticker Check
-    if clean_sym in KNOWN_FINANCIALS:
+    if is_cap_light_fin:
+        is_financial = False
+    # 1. Known Balance-Sheet Lender / Bank / Insurer Check
+    elif clean_sym in KNOWN_BALANCE_SHEET_FINANCIALS:
         is_financial = True
     # 2. Sector / Industry Metadata
     elif any(k in sec_lower for k in ["financial", "banking"]):
         is_financial = True
-    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "capital markets", "asset management", "consumer finance", "financial", "specialty finance"]):
+    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "mortgage finance", "consumer finance", "specialty finance"]):
         is_financial = True
     # 3. Company Name Keywords
     elif any(kw in name_lower for kw in [
-        "bank", "finance", "financial", "credit", "housing finance", 
-        "development agency", "energy development agency", "capital", "insurance", 
-        "securities", "finvest", "leasing", "fincorp", "asset management"
+        "bank", "housing finance", "finance", "financial", "credit",
+        "development agency", "energy development agency", "insurance",
+        "finvest", "leasing", "fincorp"
     ]):
         is_financial = True
     # 4. Financial Statement Structural Signals (handles empty info metadata from Yahoo Finance)
     elif "Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns:
-        # Check if interest is primary revenue source or extreme financial leverage exists
         debt_vals = safe_get(balance_sheet, "Total Debt", 0)
         rev_vals = safe_get(income_stmt, "Total Revenue", 0)
         if len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0:
@@ -672,6 +713,8 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "sector": sector,
         "industry": industry,
         "is_financial": is_financial,
+        "is_capital_light_financial": is_cap_light_fin,
+        "redirect_note": redirect_note,
         "is_extractive": is_extractive,
         "is_cyclical": is_cyclical,
         "current_price": float(current_price),
@@ -798,6 +841,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     rev_growth = np.diff(revenue) / np.where(revenue[:-1] != 0, revenue[:-1], 1.0)
     ebit_margins = ebit / np.where(revenue != 0, revenue, 1.0)
+    if stock_data.get("is_capital_light_financial", False):
+        # Capital-light financial infrastructure (exchanges, AMCs, depositories) often include
+        # treasury yield in reported EBIT; cap operating margin at 75% for sustainable FCFF.
+        ebit_margins = np.clip(ebit_margins, -0.50, 0.75)
 
     avg_rev_growth = float(np.mean(rev_growth))
     std_rev_growth = float(np.std(rev_growth, ddof=1)) if len(rev_growth) > 1 else 0.05
@@ -842,6 +889,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     
     nwc_to_rev = nwc / np.where(revenue != 0, revenue, 1.0)
     normalized_nwc_to_revenue = float(np.mean(nwc_to_rev))
+    if stock_data.get("is_capital_light_financial", False):
+        # Exchanges (MCX, BSE, IEX), depositories (CDSL), and brokers (ANGELONE) hold client
+        # clearing/settlement margin float in Current Assets & Liabilities. Clamp NWC/Rev to ±5%.
+        normalized_nwc_to_revenue = float(np.clip(normalized_nwc_to_revenue, -0.05, 0.05))
 
     # Total debt and cash (most recent year – index [0] is newest before reversal,
     # but after [::-1] index [-1] is newest … however the original notebook uses

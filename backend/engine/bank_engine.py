@@ -161,6 +161,9 @@ def run_bank_valuation(
     else:
         target_roe = max(0.05, min(0.35, target_roe))
 
+    # Bound start_growth to [-5%, 35%] consistent with bank Monte Carlo bounds
+    start_growth = max(-0.05, min(0.35, float(start_growth)))
+
     # Construct linear schedules
     growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
     roe_schedule = np.linspace(base_roe, target_roe, projection_years)
