@@ -695,7 +695,12 @@ def analyze(req: AnalyzeRequest):
                 "exit_implied_price": dcf_result.get("exit_implied_price"),
                 "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
                 "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
-                "historical_fcf_negative": False,
+                "historical_fcf_negative": bool(
+                    not is_financial and (
+                        metrics.get("avg_ebit_margin", 0.1) <= 0
+                        or (metrics.get("ebit") and len(metrics.get("ebit")) > 0 and metrics["ebit"][-1] <= 0)
+                    )
+                ),
                 "terminal_ufcf_positive": bool(dcf_result.get("terminal_value_valid", True)),
                 "terminal_value_valid": dcf_result.get("terminal_value_valid", True),
                 "terminal_value_note": dcf_result.get("terminal_value_note"),

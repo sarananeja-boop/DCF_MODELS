@@ -447,6 +447,38 @@ _SYNC_INTERVAL_SECONDS: int = 43200  # 12 hours
 _DYNAMIC_REDIRECTS: Dict[str, Tuple[str, str, str]] = {}
 
 
+def lookup_company_name(ticker: str) -> Optional[str]:
+    """Look up the canonical company name for a ticker from enrichments, live universe, or baseline stocks.json."""
+    if not ticker:
+        return None
+    sym_upper = ticker.strip().upper()
+    sym_clean = re.sub(r"\.(NS|BO)$", "", sym_upper)
+
+    # 1. Check explicit enrichments
+    for key in (sym_upper, f"{sym_clean}.NS", sym_clean):
+        enr = ACTIVE_COMPANY_ENRICHMENTS.get(key)
+        if enr and enr.get("name_override"):
+            return enr["name_override"]
+
+    # 2. Check in-memory universe (or load baseline if not yet initialized)
+    global _LIVE_UNIVERSE, _LIVE_UNIVERSE_VERSION
+    with _UNIVERSE_LOCK:
+        if not _LIVE_UNIVERSE:
+            baseline = load_baseline_universe()
+            _LIVE_UNIVERSE = baseline
+            _LIVE_UNIVERSE_VERSION = _compute_version(baseline)
+        universe_snapshot = list(_LIVE_UNIVERSE)
+
+    for item in universe_snapshot:
+        item_sym = str(item.get("s", "")).strip().upper()
+        item_clean = re.sub(r"\.(NS|BO)$", "", item_sym)
+        if item_sym == sym_upper or item_clean == sym_clean:
+            name = item.get("n")
+            if name and name.upper() != item_sym:
+                return str(name)
+    return None
+
+
 def clean_company_name(raw_name: str) -> str:
     """Clean HTML entities, mojibake, and awkward NSE formatting from company names."""
     if not raw_name:
@@ -454,6 +486,13 @@ def clean_company_name(raw_name: str) -> str:
     text = html.unescape(str(raw_name))
     text = text.replace("Â€“", "-").replace("\u00a0", " ")
     text = re.sub(r"\s+", " ", text).strip()
+
+    # If Yahoo Finance returned a raw ticker like "JMFINANCIL.NS" instead of a name, resolve via universe
+    if re.match(r"^[A-Z0-9&\-]+\.(NS|BO)$", text, flags=re.IGNORECASE):
+        resolved = lookup_company_name(text)
+        if resolved:
+            return resolved
+        return re.sub(r"\.(NS|BO)$", "", text, flags=re.IGNORECASE).upper()
 
     # Fix "(India)" -> "India" when preceded by words
     text = re.sub(r"\(India\)", "India", text, flags=re.IGNORECASE)

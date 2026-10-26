@@ -629,6 +629,47 @@ export default function App() {
                   For banks and NBFCs, customer deposits and borrowings are operational working capital rather than debt. The engine automatically switches to a 100%-equity Tier-1 Regulatory Capital FCFE model where terminal equity value is validated through Justified Price-to-Book: <span className="text-[#f4eedf]">P/B = (ROE − g) / (Ke − g)</span>.
                 </p>
               </div>
+
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#e3b23c]/15 text-[#e3b23c] border border-[#e3b23c]/30">05</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Model Validation, Multiples Cross-Check &amp; Distress Logic</h4>
+                  </div>
+                  <span className="font-display text-xs text-[#e3b23c] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                    EV/EBITDA &nbsp;|&nbsp; P/B &nbsp;|&nbsp; Distress Guardrails
+                  </span>
+                </div>
+                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
+                  Every DCF valuation is cross-checked against market multiples (<strong className="text-[#f4eedf]">EV/EBITDA</strong> for profitable corporates, <strong className="text-[#f4eedf]">EV/Sales</strong> when trailing EBITDA ≤ 0, and <strong className="text-[#f4eedf]">P/B vs. Justified P/B</strong> for Banks/NBFCs) using the divergence formula <span className="text-[#f4eedf]">|Model Multiple − Market Multiple| / Market Multiple</span>:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3 text-xs">
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
+                    <div className="font-display font-bold text-[#34b38a] mb-0.5">✓ VERIFIED (&lt; 50% Divergence Gap)</div>
+                    <p className="text-[#a6b0c3] leading-relaxed">
+                      DCF implied multiple is within 50% of the current market multiple, confirming baseline cash-flow projections align with peer market pricing.
+                    </p>
+                  </div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
+                    <div className="font-display font-bold text-[#e3b23c] mb-0.5">⚠️ WARNING (50% – 80% Divergence Gap)</div>
+                    <p className="text-[#a6b0c3] leading-relaxed">
+                      Moderate divergence between DCF and market multiple (or Terminal Value &gt; 75% of EV). Signals that the market is pricing in higher growth/margins than historical baseline.
+                    </p>
+                  </div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
+                    <div className="font-display font-bold text-[#e07a5f] mb-0.5">⚠️ FLAGGED (&gt; 80% Divergence Gap)</div>
+                    <p className="text-[#a6b0c3] leading-relaxed">
+                      Extreme valuation disconnect (&gt;80% gap) or negative operating EBITDA, indicating the stock trades on aggressive future turnaround/growth expectations.
+                    </p>
+                  </div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
+                    <div className="font-display font-bold text-[#e07a5f] mb-0.5">🚨 DCF UNRELIABLE / DISTRESSED</div>
+                    <p className="text-[#a6b0c3] leading-relaxed">
+                      Triggered when Balance Sheet Debt exceeds Implied Enterprise Value (<span className="text-[#f4eedf]">Equity Value ≤ 0</span>), when Year-5 FCF is negative (<span className="text-[#f4eedf]">TV = 0</span>), or when &gt;20% of Monte Carlo trials result in equity wipeout.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-[#f4eedf]/12 bg-[#0f1520] flex justify-end">
@@ -1283,6 +1324,11 @@ export default function App() {
                       },
                       {
                         num: '03',
+                        title: 'Interpret Model Validation Badges (VERIFIED, WARNING, FLAGGED & DISTRESSED)',
+                        desc: 'The engine cross-checks DCF Implied EV/EBITDA (or P/B for Banks/NBFCs) against Current Market Multiples. VERIFIED (<50% gap) confirms tight alignment with peer pricing; WARNING (50%–80% gap) indicates the market prices in higher growth/margins than historical averages; FLAGGED (>80% gap) signals an extreme growth premium or negative EBITDA turnaround; and DCF UNRELIABLE / DISTRESSED alerts you when Balance Sheet Debt exceeds Enterprise Value (Equity Value ≤ 0) or >20% of Monte Carlo simulations result in equity wipeout.'
+                      },
+                      {
+                        num: '04',
                         title: 'Size Portfolio Positions Using the P5–P95 Dispersion Band',
                         desc: 'Check the width of the 90% Monte Carlo confidence band. A tight P5–P95 band indicates predictable cash flows suited for a core 5–8% portfolio weight; a wide band means the stock is highly sensitive to WACC and terminal assumptions, warranting a smaller 1–3% position.'
                       }
@@ -1563,7 +1609,9 @@ export default function App() {
                       </strong>
                     </span>
                   </div>
-                  <div className={`font-display text-3xl sm:text-4xl font-bold leading-tight my-1 tracking-tight ${
+                  <div className={`font-display ${
+                    (analysisData.verdict?.verdict || '').length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
+                  } font-bold leading-tight my-1 tracking-tight ${
                     analysisData.verdict?.verdict?.includes('BUY')
                       ? 'text-[#34b38a]'
                       : analysisData.verdict?.verdict?.includes('SELL')
@@ -1572,7 +1620,7 @@ export default function App() {
                   }`}>
                     {analysisData.verdict?.verdict || 'N/A'}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] truncate" title={analysisData.verdict?.description}>
+                  <div className="text-xs text-[#a6b0c3] leading-snug" title={analysisData.verdict?.description}>
                     {analysisData.verdict?.description || 'Probability-weighted valuation signal'}
                   </div>
                 </div>

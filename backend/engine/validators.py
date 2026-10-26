@@ -45,8 +45,25 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
 
     if market_multiple and market_multiple != 0:
         multiple_gap_pct = abs(model_multiple - market_multiple) / market_multiple
-        status = "PASS" if multiple_gap_pct < 0.50 else "WARNING"
-    
+        if multiple_gap_pct < 0.50:
+            status = "PASS"
+        elif multiple_gap_pct <= 0.80:
+            status = "WARNING"
+        else:
+            status = "FLAG"
+
+    warning_msg: Optional[str] = None
+    if dcf_result.get("equity_value", 1.0) <= 0:
+        status = "FLAG"
+        warning_msg = "Net debt claims exceed DCF Enterprise Value, resulting in zero baseline equity value."
+    elif not dcf_result.get("terminal_value_valid", True):
+        status = "FLAG"
+        warning_msg = "Year-5 projected cash flow is negative; perpetual Gordon Growth terminal value cannot be capitalized."
+    elif trailing_ebitda <= 0:
+        warning_msg = "Trailing EBITDA is negative or zero; switched cross-check to EV/Sales and applied turnaround margin convergence."
+    elif dcf_result.get("tv_share_flag", False):
+        warning_msg = "Terminal Value accounts for >75% of Enterprise Value; valuation is highly sensitive to terminal WACC and growth."
+
     return {
         "metric_used": metric_used,
         "trailing_ebitda": float(trailing_ebitda),
@@ -56,6 +73,7 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
         "model_multiple": float(model_multiple) if model_multiple is not None else None,
         "multiple_gap_pct": float(multiple_gap_pct),
         "status": status,
+        "warning": warning_msg,
         "exit_implied_price": dcf_result.get("exit_implied_price"),
         "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
         "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
@@ -89,13 +107,23 @@ def validate_bank_valuation(
 
     if multiple_gap_pct <= 0.35:
         status = "PASS"
-    elif multiple_gap_pct <= 0.60:
+    elif multiple_gap_pct <= 0.65:
         status = "WARNING"
     else:
         status = "FLAG"
 
+    warning_msg: Optional[str] = None
+    avg_roe = float(metrics.get("avg_roe", 0.14) or 0.14)
+    ke = float(dcf_result.get("cost_of_equity", 0.12) or 0.12)
+    if avg_roe < ke:
+        warning_msg = (
+            f"4-Yr Avg ROE ({avg_roe*100:.1f}%) is below Cost of Equity ({ke*100:.1f}%), "
+            f"which compresses Justified Gordon P/B ({justified_pb:.2f}x) below 1.0x Book Value."
+        )
+
     return {
         "status": status,
+        "warning": warning_msg,
         "metric_used": "price_to_book",
         "market_multiple": float(market_pb) if market_pb is not None else None,
         "model_multiple": float(model_pb) if model_pb is not None else None,

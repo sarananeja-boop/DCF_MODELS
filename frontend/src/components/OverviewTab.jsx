@@ -46,7 +46,7 @@ const formatShares = (shares, market) => {
 const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   if (!data) return <div className="p-8 text-center text-[#a6b0c3]">No data available</div>;
 
-  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, diagnostics, historicals } = data;
+  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, diagnostics, historicals } = data;
   const isFinancial = Boolean(company?.is_financial || diagnostics?.is_financial || dcf_result?.is_financial);
   const symbol = company?.currency === 'INR' ? '₹' : '$';
   const market = company?.market || 'US';
@@ -155,8 +155,93 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const benchMult = validation?.benchmark_exit_multiple ?? diagnostics?.benchmark_exit_multiple ?? 10;
   const maxMult = Math.max(mktMult, modMult, benchMult, 1) * 1.15;
 
+  // Distress & Stressed DCF Diagnostics
+  const isDistressed = Boolean(
+    verdict?.is_distressed ||
+    verdict?.verdict?.includes('DISTRESSED') ||
+    verdict?.verdict?.includes('UNRELIABLE') ||
+    (dcf_result?.equity_value != null && dcf_result.equity_value <= 0)
+  );
+  const tvInvalid = dcf_result?.terminal_value_valid === false || diagnostics?.terminal_value_valid === false;
+  const negHistFcf = Boolean(diagnostics?.historical_fcf_negative || validation?.metric_used === 'ev_revenue');
+  const tvFlag = Boolean(diagnostics?.tv_share_flag);
+  const rawEqVal = dcf_result?.raw_equity_value ?? ((dcf_result?.enterprise_value || 0) - totalDebt + totalCash);
+
   return (
     <div className="space-y-4 text-[#f4eedf]">
+
+      {/* =================================================================== */}
+      {/* STRESSED / DISTRESSED DCF & DIAGNOSTIC EXPLANATION BANNER           */}
+      {/* =================================================================== */}
+      {(isDistressed || tvInvalid || negHistFcf || tvFlag) && (
+        <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/12 shadow-lg space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FiAlertTriangle className={`w-4 h-4 shrink-0 ${isDistressed || tvInvalid ? 'text-[#e07a5f]' : 'text-[#e3b23c]'}`} />
+              <span className="font-display font-bold text-xs sm:text-sm uppercase tracking-wider text-[#f4eedf]">
+                {isDistressed
+                  ? 'Why DCF Is Distressed / Unreliable for This Security'
+                  : tvInvalid
+                  ? 'Terminal Value Warning — Negative Year-5 Cash Flow'
+                  : 'DCF Model Diagnostic & Structural Notes'}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-[#a6b0c3]">
+              Model Diagnostics
+            </span>
+          </div>
+
+          <div className="space-y-2 text-xs text-[#c5cedd] leading-relaxed">
+            {isDistressed && (
+              <div className="border-l-2 border-[#e07a5f] pl-3 py-0.5">
+                <strong className="text-[#f4eedf]">Debt Claims Exceed Baseline Cash Flows: </strong>
+                {dcf_result?.equity_value != null && dcf_result.equity_value <= 0 ? (
+                  <>
+                    Discounted 5-Year Operating Cash Flows plus Terminal Value produce an Implied Enterprise Value of{' '}
+                    <strong className="text-[#f4eedf]">{formatCurrency(dcf_result?.enterprise_value, symbol, true)}</strong>. After subtracting Total Balance Sheet Debt (<strong className="text-[#e07a5f]">{formatCurrency(totalDebt, symbol, true)}</strong>) and adding Cash (<strong className="text-[#34b38a]">{formatCurrency(totalCash, symbol, true)}</strong>), raw Implied Equity Value is{' '}
+                    <strong className="text-[#e07a5f]">{formatCurrency(rawEqVal, symbol, true)}</strong> (floored at <strong className="text-[#f4eedf]">{symbol}0.00/share</strong> due to limited shareholder liability).{' '}
+                  </>
+                ) : null}
+                {verdict?.description && <span>{verdict.description} </span>}
+                {!exitImpliedPrice && !isFinancial && (
+                  <span>
+                    Similarly, the <strong className="text-[#f4eedf]">Exit-Multiple Share Price is N/A</strong> because Year-5 projected EBITDA at the {benchMult}x peer multiple remains below net debt obligations.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {tvInvalid && (
+              <div className="border-l-2 border-[#e07a5f] pl-3 py-0.5">
+                <strong className="text-[#f4eedf]">Invalid Perpetual Terminal Value: </strong>
+                {dcf_result?.terminal_value_note || diagnostics?.terminal_value_note || 'Year-5 projected free cash flow remains negative under baseline assumptions. A negative cash flow cannot be capitalized into perpetuity via Gordon Growth, so Terminal Value is set to zero.'}
+              </div>
+            )}
+
+            {negHistFcf && (
+              <div className="border-l-2 border-[#e3b23c] pl-3 py-0.5">
+                <strong className="text-[#f4eedf]">Negative / Depressed Trailing Operating Profit: </strong>
+                {validation?.metric_used === 'ev_revenue' ? (
+                  <>
+                    Trailing EBITDA ({formatCurrency(validation?.trailing_ebitda, symbol, true)}) is negative or zero. The engine automatically switches the multiple cross-check from EV/EBITDA to <strong className="text-[#f4eedf]">EV/Sales</strong> and models a turnaround operating margin convergence toward <strong className="text-[#f4eedf]">{formatPercent(diagnostics?.target_ebit_margin)}</strong> over 5 years.
+                  </>
+                ) : (
+                  <>
+                    Trailing Operating EBIT ({formatCurrency(latestEbit, symbol, true)}, {formatPercent(historicals?.avg_ebit_margin)} 4-yr avg margin) is negative. The engine models a turnaround operating margin convergence from <strong className="text-[#f4eedf]">{formatPercent(diagnostics?.current_ebit_margin)}</strong> toward <strong className="text-[#f4eedf]">{formatPercent(diagnostics?.target_ebit_margin)}</strong> over 5 years.
+                  </>
+                )}
+              </div>
+            )}
+
+            {tvFlag && diagnostics?.tv_share_note && (
+              <div className="border-l-2 border-[#8ab4f8] pl-3 py-0.5">
+                <strong className="text-[#f4eedf]">High Terminal Value Concentration ({pvTvShare.toFixed(1)}% of EV): </strong>
+                {diagnostics.tv_share_note}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* ROW 1: SIMPLY WALL ST PRICE VS FAIR VALUE BAR + EQUITY VALUE BRIDGE */}
@@ -714,6 +799,46 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Dynamic Model Validation & Warning Interpretation Note */}
+          <div className="mt-3.5 pt-3 border-t border-[#f4eedf]/10 text-[11px] leading-relaxed text-[#c5cedd] space-y-1.5">
+            {isDistressed ? (
+              <div className="border-l-2 border-[#e07a5f] pl-2.5">
+                <strong className="text-[#e07a5f]">Distressed / Invalid DCF Note: </strong>
+                Balance sheet debt ({formatCurrency(totalDebt, symbol, true)}) exceeds discounted operating cash flows ({formatCurrency(dcf_result?.enterprise_value, symbol, true)}), resulting in zero baseline equity value. Use multiples or asset-recovery analysis until leverage normalizes.
+              </div>
+            ) : validation?.status === 'PASS' ? (
+              <div className="border-l-2 border-[#34b38a] pl-2.5">
+                <strong className="text-[#34b38a]">Verified ({isFinancial ? '≤35% P/B Gap' : '<50% Multiple Gap'}): </strong>
+                DCF implied {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(modMult)}x) is within{' '}
+                {validation?.multiple_gap_pct != null ? formatPercent(validation.multiple_gap_pct) : 'the normal range'} of the current market multiple ({formatNumber(mktMult)}x), confirming cash-flow projections align with peer market pricing.
+              </div>
+            ) : validation?.status === 'WARNING' ? (
+              <div className="border-l-2 border-[#e3b23c] pl-2.5">
+                <strong className="text-[#e3b23c]">How to Interpret WARNING ({isFinancial ? '35%–65% P/B Gap' : '50%–80% Multiple Gap'}): </strong>
+                Market {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
+                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from DCF implied ({formatNumber(modMult)}x).{' '}
+                {modMult < mktMult
+                  ? 'The market is pricing in higher revenue/earnings growth or ROE/margin expansion than historical averages.'
+                  : 'Baseline DCF projects stronger cash-flow expansion than currently priced by the market.'}
+              </div>
+            ) : (validation?.status === 'FAIL' || validation?.status === 'FLAG') ? (
+              <div className="border-l-2 border-[#e07a5f] pl-2.5">
+                <strong className="text-[#e07a5f]">How to Interpret FLAGGED ({isFinancial ? '>65% P/B Gap' : '>80% Multiple Gap'}): </strong>
+                Market {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
+                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from DCF implied ({formatNumber(modMult)}x).{' '}
+                {modMult < mktMult
+                  ? 'Stock trades at a steep growth/scarcity premium over historical cash flows; use Model Assumptions sliders to test market-implied growth.'
+                  : 'Significant disconnect between baseline operating cash flows and market valuation.'}
+              </div>
+            ) : null}
+
+            {validation?.warning && (
+              <div className="text-[10.5px] text-[#e3b23c] pl-2.5 border-l-2 border-[#e3b23c]/50">
+                ⚠️ {validation.warning}
+              </div>
+            )}
           </div>
         </div>
 

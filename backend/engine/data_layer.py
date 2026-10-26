@@ -652,11 +652,14 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     except Exception as e:
         logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
 
+    from engine.ticker_universe import clean_company_name, lookup_company_name
     long_name = info.get("longName")
     short_name = info.get("shortName")
-    raw_comp_name = long_name or short_name or yf_ticker
-    from engine.ticker_universe import clean_company_name
-    company_name = clean_company_name(raw_comp_name) or yf_ticker
+    universe_name = lookup_company_name(yf_ticker)
+    raw_comp_name = long_name or short_name or universe_name or yf_ticker
+    if str(raw_comp_name).strip().upper() == yf_ticker.upper() and universe_name:
+        raw_comp_name = universe_name
+    company_name = clean_company_name(raw_comp_name) or universe_name or yf_ticker
     sector = info.get("sector")
     industry = info.get("industry")
 
@@ -679,8 +682,14 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "IOB", "J&KBANK", "KARURVYSYA", "SOUTHBANK", "CSBBANK", "DCBBANK", "CITYUNIONB", 
         "EQUITASBNK", "UJJIVANSFB", "SURYODAY", "ESAFSFB", "SBICARD", "ICICIGI", "HDFCLIFE", 
         "SBILIFE", "ICICIPRULI", "LICI", "GICRE", "NIACL", "STARHEALTH", "SAMMAANCAP", "LTF",
-        "TATACAP", "JPM", "BAC", "WFC", "C", "GS", "MS", "AXP", "COF", "USB", "PNC", "TFC",
-        "SCHW", "BK", "FITB", "MTB", "KEY", "CFG", "HBAN", "RF", "SYF", "DFS", "SOFI", "AFRM"
+        "JMFINANCIL", "EDELWEISS", "IIFL", "ABCAPITAL", "SUNDARMFIN", "MASFIN", "REPCOHOME",
+        "LICHSGFIN", "PNBHOUSING", "GICHSGFIN", "APTUS", "SBFC", "FIVESTAR", "SPANDANA",
+        "FUSION", "SATIN", "ARMANFIN", "UGROCAP", "CGCL", "PAISALO", "IFCI", "PFS",
+        "TOURISMFIN", "PEL", "RELIGARE", "CENTRUM", "RBLBANK", "YESBANK", "IDBI", "KTKBANK",
+        "TMB", "DHANBANK", "CAPTRUST", "MUTHOOTMF", "INDOSTAR", "FEDFINA", "UTKARSHBNK",
+        "JANASFB", "CAPITALSFB", "TATACAP", "JPM", "BAC", "WFC", "C", "GS", "MS", "AXP",
+        "COF", "USB", "PNC", "TFC", "SCHW", "BK", "FITB", "MTB", "KEY", "CFG", "HBAN",
+        "RF", "SYF", "DFS", "SOFI", "AFRM", "ALLY", "SLM", "NAVI"
     }
 
     if is_cap_light_fin:
@@ -691,22 +700,30 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     # 2. Sector / Industry Metadata
     elif any(k in sec_lower for k in ["financial", "banking"]):
         is_financial = True
-    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "mortgage finance", "consumer finance", "specialty finance"]):
+    elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "mortgage finance", "consumer finance", "specialty finance", "capital markets"]):
         is_financial = True
-    # 3. Company Name Keywords
+    # 3. Company Name or Symbol Keywords
     elif any(kw in name_lower for kw in [
-        "bank", "housing finance", "finance", "financial", "credit",
+        "bank", "housing finance", "finance", "financial", "financ", "credit",
         "development agency", "energy development agency", "insurance",
-        "finvest", "leasing", "fincorp"
-    ]):
+        "finvest", "leasing", "fincorp", "fino"
+    ]) or any(kw in clean_sym.lower() for kw in ["financ", "bank", "hsgfin", "fincorp", "finvest"]):
         is_financial = True
     # 4. Financial Statement Structural Signals (handles empty info metadata from Yahoo Finance)
     elif "Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns:
+        has_ebit = "EBIT" in income_stmt.columns or "Operating Income" in income_stmt.columns
         debt_vals = safe_get(balance_sheet, "Total Debt", 0)
         rev_vals = safe_get(income_stmt, "Total Revenue", 0)
-        if len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0:
-            if debt_vals[-1] / rev_vals[-1] > 3.0:
+        if not has_ebit:
+            is_financial = True
+        elif len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0:
+            if debt_vals[-1] / rev_vals[-1] > 1.5:
                 is_financial = True
+
+    if is_financial and not sector:
+        sector = "Financial Services"
+    if is_financial and not industry:
+        industry = "Financial Services & Lending"
 
     is_extractive, is_cyclical = classify_sector_dynamics(sector, industry)
 
@@ -812,8 +829,15 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     # 3C/3D – Extract historical financials (chronological oldest→newest)
     # ------------------------------------------------------------------
-    revenue = safe_get(income_stmt, "Total Revenue")[::-1]
-    ebit = safe_get(income_stmt, "EBIT")[::-1]
+    revenue = safe_get(income_stmt, "Total Revenue")[::-1].copy()
+    ebit = safe_get(income_stmt, "EBIT")[::-1].copy()
+    if "Operating Income" in income_stmt.columns and not is_financial:
+        op_inc = safe_get(income_stmt, "Operating Income")[::-1]
+        # Guard against one-time non-operating accounting gains (e.g. debt write-offs in EBIT)
+        # where reported EBIT exceeds 85% of revenue while Operating Income is normal/negative.
+        for idx in range(len(ebit)):
+            if revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85 and (op_inc[idx] / revenue[idx]) <= 0.85:
+                ebit[idx] = op_inc[idx]
     
     # Banking & Financial Services specific metrics
     net_income = safe_get(income_stmt, "Net Income")[::-1]
