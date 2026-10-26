@@ -723,21 +723,24 @@ export default function App() {
           <div className="flex-1 flex flex-col">
             
             {/* 1. FULL-BLEED PAINTERLY HERO SECTION */}
-            <section className="relative min-h-[92vh] w-full flex flex-col justify-between overflow-hidden select-none">
-              <img
-                src="/bse_acrylic_hero.jpg"
-                alt="Acrylic painting of the Bombay Stock Exchange tower across a sunlit meadow under a deep Prussian-blue sky"
-                className="absolute inset-0 w-full h-full object-cover scale-[1.32] translate-x-[-3%] translate-y-[-6%] origin-[60%_65%] transition-transform duration-700 ease-out"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-[#071124]/35 via-transparent to-[#0c1017]/90 pointer-events-none" />
+            <section className="relative min-h-[88vh] w-full flex flex-col justify-between select-none">
+              {/* Background Artwork Layer (Scoped overflow-hidden so scaled artwork stays contained without clipping dropdowns) */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <img
+                  src="/bse_acrylic_hero.jpg"
+                  alt="Acrylic painting of the Bombay Stock Exchange tower across a sunlit meadow under a deep Prussian-blue sky"
+                  className="w-full h-full object-cover scale-[1.32] translate-x-[-3%] translate-y-[-6%] origin-[60%_65%] transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#071124]/35 via-transparent to-[#0c1017]/95" />
+              </div>
 
-              {/* Top-Center Floating Frosted-Glass Pill Navbar */}
+              {/* Top-Center Floating Solid Pill Navbar */}
               <div className="relative z-20 pt-6 sm:pt-8 px-4 flex justify-center">
-                <nav className="frosted-pill rounded-2xl px-3 sm:px-4 py-2 flex items-center gap-3 sm:gap-6 shadow-2xl">
+                <nav className="bg-[#141b26]/90 border border-[#f4eedf]/12 rounded-2xl px-4 py-2 flex items-center gap-4 sm:gap-6 shadow-2xl backdrop-blur-md">
                   <button
                     type="button"
                     onClick={() => handleGoHome(true)}
-                    className="w-8 h-8 rounded-lg bg-[#f4eedf]/15 border border-[#f4eedf]/25 flex items-center justify-center text-[#f4eedf] hover:bg-[#f4eedf]/25 transition cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-[#f4eedf]/10 border border-[#f4eedf]/15 flex items-center justify-center text-[#f4eedf] hover:bg-[#f4eedf]/20 transition cursor-pointer"
                     title="ValuationLab"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -781,9 +784,9 @@ export default function App() {
                 <TypewriterHeadline />
               </div>
 
-              {/* Bottom Hero Split: Left Frosted Narrative Card + Right Interactive Valuation Search */}
-              <div className="relative z-20 max-w-7xl w-full mx-auto px-4 sm:px-8 pb-6 sm:pb-8 pt-24 grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
-                <div className="lg:col-span-5 frosted-card rounded-3xl p-5 sm:p-7 text-left">
+              {/* Bottom Hero Split: Left Narrative Card + Right Interactive Valuation Search */}
+              <div className="relative z-20 max-w-7xl w-full mx-auto px-4 sm:px-8 pb-14 sm:pb-16 pt-12 sm:pt-16 grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                <div className="lg:col-span-5 bg-[#141b26]/95 border border-[#f4eedf]/12 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-md flex flex-col justify-between text-left">
                   <p className="text-xs sm:text-sm text-[#f4eedf]/95 leading-relaxed mb-5">
                     Value any Indian or US company from first principles. Extract audited financial statements, discount future cash flows with live sovereign yields, and stress-test fair value across 10,000 Cholesky-correlated Monte Carlo simulations.
                   </p>
@@ -806,7 +809,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="lg:col-span-7 frosted-card rounded-3xl p-5 sm:p-7 text-left">
+                <div className="lg:col-span-7 bg-[#141b26]/95 border border-[#f4eedf]/12 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-md flex flex-col justify-between text-left">
                   <TickerInput 
                     heroMode={true}
                     ticker={ticker}
@@ -817,8 +820,8 @@ export default function App() {
                     loading={loading}
                   />
 
-                  <div className="mt-4 pt-3.5 border-t border-[#f4eedf]/15 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-semibold text-[#f4eedf]/70 mr-1">
+                  <div className="mt-3.5 pt-3 border-t border-[#f4eedf]/10 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-[#a6b0c3] mr-1">
                       Instant Models:
                     </span>
                     {[
@@ -835,7 +838,7 @@ export default function App() {
                         key={item.sym}
                         type="button"
                         onClick={() => handleQuickLaunch(item.sym, item.m)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0b1322]/65 hover:bg-[#e3b23c] text-[#f4eedf] hover:text-[#0f141c] border border-[#f4eedf]/20 hover:border-[#e3b23c] text-xs font-semibold transition-all cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0d121a] hover:bg-[#e3b23c] text-[#f4eedf] hover:text-[#0f141c] border border-[#f4eedf]/10 hover:border-[#e3b23c] text-xs font-semibold transition-all cursor-pointer"
                       >
                         <span className="text-[10px]">{item.flag}</span>
                         <span>{item.label}</span>
