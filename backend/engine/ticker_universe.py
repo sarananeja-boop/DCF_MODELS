@@ -458,6 +458,9 @@ def clean_company_name(raw_name: str) -> str:
     # Fix "(India)" -> "India" when preceded by words
     text = re.sub(r"\(India\)", "India", text, flags=re.IGNORECASE)
 
+    # Expand truncated exchange suffixes like " L" or " L." to " Ltd" so names are never cut off
+    text = re.sub(r"\bL\.?$", "Ltd", text, flags=re.IGNORECASE)
+
     # Convert ALL-CAPS names from NSE/SEC into clean Title Case while preserving acronyms
     if text.isupper() or text.islower():
         words = text.split(" ")

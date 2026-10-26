@@ -9,15 +9,10 @@ import {
   FiGrid, 
   FiActivity, 
   FiCpu, 
-  FiRefreshCw, 
-  FiMessageSquare,
   FiRotateCcw,
   FiArrowRight,
-  FiCheckCircle,
-  FiLayers,
+  FiArrowUpRight,
   FiFileText,
-  FiSliders,
-  FiExternalLink,
   FiX
 } from 'react-icons/fi';
 
@@ -37,8 +32,26 @@ if (API_BASE_URL) {
   axios.defaults.baseURL = API_BASE_URL;
 }
 
-// Exact benchmark outputs produced by the ValuationLab DCF Engine (100% verified consistency)
 const PREVIEW_DATA = {
+  CESC: {
+    ticker: 'CESC.NS',
+    market: 'IN',
+    name: 'CESC Limited',
+    tabLabel: '🇮🇳 CESC (NSE)',
+    currency: '₹',
+    fairValue: '₹223.42',
+    fairValueNum: 223.42,
+    currentPrice: '₹143.47',
+    currentPriceNum: 143.47,
+    upsidePct: 55.7,
+    upsideBadge: 'Regulated Utility Model',
+    upsideNote: 'Regulated utility cash flows analyzed via cost-plus rate base model',
+    wacc: '9.1%',
+    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.85',
+    mcRange: '₹128 – ₹471',
+    p5Num: 128,
+    p95Num: 471,
+  },
   HINDUNILVR: {
     ticker: 'HINDUNILVR.NS',
     market: 'IN',
@@ -46,30 +59,17 @@ const PREVIEW_DATA = {
     tabLabel: '🇮🇳 HUL (NSE)',
     currency: '₹',
     fairValue: '₹750.08',
+    fairValueNum: 750.08,
     currentPrice: '₹1,947.00',
+    currentPriceNum: 1947.00,
     upsidePct: -61.5,
-    upsideBadge: '▼ 61.5% Downside',
-    upsideNote: 'Trades at 45x P/E premium over DCF',
+    upsideBadge: '▼ 61.5% Above DCF',
+    upsideNote: 'Trades at 45x P/E quality & scarcity premium over baseline DCF',
     wacc: '11.3%',
     waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.71',
     mcRange: '₹487 – ₹1,556',
-    metrics: {
-      revBase: '₹60,580 Cr',
-      revY1: '₹65,251 Cr',
-      revY3: '₹69,926 Cr',
-      revY5: '₹77,246 Cr',
-      revTV: '₹81,494 Cr',
-      fcffBase: '₹10,094 Cr',
-      fcffY1: '₹11,207 Cr',
-      fcffY3: '₹11,937 Cr',
-      fcffY5: '₹13,108 Cr',
-      fcffTV: '₹13,829 Cr',
-      dfBase: '1.000',
-      dfY1: '0.948 (Mid-Yr)',
-      dfY3: '0.765 (Mid-Yr)',
-      dfY5: '0.618 (Mid-Yr)',
-      dfTV: '0.584',
-    }
+    p5Num: 487,
+    p95Num: 1556,
   },
   AAPL: {
     ticker: 'AAPL',
@@ -78,63 +78,69 @@ const PREVIEW_DATA = {
     tabLabel: '🇺🇸 Apple (NASDAQ)',
     currency: '$',
     fairValue: '$85.28',
+    fairValueNum: 85.28,
     currentPrice: '$338.98',
+    currentPriceNum: 338.98,
     upsidePct: -74.8,
-    upsideBadge: '▼ 74.8% Downside',
-    upsideNote: 'Trades at 38x EV/FCF multiple',
+    upsideBadge: '▼ 74.8% Above DCF',
+    upsideNote: 'Trades at 38x EV/FCF multiple; market prices in multi-decade AI ecosystem growth',
     wacc: '10.1%',
     waccNote: 'FRED US 10Y: 4.1% | Beta: 1.02',
     mcRange: '$49 – $178',
-    metrics: {
-      revBase: '$416.2 B',
-      revY1: '$424.0 B',
-      revY3: '$440.3 B',
-      revY5: '$457.2 B',
-      revTV: '$468.6 B',
-      fcffBase: '$100.9 B',
-      fcffY1: '$104.5 B',
-      fcffY3: '$108.7 B',
-      fcffY5: '$113.6 B',
-      fcffTV: '$116.4 B',
-      dfBase: '1.000',
-      dfY1: '0.953 (Mid-Yr)',
-      dfY3: '0.785 (Mid-Yr)',
-      dfY5: '0.647 (Mid-Yr)',
-      dfTV: '0.617',
-    }
-  },
-  CESC: {
-    ticker: 'CESC.NS',
-    market: 'IN',
-    name: 'CESC Limited',
-    tabLabel: '🇮🇳 CESC (+55% Upside)',
-    currency: '₹',
-    fairValue: '₹223.42',
-    currentPrice: '₹143.47',
-    upsidePct: 55.7,
-    upsideBadge: '▲ +55.7% Upside',
-    upsideNote: 'Deep value utility with robust terminal cash flow',
-    wacc: '9.1%',
-    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.85',
-    mcRange: '₹128 – ₹471',
-    metrics: {
-      revBase: '₹15,487 Cr',
-      revY1: '₹16,618 Cr',
-      revY3: '₹18,502 Cr',
-      revY5: '₹20,598 Cr',
-      revTV: '₹21,731 Cr',
-      fcffBase: '₹1,824 Cr',
-      fcffY1: '₹1,992 Cr',
-      fcffY3: '₹2,351 Cr',
-      fcffY5: '₹2,789 Cr',
-      fcffTV: '₹2,942 Cr',
-      dfBase: '1.000',
-      dfY1: '0.958 (Mid-Yr)',
-      dfY3: '0.805 (Mid-Yr)',
-      dfY5: '0.676 (Mid-Yr)',
-      dfTV: '0.646',
-    }
+    p5Num: 49,
+    p95Num: 178,
   }
+};
+
+// Helper function to format company names cleanly and prevent cutoff
+function formatCompanyName(name) {
+  if (!name) return '';
+  let n = String(name).trim();
+  n = n.replace(/\bL\.?$/i, 'Ltd');
+  return n;
+}
+
+const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cash flows", speed = 38, delay = 200 }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isDone, setIsDone] = useState(false);
+
+  useEffect(() => {
+    let index = 0;
+    setDisplayedText('');
+    setIsDone(false);
+
+    let interval;
+    const startTimeout = setTimeout(() => {
+      interval = setInterval(() => {
+        index++;
+        setDisplayedText(fullText.slice(0, index));
+        if (index >= fullText.length) {
+          clearInterval(interval);
+          setIsDone(true);
+        }
+      }, speed);
+    }, delay);
+
+    return () => {
+      clearTimeout(startTimeout);
+      if (interval) clearInterval(interval);
+    };
+  }, [fullText, speed, delay]);
+
+  const lines = displayedText.split('\n');
+
+  return (
+    <h1 className="font-heromono text-3xl sm:text-5xl md:text-[54px] font-medium tracking-tight text-[#f4eedf] leading-[1.15] drop-shadow-[0_4px_24px_rgba(6,15,32,0.65)] min-h-[72px] sm:min-h-[115px] md:min-h-[125px]">
+      {lines[0]}
+      {lines.length > 1 && (
+        <>
+          <br />
+          {lines[1]}
+        </>
+      )}
+      <span className={`inline-block w-2 sm:w-2.5 h-6 sm:h-10 md:h-11 ml-1.5 align-middle bg-[#e3b23c] ${isDone ? 'animate-pulse opacity-50' : 'animate-pulse'}`} />
+    </h1>
+  );
 };
 
 export default function App() {
@@ -150,7 +156,6 @@ export default function App() {
   const activeRequestIdRef = useRef(0);
   const valuationCacheRef = useRef(new Map());
 
-  // Populate valuation cache from session state if already present
   useEffect(() => {
     if (analysisData?.company?.ticker) {
       const key = `${analysisData.company.ticker.toUpperCase()}:${analysisData.company.market || market}`;
@@ -168,16 +173,13 @@ export default function App() {
     const saved = sessionStorage.getItem('vl_overrides');
     return saved ? JSON.parse(saved) : {};
   });
-  const [monteCarloIterations, setMonteCarloIterations] = useState(10000);
+  const [monteCarloIterations] = useState(10000);
   const [resetKey, setResetKey] = useState(0);
   const [showMethodology, setShowMethodology] = useState(false);
 
-  // Landing page interactive preview state
-  const [previewStock, setPreviewStock] = useState('HINDUNILVR');
-  const [previewTab, setPreviewTab] = useState('dcf');
-  const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.HINDUNILVR;
+  const [previewStock, setPreviewStock] = useState('CESC');
+  const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.CESC;
 
-  // Sync state to sessionStorage
   useEffect(() => {
     if (analysisData) sessionStorage.setItem('vl_analysisData', JSON.stringify(analysisData));
     else sessionStorage.removeItem('vl_analysisData');
@@ -186,7 +188,6 @@ export default function App() {
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
   useEffect(() => sessionStorage.setItem('vl_aiSummary', aiSummary), [aiSummary]);
   
-  // Only persist verified tickers when analysisData exists to avoid reload loops on invalid queries
   useEffect(() => {
     if (analysisData?.company?.ticker) {
       sessionStorage.setItem('vl_ticker', analysisData.company.ticker);
@@ -198,12 +199,10 @@ export default function App() {
   useEffect(() => sessionStorage.setItem('vl_market', market), [market]);
   useEffect(() => sessionStorage.setItem('vl_overrides', JSON.stringify(overrides)), [overrides]);
 
-  // Pre-warm backend container immediately upon page load to eliminate cold start friction
   useEffect(() => {
     axios.get('/api/health').then(() => setServerAwake(true)).catch(() => {});
   }, []);
 
-  // Timer for loading screen to give reassuring feedback during cold starts
   useEffect(() => {
     let interval;
     if (loading) {
@@ -217,7 +216,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Auto-refresh on page reload (Cmd+R) ONLY if there was an active valid valuation
   useEffect(() => {
     const savedTicker = sessionStorage.getItem('vl_ticker');
     const savedData = sessionStorage.getItem('vl_analysisData');
@@ -246,7 +244,6 @@ export default function App() {
     }
   }, []);
 
-  // Browser Back/Forward navigation support (SPA navigation without exiting site)
   useEffect(() => {
     if (!window.history.state) {
       const initialView = analysisData ? 'analysis' : 'home';
@@ -304,7 +301,6 @@ export default function App() {
       }
     }
 
-    // Instant in-memory cache check: eliminate re-fetching on back/forward or repeat navigation
     const cacheKey = `${targetTicker}:${targetMarket}`;
     if (!isNewSearch && Object.keys(safeOverrides).length === 0 && valuationCacheRef.current.has(cacheKey)) {
       const cached = valuationCacheRef.current.get(cacheKey);
@@ -317,10 +313,8 @@ export default function App() {
       return;
     }
 
-    // Assign unique incremental ID to this valuation request
     const currentReqId = ++activeRequestIdRef.current;
 
-    // Abort previous in-flight network request silently
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -341,7 +335,6 @@ export default function App() {
         signal: controller.signal
       });
       
-      // If a newer search was initiated while this request was running, discard silently
       if (currentReqId !== activeRequestIdRef.current) {
         return;
       }
@@ -350,7 +343,9 @@ export default function App() {
       const resolvedMarket = response.data?.company?.market || targetMarket;
       const redirectNote = response.data?.company?.redirect_note;
 
-      valuationCacheRef.current.set(cacheKey, response.data);
+      if (Object.keys(safeOverrides).length === 0) {
+        valuationCacheRef.current.set(cacheKey, response.data);
+      }
       setServerAwake(true);
       setAnalysisData(response.data);
       setTicker(resolvedTicker);
@@ -359,10 +354,9 @@ export default function App() {
       if (redirectNote) {
         toast.success(redirectNote, { duration: 6000 });
       } else {
-        toast.success(`Analysis for ${resolvedTicker} completed`);
+        toast.success(`Valuation for ${resolvedTicker} ready`);
       }
       
-      // Update browser history only for new searches (not on popstate back/forward traversal)
       if (!isHistoryNav) {
         try {
           window.history.pushState(
@@ -373,21 +367,19 @@ export default function App() {
         } catch (_) {}
       }
     } catch (err) {
-      // If this is no longer the active request, ignore completely
       if (currentReqId !== activeRequestIdRef.current) {
         return;
       }
 
       if (axios.isCancel(err) || err.name === 'CanceledError') {
-        // Silent cancellation when superseded by newer request
         return;
       }
 
       let errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message;
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep on Render. Please retry in 10 seconds.';
+        errorMsg = 'Valuation request timed out. The backend server may be waking up from cold sleep. Please retry in 10 seconds.';
       } else if (errorMsg?.includes('not supported for DCF')) {
-        // Keep the specific ETF / Commodity ETF / Mutual Fund / REIT / InvIT explanation intact
+        // Keep ETF/REIT explanation
       } else if (
         errorMsg?.includes('did not return critical data') ||
         errorMsg?.includes('Cannot build a DCF') ||
@@ -398,12 +390,10 @@ export default function App() {
       } else if (!errorMsg) {
         errorMsg = 'An error occurred during valuation analysis';
       }
-      // Never leave invalid tickers in session storage
       sessionStorage.removeItem('vl_ticker');
       setError(errorMsg);
       toast.error(errorMsg, { duration: 6000 });
     } finally {
-      // Only the active request is allowed to reset the loading state
       if (currentReqId === activeRequestIdRef.current) {
         setLoading(false);
         setLoadingTimer(0);
@@ -457,7 +447,7 @@ export default function App() {
     try {
       const response = await axios.post('/api/ai-summary', { analysis_data: analysisData });
       setAiSummary(response.data.summary);
-      toast.success('AI summary generated');
+      toast.success('Research memo generated');
     } catch (err) {
       toast.error('Failed to generate AI summary');
       console.error(err);
@@ -466,146 +456,188 @@ export default function App() {
     }
   };
 
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: <FiActivity className="w-4 h-4" /> },
-    { id: 'dcf', label: 'DCF Model', icon: <FiTrendingUp className="w-4 h-4" /> },
-    { id: 'monte_carlo', label: 'Monte Carlo', icon: <FiCpu className="w-4 h-4" /> },
-    { id: 'sensitivity', label: 'Sensitivity', icon: <FiGrid className="w-4 h-4" /> },
-    { id: 'trends', label: 'Trends', icon: <FiBarChart2 className="w-4 h-4" /> }
+    { id: 'overview', label: 'Valuation Overview', icon: <FiActivity className="w-4 h-4" /> },
+    { id: 'dcf', label: 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
+    { id: 'monte_carlo', label: 'Monte Carlo (10k Runs)', icon: <FiCpu className="w-4 h-4" /> },
+    { id: 'sensitivity', label: 'Sensitivity Matrix', icon: <FiGrid className="w-4 h-4" /> },
+    { id: 'trends', label: 'Historical Trends', icon: <FiBarChart2 className="w-4 h-4" /> }
   ];
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-slate-100 font-sans flex flex-col selection:bg-blue-600 selection:text-white">
-      <Toaster position="top-right" toastOptions={{ className: 'bg-zinc-900 text-white border border-zinc-700' }} />
-      
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-zinc-800/80 bg-zinc-950/85 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 py-3">
-        {/* Brand Logo & Title */}
-        <div 
-          className="flex items-center gap-3 cursor-pointer group select-none"
-          onClick={handleGoHome}
-        >
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-b from-blue-600/25 to-indigo-600/15 border border-blue-500/30 shadow-sm group-hover:border-blue-400/60 group-hover:shadow-blue-500/10 transition-all duration-200">
-            <svg className="w-4.5 h-4.5 text-blue-400 group-hover:text-blue-300 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18" />
-              <path d="m19 9-5 5-4-4-3 3" />
-            </svg>
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <h1 className="font-bold tracking-tight text-base sm:text-lg text-zinc-100 group-hover:text-white transition-colors">
-                Valuation<span className="text-blue-400">Lab</span>
-              </h1>
-              <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                DCF Engine
-              </span>
-            </div>
-            <span className="text-[11px] text-zinc-400 hidden sm:block">Automated Valuation & Scenario Modeling</span>
-          </div>
-        </div>
+  const prevScaleMax = Math.max(currentPreview.currentPriceNum, currentPreview.fairValueNum, currentPreview.p95Num) * 1.15;
+  const prevFairPct = Math.min(92, Math.max(8, (currentPreview.fairValueNum / prevScaleMax) * 100));
+  const prevPricePct = Math.min(92, Math.max(8, (currentPreview.currentPriceNum / prevScaleMax) * 100));
 
-        {/* Right Header Navigation / Actions */}
-        <div className="flex items-center gap-2.5">
-          {!analysisData ? (
-            <>
-              <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-400">
-                <span className="text-zinc-500 text-[11px]">Markets:</span>
-                <span className="text-zinc-300 font-medium">US & Indian Equities</span>
+  // Workspace Top Highlight Calculations
+  const wsSymbol = analysisData?.company?.symbol || (analysisData?.company?.currency === 'INR' ? '₹' : '$');
+  const wsCurrentPrice = Number(analysisData?.market_data?.current_price || 1);
+  const wsFairValue = Number(analysisData?.dcf_result?.implied_price || 0);
+  const wsMcMedian = Number(analysisData?.monte_carlo?.stats?.median || wsFairValue);
+  const wsP5 = Number(analysisData?.monte_carlo?.stats?.p5 || wsFairValue * 0.65);
+  const wsP95 = Number(analysisData?.monte_carlo?.stats?.p95 || wsFairValue * 1.45);
+  const wsUpsidePct = ((wsFairValue / wsCurrentPrice) - 1) * 100;
+  const wsIsUndervalued = wsUpsidePct >= 0;
+
+  return (
+    <div className="min-h-screen bg-[#0c1017] text-[#f4eedf] font-sans flex flex-col selection:bg-[#e3b23c] selection:text-[#0f141c]">
+      <Toaster position="top-right" toastOptions={{ className: 'bg-[#141b26] text-[#f4eedf] border border-[#f4eedf]/15 font-sans text-xs font-semibold' }} />
+      
+      {/* Workspace Sticky Header (Shown ONLY when inside Valuation Workspace) */}
+      {analysisData && (
+        <header className="sticky top-0 z-50 w-full border-b border-[#f4eedf]/10 bg-[#0c1017]/95 backdrop-blur-md">
+          <div className="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 py-3">
+            {/* Brand Logo */}
+            <div 
+              className="flex items-center gap-3 cursor-pointer group select-none shrink-0"
+              onClick={() => handleGoHome(true)}
+            >
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 group-hover:border-[#e3b23c]/50 transition-all">
+                <svg className="w-4 h-4 text-[#e3b23c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 3v18h18" />
+                  <path d="m19 9-5 5-4-4-3 3" />
+                </svg>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="font-display text-lg font-bold tracking-tight text-[#f4eedf]">
+                  Valuation<span className="text-[#e3b23c]">Lab</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Center: Wide Search Bar */}
+            <div className="flex-1 flex justify-center min-w-[280px] max-w-2xl mx-auto">
+              <TickerInput
+                compact={true}
+                ticker={ticker}
+                setTicker={setTicker}
+                market={market}
+                setMarket={setMarket}
+                onAnalyze={handleAnalyze}
+                loading={loading}
+              />
+            </div>
+
+            {/* Right Actions */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <ExcelDownloadButton data={analysisData} compact={true} />
               <button
                 type="button"
                 onClick={() => setShowMethodology(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-lg transition-colors cursor-pointer shadow-sm"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
               >
-                <FiFileText className="w-3.5 h-3.5 text-zinc-400" />
-                <span>Methodology</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs">
-                <span className="font-semibold text-zinc-200">{analysisData?.company?.ticker || ticker}</span>
-                <span className="text-zinc-600">|</span>
-                <span className="text-zinc-400 truncate max-w-[140px]">{analysisData?.company?.name || ''}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowMethodology(true)}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 rounded-lg transition-colors cursor-pointer"
-              >
-                <FiFileText className="w-3.5 h-3.5 text-zinc-400" />
+                <FiFileText className="w-3.5 h-3.5 text-[#e3b23c]" />
                 <span>Methodology</span>
               </button>
               <button 
                 type="button"
-                onClick={handleGoHome}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-white px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 hover:border-zinc-600 transition shadow-sm cursor-pointer"
+                onClick={() => handleGoHome(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#f4eedf] hover:text-[#e3b23c] px-3.5 py-2 rounded-xl bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/15 transition cursor-pointer"
               >
-                <FiRotateCcw className="w-3.5 h-3.5 text-zinc-400" />
-                <span>Search Another Stock</span>
+                <FiRotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Home</span>
               </button>
-            </>
-          )}
-        </div>
-      </header>
+            </div>
+          </div>
+        </header>
+      )}
 
-      {/* Methodology Modal */}
+      {/* Methodology Modal (Spacious, High-Contrast & Readable) */}
       {showMethodology && (
-        <div className="fixed inset-0 z-50 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+        <div className="fixed inset-0 z-50 bg-[#080c12]/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-[#141b26] border border-[#f4eedf]/20 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#f4eedf]/12 bg-[#0f1520]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 flex items-center justify-center text-[#e3b23c]">
                   <FiFileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-zinc-100">DCF Valuation Methodology</h3>
-                  <p className="text-xs text-zinc-400">Institutional Damodaran-aligned framework</p>
+                  <h3 className="font-display text-lg font-bold text-[#f4eedf] tracking-tight">DCF &amp; Cholesky Monte Carlo Methodology</h3>
+                  <p className="text-xs text-[#a6b0c3]">Institutional Damodaran-aligned intrinsic valuation pipeline</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowMethodology(false)}
-                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                className="p-2 text-[#a6b0c3] hover:text-[#f4eedf] hover:bg-[#1f2937] rounded-xl transition-colors cursor-pointer"
               >
                 <FiX className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto space-y-4 text-xs text-zinc-300 leading-relaxed">
-              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">1. Historical Normalization</h4>
-                <p className="text-zinc-400">Extracts 4-year audited balance sheet, income statement, and cash flow data with date cross-intersection to prevent restatement distortion.</p>
+            <div className="p-6 sm:p-7 overflow-y-auto space-y-4 text-sm text-[#f4eedf]/90 leading-relaxed">
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-display text-xs font-bold text-[#e3b23c] font-mono">01.</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Linear Growth Fade &amp; Operating Margin Convergence</h4>
+                  </div>
+                  <span className="font-display text-xs text-[#e3b23c] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                    FCFF = NOPAT + D&amp;A − CapEx − ΔNWC
+                  </span>
+                </div>
+                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
+                  Year-1 revenue growth fades linearly toward the long-run nominal GDP terminal rate over 5 years. Operating EBIT margin converges toward sustainable target/historical margins, computing Unlevered Free Cash Flow available to all capital providers.
+                </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">2. Dynamic WACC Computation</h4>
-                <p className="text-zinc-400">Applies CAPM using real-time 10Y sovereign bond yields (US Treasury or India 10Y G-Sec), 5-year beta, and country-specific risk premiums.</p>
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#5b8fd9]/15 text-[#8ab4f8] border border-[#5b8fd9]/30">02</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Dynamic Cost of Capital (WACC, CAPM &amp; Mid-Year Convention)</h4>
+                  </div>
+                  <span className="font-display text-xs text-[#8ab4f8] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                    Ke = Rf + β × ERP &nbsp;|&nbsp; t = 0.5, 1.5 …
+                  </span>
+                </div>
+                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
+                  Cost of Equity (<strong className="text-[#f4eedf]">Ke</strong>) is anchored to live 10-year sovereign bond yields (India 10Y G-Sec via RBI or US FRED Treasury), blended with after-tax debt cost via synthetic interest-coverage ratings. Cash flows are discounted using the Mid-Year convention (<span className="text-[#f4eedf]">t − 0.5</span>) because earnings accrue evenly throughout the year.
+                </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">3. 5-Year Unlevered Free Cash Flows (FCFF)</h4>
-                <p className="text-zinc-400">Forecasts revenues with fading growth, applies NOPAT margin convergence, and factors in reinvestment rate dynamics (CapEx, D&A, and Net Working Capital changes).</p>
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#34b38a]/15 text-[#34b38a] border border-[#34b38a]/30">03</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Cholesky Decomposition (Σ = L·Lᵀ) &amp; Fat-Tailed Monte Carlo</h4>
+                  </div>
+                  <span className="font-display text-xs text-[#34b38a] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                    10,000 Runs &nbsp;|&nbsp; df = 5 &nbsp;|&nbsp; 3× Oversampled
+                  </span>
+                </div>
+                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
+                  Factors a 7×7 empirical correlation matrix (linking Revenue Growth, EBIT Margin, Risk-Free Rate, Beta, ERP, and Debt Costs). Draws 3× oversampled heavy-tailed shocks from Student&apos;s t-distribution (<span className="text-[#f4eedf]">df = 5</span>), rejects invalid economic states (WACC ≤ g), and outputs the 10,000-trial probability distribution (P5 Bear, P50 Median, P95 Bull).
+                </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">4. Monte Carlo Simulation</h4>
-                <p className="text-zinc-400">Executes 10,000 randomized simulation runs over WACC and terminal growth distributions to evaluate fair value variance and downside probability.</p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/60">
-                <h4 className="font-semibold text-zinc-100 mb-1 text-sm">5. Model Validation & Multiple Cross-Check</h4>
-                <p className="text-zinc-400">Cross-checks DCF implied Enterprise Value against prevailing market multiples (EV/EBITDA or EV/Revenue for non-financials, and Price-to-Book / P/B for banks) to test whether fundamental intrinsic cash flows align with market pricing or require market re-rating.</p>
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#e07a5f]/15 text-[#e07a5f] border border-[#e07a5f]/30">04</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Bank &amp; Financial Institution Auto-Switch (FCFE &amp; Justified P/B)</h4>
+                  </div>
+                  <span className="font-display text-xs text-[#e07a5f] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                    Tier-1 Capital &nbsp;|&nbsp; Direct-to-Equity FCFE
+                  </span>
+                </div>
+                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
+                  For banks and NBFCs, customer deposits and borrowings are operational working capital rather than debt. The engine automatically switches to a 100%-equity Tier-1 Regulatory Capital FCFE model where terminal equity value is validated through Justified Price-to-Book: <span className="text-[#f4eedf]">P/B = (ROE − g) / (Ke − g)</span>.
+                </p>
               </div>
             </div>
 
-            <div className="px-6 py-3 border-t border-zinc-800/80 bg-zinc-950/50 flex justify-end">
+            <div className="px-6 py-4 border-t border-[#f4eedf]/12 bg-[#0f1520] flex justify-end">
               <button
                 type="button"
                 onClick={() => setShowMethodology(false)}
-                className="px-4 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors cursor-pointer"
+                className="px-5 py-2.5 text-xs font-bold bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] rounded-xl transition cursor-pointer shadow-md"
               >
-                Close
+                Done
               </button>
             </div>
           </div>
@@ -613,55 +645,50 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 relative overflow-hidden flex flex-col">
+      <main className="flex-1 relative flex flex-col">
         
-        {/* Reassuring Loading Overlay with cold start progress timer and cancel escape hatch */}
+        {/* Loading Overlay */}
         {loading && (
-          <div className="fixed inset-0 bg-zinc-950/85 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
+          <div className="fixed inset-0 bg-[#0c1017]/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
             <div className="relative mb-6">
-              <div className="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center font-mono text-xs text-blue-400 font-bold">
+              <div className="w-16 h-16 rounded-full border-4 border-[#e3b23c]/20 border-t-[#e3b23c] animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center font-display text-xs text-[#e3b23c] font-bold">
                 {loadingTimer}s
               </div>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-zinc-100 mb-2">
-              Valuing {ticker || 'Company'}...
+            <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-2">
+              Valuating {ticker || 'Company'}...
             </h2>
-            <p className="text-zinc-400 max-w-md text-sm leading-relaxed mb-4 min-h-[40px] flex items-center justify-center">
+            <p className="text-[#a6b0c3] max-w-md text-xs sm:text-sm leading-relaxed mb-4 min-h-[40px] flex items-center justify-center">
               {loadingTimer < 2
-                ? 'Fetching live SEC/NSE financial statements & market data...'
+                ? 'Extracting audited SEC / NSE financial statements & market data...'
                 : loadingTimer < 5
-                ? 'Computing CAPM WACC, 5-year FCFF & 10,000 Monte Carlo simulations...'
+                ? 'Computing CAPM WACC, 5-year FCFF & 10,000 Cholesky Monte Carlo runs...'
                 : !serverAwake && loadingTimer >= 8
                 ? 'Waking up cloud valuation engine (~15-25s on cold start)...'
                 : 'Finalizing sensitivity matrices & valuation diagnostics...'}
             </p>
-            {!serverAwake && loadingTimer >= 8 && (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs mb-6 animate-pulse">
-                <span>⚡ Cloud server warming up from idle sleep</span>
-              </div>
-            )}
             <button
               type="button"
               onClick={handleCancelAnalyze}
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg transition-colors cursor-pointer"
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] border border-[#f4eedf]/15 rounded-xl transition-colors cursor-pointer"
             >
               <FiX className="w-3.5 h-3.5" />
-              <span>Cancel & Return</span>
+              <span>Cancel &amp; Return</span>
             </button>
           </div>
         )}
 
-        {/* Error Banner with Retry Escape Hatch */}
+        {/* Error Banner */}
         {error && (
-          <div className="bg-red-950/70 border border-red-500/50 text-red-100 p-4 mx-6 mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 rounded-xl shadow-xl z-40 animate-in fade-in duration-200">
+          <div className="bg-[#2c1618] border border-[#e07a5f]/50 text-[#f4eedf] p-4 mx-auto max-w-5xl w-full mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 rounded-xl shadow-xl z-40">
             <div className="flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400 mt-0.5">
+              <div className="p-1.5 rounded-lg bg-[#e07a5f]/20 text-[#e07a5f] mt-0.5">
                 <FiX className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-bold text-sm text-red-200">Valuation Attempt Incomplete</p>
-                <p className="text-xs sm:text-sm text-red-300/90 leading-relaxed mt-0.5">{error}</p>
+                <p className="font-display font-bold text-base text-[#f4eedf]">Valuation Attempt Incomplete</p>
+                <p className="text-xs sm:text-sm text-[#f4eedf]/80 leading-relaxed mt-0.5">{error}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -672,7 +699,7 @@ export default function App() {
                     setError(null);
                     handleAnalyze({}, false, ticker, market);
                   }}
-                  className="px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-bold bg-[#e07a5f] text-[#0f141c] rounded-lg transition-colors cursor-pointer"
                 >
                   Retry {ticker}
                 </button>
@@ -680,7 +707,7 @@ export default function App() {
               <button 
                 type="button"
                 onClick={() => setError(null)} 
-                className="text-xs text-red-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-red-800/60 hover:bg-red-900/40 transition-colors cursor-pointer"
+                className="text-xs text-[#f4eedf]/80 hover:text-[#f4eedf] px-2.5 py-1.5 rounded-lg border border-[#f4eedf]/20 transition-colors cursor-pointer"
               >
                 Dismiss
               </button>
@@ -688,477 +715,946 @@ export default function App() {
           </div>
         )}
 
-        {/* Landing Page (Remains visible even if a previous search timed out) */}
+        {/* ===================================================================== */}
+        {/* LANDING PAGE: PAINTERLY BSE HERO + METHODOLOGY & VISUAL DIAGRAMS      */}
+        {/* (All Educational Explanations Live Here, NOT on the Analysis Page!)   */}
+        {/* ===================================================================== */}
         {!analysisData && !loading && (
-          <div className="flex-1 flex flex-col items-center overflow-y-auto px-4 py-12 sm:px-6 relative">
-            {/* Subtle background glow */}
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-blue-600/10 blur-[140px] rounded-full pointer-events-none"></div>
+          <div className="flex-1 flex flex-col">
+            
+            {/* 1. FULL-BLEED PAINTERLY HERO SECTION */}
+            <section className="relative min-h-[92vh] w-full flex flex-col justify-between overflow-hidden select-none">
+              <img
+                src="/bse_acrylic_hero.jpg"
+                alt="Acrylic painting of the Bombay Stock Exchange tower across a sunlit meadow under a deep Prussian-blue sky"
+                className="absolute inset-0 w-full h-full object-cover scale-[1.32] translate-x-[-3%] translate-y-[-6%] origin-[60%_65%] transition-transform duration-700 ease-out"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-[#071124]/35 via-transparent to-[#0c1017]/90 pointer-events-none" />
 
-            {/* Hero Section */}
-            <div className="max-w-4xl w-full text-center mb-10 relative z-10">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-900/80 px-3.5 py-1 text-xs font-medium text-zinc-400 backdrop-blur-md shadow-sm">
-                <span>US & Indian Equities</span>
+              {/* Top-Center Floating Frosted-Glass Pill Navbar */}
+              <div className="relative z-20 pt-6 sm:pt-8 px-4 flex justify-center">
+                <nav className="frosted-pill rounded-2xl px-3 sm:px-4 py-2 flex items-center gap-3 sm:gap-6 shadow-2xl">
+                  <button
+                    type="button"
+                    onClick={() => handleGoHome(true)}
+                    className="w-8 h-8 rounded-lg bg-[#f4eedf]/15 border border-[#f4eedf]/25 flex items-center justify-center text-[#f4eedf] hover:bg-[#f4eedf]/25 transition cursor-pointer"
+                    title="ValuationLab"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 3v18h18" />
+                      <path d="m19 9-5 5-4-4-3 3" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('dcf-explainer')}
+                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
+                  >
+                    Methodology
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('cholesky-section')}
+                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
+                  >
+                    Cholesky &amp; WACC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('portfolio-guide')}
+                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
+                  >
+                    Portfolio Guide
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('live-showcase')}
+                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
+                  >
+                    Live Models
+                  </button>
+                </nav>
               </div>
 
-              <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-zinc-100 mb-4 leading-tight">
-                Automated DCF <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
-                  Valuation Engine
-                </span>
-              </h2>
-
-              <p className="text-base sm:text-lg text-zinc-400 font-normal max-w-xl mx-auto leading-relaxed mb-8">
-                Calculate intrinsic value, run Monte Carlo simulations, and export financial models for US and Indian stocks.
-              </p>
-
-              {/* Main Ticker Search Box */}
-              <div className="max-w-2xl mx-auto w-full text-left mb-6 shadow-2xl">
-                <TickerInput 
-                  ticker={ticker}
-                  setTicker={setTicker}
-                  market={market}
-                  setMarket={setMarket}
-                  onAnalyze={handleAnalyze}
-                  loading={loading}
-                />
+              {/* Upper-Sky Headline (Live Typewriter Effect on Refresh / Mount) */}
+              <div className="relative z-20 max-w-4xl mx-auto text-center px-4 mt-6 sm:mt-10 mb-auto">
+                <TypewriterHeadline />
               </div>
 
-              {/* One-Click Quick-Start Pills (Eliminates user friction) */}
-              <div className="flex flex-col items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Instant One-Click Analysis:
-                </span>
-                <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                  {[
-                    { sym: 'HINDUNILVR.NS', label: 'Hindustan Unilever', m: 'IN', flag: '🇮🇳' },
-                    { sym: 'RELIANCE.NS', label: 'Reliance', m: 'IN', flag: '🇮🇳' },
-                    { sym: 'HDFCBANK.NS', label: 'HDFC Bank', m: 'IN', flag: '🇮🇳' },
-                    { sym: 'TCS.NS', label: 'TCS', m: 'IN', flag: '🇮🇳' },
-                    { sym: 'AAPL', label: 'Apple', m: 'US', flag: '🇺🇸' },
-                    { sym: 'NVDA', label: 'NVIDIA', m: 'US', flag: '🇺🇸' },
-                    { sym: 'MSFT', label: 'Microsoft', m: 'US', flag: '🇺🇸' },
-                    { sym: 'TSLA', label: 'Tesla', m: 'US', flag: '🇺🇸' },
-                  ].map((item) => (
+              {/* Bottom Hero Split: Left Frosted Narrative Card + Right Interactive Valuation Search */}
+              <div className="relative z-20 max-w-7xl w-full mx-auto px-4 sm:px-8 pb-6 sm:pb-8 pt-24 grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+                <div className="lg:col-span-5 frosted-card rounded-3xl p-5 sm:p-7 text-left">
+                  <p className="text-xs sm:text-sm text-[#f4eedf]/95 leading-relaxed mb-5">
+                    Value any Indian or US company from first principles. Extract audited financial statements, discount future cash flows with live sovereign yields, and stress-test fair value across 10,000 Cholesky-correlated Monte Carlo simulations.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-6 text-xs sm:text-sm font-semibold">
                     <button
-                      key={item.sym}
-                      onClick={() => handleQuickLaunch(item.sym, item.m)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 text-xs font-medium transition-all shadow-sm hover:scale-[1.03] active:scale-[0.98]"
+                      type="button"
+                      onClick={() => scrollToSection('dcf-explainer')}
+                      className="inline-flex items-center gap-1.5 text-[#f4eedf] hover:text-[#e3b23c] underline underline-offset-4 decoration-[#f4eedf]/60 hover:decoration-[#e3b23c] transition cursor-pointer"
                     >
-                      <span className="text-[11px]">{item.flag}</span>
-                      <span className="font-semibold text-zinc-200">{item.label}</span>
-                      <span className="text-[10px] text-zinc-400 font-mono">({item.sym.replace('.NS', '')})</span>
+                      <span>How DCF works</span>
+                      <FiArrowUpRight className="w-4 h-4" />
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('portfolio-guide')}
+                      className="wavy-link text-[#f4eedf] cursor-pointer"
+                    >
+                      Build your portfolio
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-7 frosted-card rounded-3xl p-5 sm:p-7 text-left">
+                  <TickerInput 
+                    heroMode={true}
+                    ticker={ticker}
+                    setTicker={setTicker}
+                    market={market}
+                    setMarket={setMarket}
+                    onAnalyze={handleAnalyze}
+                    loading={loading}
+                  />
+
+                  <div className="mt-4 pt-3.5 border-t border-[#f4eedf]/15 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-[#f4eedf]/70 mr-1">
+                      Instant Models:
+                    </span>
+                    {[
+                      { sym: 'HINDUNILVR.NS', label: 'HUL', m: 'IN', flag: '🇮🇳' },
+                      { sym: 'RELIANCE.NS', label: 'Reliance', m: 'IN', flag: '🇮🇳' },
+                      { sym: 'HDFCBANK.NS', label: 'HDFC Bank', m: 'IN', flag: '🇮🇳' },
+                      { sym: 'TCS.NS', label: 'TCS', m: 'IN', flag: '🇮🇳' },
+                      { sym: 'CESC.NS', label: 'CESC', m: 'IN', flag: '🇮🇳' },
+                      { sym: 'AAPL', label: 'Apple', m: 'US', flag: '🇺🇸' },
+                      { sym: 'NVDA', label: 'NVIDIA', m: 'US', flag: '🇺🇸' },
+                      { sym: 'MSFT', label: 'Microsoft', m: 'US', flag: '🇺🇸' },
+                    ].map((item) => (
+                      <button
+                        key={item.sym}
+                        type="button"
+                        onClick={() => handleQuickLaunch(item.sym, item.m)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0b1322]/65 hover:bg-[#e3b23c] text-[#f4eedf] hover:text-[#0f141c] border border-[#f4eedf]/20 hover:border-[#e3b23c] text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        <span className="text-[10px]">{item.flag}</span>
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* Interactive Live Valuation Showcase Card (Synchronized with DCF engine outputs) */}
-            <div className="max-w-4xl w-full mb-16 relative z-10">
-                  <div className="bg-zinc-900/60 rounded-2xl border border-zinc-800 p-6 backdrop-blur-xl shadow-2xl">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Live Model Showcase</span>
-                          <span className="text-zinc-600">•</span>
-                          <span className="text-xs text-zinc-400">Verified Engine Outputs</span>
+            {/* ===================================================================== */}
+            {/* BELOW THE HERO: METHODOLOGY & PORTFOLIO GUIDE                         */}
+            {/* ===================================================================== */}
+            <div className="max-w-[1560px] w-full mx-auto px-6 lg:px-12 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12 xl:gap-16 items-start">
+              
+              {/* STICKY LEFT-HAND READING GUIDE RAIL (Spacious, Clear & Open) */}
+              <aside className="hidden lg:block lg:col-span-4 sticky top-12 pr-6 border-r border-[#f4eedf]/10 space-y-8">
+                <div>
+                  <span className="text-xs font-display uppercase tracking-[0.22em] text-[#e3b23c] block mb-3 font-bold">
+                    Methodology Guide
+                  </span>
+                  <h3 className="font-display text-2xl font-bold text-[#f4eedf] tracking-tight mb-3">
+                    How Our Valuation Engine Works
+                  </h3>
+                  <p className="text-sm text-[#a6b0c3] leading-relaxed">
+                    Walk through the exact mathematical pipeline we run when you analyze a stock—from operating margins and discount rates to Cholesky Monte Carlo simulations.
+                  </p>
+                </div>
+
+                <nav className="space-y-3">
+                  {[
+                    { id: 'dcf-explainer', num: '01', title: 'Operating Margin & Free Cash Flow (FCFF)', subtitle: 'Linear growth fade & revenue-to-FCFF waterfall' },
+                    { id: 'wacc-section', num: '02', title: 'Discount Rate (WACC, CAPM & Mid-Year)', subtitle: 'Sovereign 10Y yields, synthetic spreads & mid-year discounting' },
+                    { id: 'cholesky-section', num: '03', title: 'Cholesky Decomposition & 10,000 Runs', subtitle: '7×7 empirical correlation matrix & Student’s t-shocks' },
+                    { id: 'portfolio-guide', num: '04', title: 'Incorporating DCF in Stock Analysis', subtitle: 'Margin of safety, compounders & portfolio sizing' },
+                    { id: 'live-showcase', num: '05', title: 'Verified Live Engine Benchmarks', subtitle: 'Sample DCF models & workspace launch' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => scrollToSection(item.id)}
+                      className="w-full text-left p-3.5 rounded-2xl bg-[#141b26]/50 hover:bg-[#141b26] border border-[#f4eedf]/8 hover:border-[#e3b23c]/40 transition-all cursor-pointer group flex items-start gap-3.5 shadow-sm"
+                    >
+                      <span className="w-8 h-8 rounded-xl bg-[#0d121a] text-[#e3b23c] border border-[#f4eedf]/10 group-hover:bg-[#e3b23c] group-hover:text-[#0f141c] flex items-center justify-center font-display font-bold text-xs shrink-0 transition-colors">
+                        {item.num}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-bold text-sm text-[#f4eedf] group-hover:text-[#e3b23c] transition-colors leading-snug">
+                          {item.title}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          {Object.keys(PREVIEW_DATA).map((key) => {
-                            const item = PREVIEW_DATA[key];
-                            const isSelected = previewStock === key;
-                            return (
-                              <button 
-                                key={key}
-                                onClick={() => setPreviewStock(key)}
-                                className={`text-xs sm:text-sm font-bold px-3 py-1.5 rounded-lg transition ${
-                                  isSelected
-                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                                    : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
-                                }`}
-                              >
-                                {item.tabLabel}
-                              </button>
-                            );
-                          })}
+                        <div className="text-xs text-[#a6b0c3] mt-1 leading-normal">
+                          {item.subtitle}
                         </div>
                       </div>
+                    </button>
+                  ))}
+                </nav>
 
-                      <button
-                        onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs shadow-lg transition active:scale-[0.98]"
-                      >
-                        <span>Run Full Model Live ({currentPreview.name})</span>
-                        <FiArrowRight />
-                      </button>
+                {/* Mathematical Guardrails Reference Card */}
+                <div className="p-4 rounded-2xl bg-[#0d121a] border border-[#f4eedf]/10 space-y-2.5">
+                  <span className="text-[10px] font-display uppercase tracking-wider text-[#e3b23c] font-bold block">
+                    Institutional Standards
+                  </span>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                      <span className="text-[#a6b0c3]">Discount Period</span>
+                      <span className="font-display font-bold text-[#f4eedf]">Mid-Year (t − 0.5)</span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                      <span className="text-[#a6b0c3]">Terminal Anchor</span>
+                      <span className="font-display font-bold text-[#f4eedf]">Nominal GDP Cap</span>
+                    </div>
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-[#a6b0c3]">Fat-Tailed Shocks</span>
+                      <span className="font-display font-bold text-[#34b38a]">Student&apos;s t (df = 5)</span>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+
+              {/* MAIN CONTINUOUS EDITORIAL FLOW (8 COLUMNS) */}
+              <div className="lg:col-span-8 divide-y divide-[#f4eedf]/12">
+
+                {/* CHAPTER 01: OPERATING MARGIN, GROWTH FADE & FREE CASH FLOW (FCFF) */}
+                <section id="dcf-explainer" className="pb-16">
+                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#34b38a] block mb-2 font-bold">
+                    01 · Cash Flow &amp; Operating Margin Architecture
+                  </span>
+                  <h2 className="font-display text-2xl sm:text-4xl font-bold text-[#f4eedf] tracking-tight mb-4 leading-tight">
+                    What a DCF valuation actually measures — from Revenue Growth and Operating Margin to Free Cash Flow
+                  </h2>
+                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
+                    Every day, the stock market quotes a <strong className="text-[#f4eedf] font-semibold">share price</strong> driven by sentiment and headlines. A <strong className="text-[#f4eedf] font-semibold">Discounted Cash Flow (DCF)</strong> model measures the <strong className="text-[#e3b23c] font-semibold">intrinsic value of the business itself</strong> based on the actual cash it can distribute after paying taxes and reinvesting in operations.
+                  </p>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-center pt-4">
+                    <div className="xl:col-span-5 space-y-5">
+                      <div className="border-l-2 border-[#34b38a] pl-4">
+                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
+                          Linear Revenue Growth Fade (Years 1 → 5)
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
+                          No company grows at 20%+ forever. Our engine takes Year-1 Revenue Growth (<span className="font-display font-bold text-[#f4eedf]">g₁</span>) and <strong className="text-[#f4eedf] font-medium">linearly fades</strong> it each year toward the economy&apos;s long-run nominal GDP growth rate (<span className="font-display font-bold text-[#f4eedf]">g_terminal</span>).
+                        </p>
+                      </div>
+
+                      <div className="border-l-2 border-[#e3b23c] pl-4">
+                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
+                          Operating EBIT Margin Convergence &amp; Reinvestment
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
+                          Operating Margin (<span className="font-display font-bold text-[#f4eedf]">EBIT / Revenue</span>) measures how much profit is kept per ₹100 or $100 of sales. After deducting corporate taxes to get <strong className="text-[#f4eedf] font-medium">NOPAT</strong>, we add back non-cash D&amp;A and subtract physical CapEx and Working Capital (<span className="font-display font-bold text-[#f4eedf]">ΔNWC</span>) required to sustain growth.
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Preview Metrics Strip */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-6">
-                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                        <span className="text-xs text-zinc-400 block mb-1">Intrinsic Fair Value</span>
-                        <span className={`text-xl sm:text-2xl font-black font-mono ${
-                          currentPreview.upsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    {/* Visual SVG Diagram: Growth Fade & Margin-to-FCFF Pipeline */}
+                    <div className="xl:col-span-7 bg-[#141b26] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/10">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-[11px] font-display uppercase tracking-wider text-[#a6b0c3] font-bold">
+                          5-Year Linear Growth Fade &amp; FCFF Waterfall
+                        </span>
+                        <span className="text-[11px] font-display font-bold text-[#34b38a]">
+                          FCFF = NOPAT + D&amp;A − CapEx − ΔNWC
+                        </span>
+                      </div>
+                      <svg viewBox="0 0 600 230" className="w-full h-auto">
+                        <text x="15" y="22" fill="#f4eedf" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
+                          A. Revenue Growth Linear Decay (Yr 1 → Yr 5)
+                        </text>
+                        <line x1="25" y1="175" x2="270" y2="175" stroke="#f4eedf" strokeOpacity="0.2" strokeWidth="1" />
+                        <line x1="25" y1="40" x2="25" y2="175" stroke="#f4eedf" strokeOpacity="0.2" strokeWidth="1" />
+                        <line x1="25" y1="145" x2="270" y2="145" stroke="#e3b23c" strokeDasharray="4 4" strokeWidth="1.2" />
+                        <text x="175" y="138" fill="#e3b23c" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
+                          Terminal g (GDP Cap)
+                        </text>
+                        <polyline
+                          fill="none"
+                          stroke="#34b38a"
+                          strokeWidth="3"
+                          points="45,58 95,80 145,102 195,123 245,145"
+                        />
+                        {[
+                          { x: 45, y: 58, yr: 'Yr 1', val: '16%' },
+                          { x: 95, y: 80, yr: 'Yr 2', val: '13.4%' },
+                          { x: 145, y: 102, yr: 'Yr 3', val: '10.8%' },
+                          { x: 195, y: 123, yr: 'Yr 4', val: '8.1%' },
+                          { x: 245, y: 145, yr: 'Yr 5', val: '5.5%' },
+                        ].map((pt, idx) => (
+                          <g key={idx}>
+                            <circle cx={pt.x} cy={pt.y} r="4.5" fill="#34b38a" />
+                            <text x={pt.x} y={pt.y - 9} textAnchor="middle" fill="#f4eedf" fontSize="9" fontFamily="Space Grotesk, sans-serif">
+                              {pt.val}
+                            </text>
+                            <text x={pt.x} y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
+                              {pt.yr}
+                            </text>
+                          </g>
+                        ))}
+
+                        <line x1="295" y1="20" x2="295" y2="205" stroke="#f4eedf" strokeOpacity="0.1" strokeWidth="1" />
+
+                        <text x="315" y="22" fill="#f4eedf" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
+                          B. Operating Margin to Free Cash Flow
+                        </text>
+                        <rect x="320" y="45" width="42" height="130" rx="4" fill="#5b8fd9" fillOpacity="0.85" />
+                        <text x="341" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">Revenue</text>
+                        <text x="341" y="40" textAnchor="middle" fill="#8ab4f8" fontSize="9" fontFamily="Space Grotesk, sans-serif">100%</text>
+
+                        <rect x="378" y="105" width="42" height="70" rx="4" fill="#e3b23c" fillOpacity="0.85" />
+                        <text x="399" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">EBIT</text>
+                        <text x="399" y="99" textAnchor="middle" fill="#e3b23c" fontSize="9" fontFamily="Space Grotesk, sans-serif">Margin</text>
+
+                        <rect x="436" y="122" width="42" height="53" rx="4" fill="#e07a5f" fillOpacity="0.8" />
+                        <text x="457" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">NOPAT</text>
+                        <text x="457" y="116" textAnchor="middle" fill="#e07a5f" fontSize="9" fontFamily="Space Grotesk, sans-serif">−Tax</text>
+
+                        <rect x="494" y="135" width="42" height="40" rx="4" fill="#a6b0c3" fillOpacity="0.5" />
+                        <text x="515" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">−CapEx</text>
+                        <text x="515" y="129" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">+D&amp;A</text>
+
+                        <rect x="548" y="118" width="42" height="57" rx="4" fill="#34b38a" />
+                        <text x="569" y="192" textAnchor="middle" fill="#34b38a" fontSize="9.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">FCFF</text>
+                        <text x="569" y="112" textAnchor="middle" fill="#34b38a" fontSize="9" fontWeight="700" fontFamily="Space Grotesk, sans-serif">Cash</text>
+                      </svg>
+                    </div>
+                  </div>
+                </section>
+
+                {/* CHAPTER 02: DISCOUNT RATE (WACC, CAPM & MID-YEAR DISCOUNTING) */}
+                <section id="wacc-section" className="py-16">
+                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#5b8fd9] block mb-2 font-bold">
+                    02 · Time Value of Money &amp; Cost of Capital (WACC)
+                  </span>
+                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    How the Discount Rate (WACC) works — and why higher interest rates compress fair value
+                  </h2>
+                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
+                    ₹100 or $100 received five years from now is worth less than the same amount in your pocket today because of inflation and opportunity cost. The <strong className="text-[#f4eedf] font-semibold">Weighted Average Cost of Capital (WACC)</strong> is the annual hurdle rate used to translate future cash flows into present-day value.
+                  </p>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-center">
+                    <div className="xl:col-span-5 space-y-5">
+                      <div className="border-l-2 border-[#5b8fd9] pl-4">
+                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
+                          Cost of Equity via CAPM (Ke = Rf + β × ERP)
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
+                          Anchored to live <strong className="text-[#f4eedf]">10-Year Sovereign Bond Yields</strong> (India 10Y G-Sec via RBI or US 10Y Treasury via FRED), plus the equity risk premium scaled by the stock&apos;s historical volatility (<span className="font-display font-bold text-[#f4eedf]">Beta</span>).
+                        </p>
+                      </div>
+
+                      <div className="border-l-2 border-[#e3b23c] pl-4">
+                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
+                          After-Tax Cost of Debt &amp; Mid-Year Discounting
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
+                          Debt is priced using a synthetic interest-coverage rating (<span className="font-display font-bold text-[#f4eedf]">EBIT / Interest Expense</span>) minus the corporate tax shield. Because companies earn cash throughout the year rather than on December 31st, we discount at <strong className="text-[#f4eedf]">Mid-Year periods (t = 0.5, 1.5, … 4.5)</strong>.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="xl:col-span-7 bg-[#141b26] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/10">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-[11px] font-display uppercase tracking-wider text-[#a6b0c3] font-bold">
+                          WACC Synthesis &amp; Mid-Year Present Value Decay
+                        </span>
+                        <span className="text-[11px] font-display font-bold text-[#e3b23c]">
+                          PV = FCFF_t / (1 + WACC)^(t − 0.5)
+                        </span>
+                      </div>
+                      <svg viewBox="0 0 600 215" className="w-full h-auto">
+                        <rect x="15" y="25" width="165" height="68" rx="8" fill="#0d121a" stroke="#5b8fd9" strokeOpacity="0.6" />
+                        <text x="27" y="45" fill="#8ab4f8" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">COST OF EQUITY (Ke)</text>
+                        <text x="27" y="63" fill="#f4eedf" fontSize="11" fontFamily="Space Grotesk, sans-serif">Rf + β × (Rm − Rf)</text>
+                        <text x="27" y="80" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">10Y G-Sec / Treasury + Beta</text>
+
+                        <rect x="15" y="115" width="165" height="68" rx="8" fill="#0d121a" stroke="#e3b23c" strokeOpacity="0.6" />
+                        <text x="27" y="135" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">AFTER-TAX DEBT (Kd)</text>
+                        <text x="27" y="153" fill="#f4eedf" fontSize="11" fontFamily="Space Grotesk, sans-serif">(Rf + Spread) × (1 − T)</text>
+                        <text x="27" y="170" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">Synthetic Coverage Rating</text>
+
+                        <path d="M180 59 L225 98" stroke="#5b8fd9" strokeWidth="1.8" fill="none" />
+                        <path d="M180 149 L225 110" stroke="#e3b23c" strokeWidth="1.8" fill="none" />
+
+                        <rect x="225" y="76" width="115" height="56" rx="10" fill="#182232" stroke="#f4eedf" strokeOpacity="0.3" />
+                        <text x="282" y="99" textAnchor="middle" fill="#e3b23c" fontSize="11" fontWeight="700" fontFamily="Space Grotesk, sans-serif">BLENDED WACC</text>
+                        <text x="282" y="117" textAnchor="middle" fill="#f4eedf" fontSize="10" fontFamily="Space Grotesk, sans-serif">Hurdle Rate</text>
+
+                        <path d="M340 104 L375 104" stroke="#f4eedf" strokeOpacity="0.4" strokeWidth="1.5" />
+
+                        <text x="385" y="25" fill="#f4eedf" fontSize="10.5" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
+                          Nominal FCF (Outline) vs. Present Value Today (Solid)
+                        </text>
+                        {[
+                          { x: 395, nomH: 75, pvH: 71, lbl: 't=0.5' },
+                          { x: 438, nomH: 85, pvH: 73, lbl: 't=1.5' },
+                          { x: 481, nomH: 96, pvH: 75, lbl: 't=2.5' },
+                          { x: 524, nomH: 108, pvH: 76, lbl: 't=3.5' },
+                          { x: 565, nomH: 120, pvH: 77, lbl: 't=4.5' },
+                        ].map((b, i) => (
+                          <g key={i}>
+                            <rect
+                              x={b.x - 12}
+                              y={170 - b.nomH}
+                              width="24"
+                              height={b.nomH}
+                              rx="3"
+                              fill="none"
+                              stroke="#a6b0c3"
+                              strokeOpacity="0.45"
+                              strokeDasharray="2 2"
+                            />
+                            <rect
+                              x={b.x - 12}
+                              y={170 - b.pvH}
+                              width="24"
+                              height={b.pvH}
+                              rx="3"
+                              fill="#34b38a"
+                            />
+                            <text x={b.x} y="187" textAnchor="middle" fill="#a6b0c3" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">
+                              {b.lbl}
+                            </text>
+                          </g>
+                        ))}
+                      </svg>
+                    </div>
+                  </div>
+                </section>
+
+                {/* CHAPTER 03: CHOLESKY DECOMPOSITION & FAT-TAILED MONTE CARLO */}
+                <section id="cholesky-section" className="py-16">
+                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e3b23c] block mb-2 font-bold">
+                    03 · Cholesky Decomposition (Σ = L·Lᵀ) &amp; Fat-Tailed Monte Carlo
+                  </span>
+                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    Why we use Cholesky Decomposition instead of naive random numbers
+                  </h2>
+                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
+                    In the real world, financial variables do not move independently—when a company&apos;s revenue growth accelerates, operating leverage usually expands its EBIT margin at the same time (<span className="font-display font-bold text-[#e3b23c]">ρ &gt; 0</span>). ValuationLab uses <strong className="text-[#f4eedf] font-semibold">Cholesky Matrix Decomposition</strong> paired with <strong className="text-[#f4eedf] font-semibold">fat-tailed Student&apos;s t-shocks (df = 5)</strong> across 10,000 valid simulations.
+                  </p>
+
+                  <div className="bg-[#141b26] rounded-2xl p-5 sm:p-7 border border-[#f4eedf]/12 mb-8">
+                    <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                      <span className="text-xs font-display uppercase tracking-wider text-[#e3b23c] font-bold">
+                        Architecture Diagram · 7-Variable Cholesky Decomposition Pipeline (L @ z)
+                      </span>
+                      <span className="text-xs font-display font-semibold text-[#a6b0c3]">
+                        30,000 Oversampled Draws → 10,000 Economically Valid DCF Worlds
+                      </span>
+                    </div>
+
+                    <svg viewBox="0 0 820 230" className="w-full h-auto">
+                      <rect x="10" y="20" width="185" height="190" rx="10" fill="#0d121a" stroke="#f4eedf" strokeOpacity="0.18" />
+                      <text x="24" y="43" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        1. CORRELATION MATRIX (Σ)
+                      </text>
+                      <text x="24" y="61" fill="#f4eedf" fontSize="10.5" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
+                        7 Stochastic Risk Drivers:
+                      </text>
+                      <text x="24" y="80" fill="#34b38a" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Rev Growth (g) ↔ Margin (m)</text>
+                      <text x="34" y="95" fill="#e3b23c" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">Empirical Corr: ρ = Cov(g,m)</text>
+                      <text x="24" y="114" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Risk-Free Rate (Rf)</text>
+                      <text x="24" y="130" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Regression Beta (β)</text>
+                      <text x="24" y="146" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Equity Risk Prem (ERP)</text>
+                      <text x="24" y="162" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Cost of Debt (Kd)</text>
+                      <text x="24" y="178" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Equity Weight (We)</text>
+
+                      <path d="M195 115 L222 115" stroke="#e3b23c" strokeWidth="2" />
+
+                      <rect x="222" y="20" width="195" height="190" rx="10" fill="#0d121a" stroke="#5b8fd9" strokeOpacity="0.45" />
+                      <text x="236" y="43" fill="#8ab4f8" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        2. CHOLESKY FACTOR (Σ = L·Lᵀ)
+                      </text>
+                      <rect x="236" y="55" width="70" height="62" rx="4" fill="#151e2c" stroke="#5b8fd9" strokeOpacity="0.3" />
+                      <text x="246" y="72" fill="#34b38a" fontSize="10" fontFamily="Space Grotesk, sans-serif">1   0   0</text>
+                      <text x="246" y="89" fill="#e3b23c" fontSize="10" fontFamily="Space Grotesk, sans-serif">ρ  √1−ρ² 0</text>
+                      <text x="246" y="106" fill="#8ab4f8" fontSize="10" fontFamily="Space Grotesk, sans-serif">0   0   1</text>
+
+                      <text x="316" y="76" fill="#f4eedf" fontSize="10.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">× z (t, df=5)</text>
+                      <text x="316" y="93" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">Heavy-tailed</text>
+                      <text x="316" y="106" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">market shocks</text>
+
+                      <text x="236" y="140" fill="#f4eedf" fontSize="9.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">
+                        Correlated: X = μ + L · z
+                      </text>
+                      <text x="236" y="158" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
+                        Preserves historical co-movement
+                      </text>
+                      <text x="236" y="173" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
+                        while modeling fat-tail shocks.
+                      </text>
+
+                      <path d="M417 115 L444 115" stroke="#5b8fd9" strokeWidth="2" />
+
+                      <rect x="444" y="20" width="165" height="190" rx="10" fill="#0d121a" stroke="#34b38a" strokeOpacity="0.4" />
+                      <text x="458" y="43" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        3. GUARDRAILS
+                      </text>
+                      <text x="458" y="65" fill="#f4eedf" fontSize="10" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
+                        3× Oversampling (30k)
+                      </text>
+                      <text x="458" y="84" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">
+                        Rejects invalid worlds:
+                      </text>
+                      <text x="458" y="103" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
+                        ✗ WACC ≤ Terminal g
+                      </text>
+                      <text x="458" y="120" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
+                        ✗ WACC − g &lt; 1.5%
+                      </text>
+                      <text x="458" y="137" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
+                        ✗ Negative Kd or Ke
+                      </text>
+                      <text x="458" y="165" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        ✓ Slices 10,000 Valid
+                      </text>
+                      <text x="458" y="180" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        5-Yr DCF Valuations
+                      </text>
+
+                      <path d="M609 115 L636 115" stroke="#34b38a" strokeWidth="2" />
+
+                      <rect x="636" y="20" width="174" height="190" rx="10" fill="#0d121a" stroke="#e3b23c" strokeOpacity="0.5" />
+                      <text x="650" y="43" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        4. FAIR VALUE BAND
+                      </text>
+                      {[
+                        { x: 652, h: 16, c: '#2d3848' },
+                        { x: 666, h: 32, c: '#e3b23c' },
+                        { x: 680, h: 54, c: '#5b8fd9' },
+                        { x: 694, h: 78, c: '#5b8fd9' },
+                        { x: 708, h: 95, c: '#34b38a' },
+                        { x: 722, h: 82, c: '#5b8fd9' },
+                        { x: 736, h: 60, c: '#5b8fd9' },
+                        { x: 750, h: 38, c: '#5b8fd9' },
+                        { x: 764, h: 24, c: '#e3b23c' },
+                        { x: 778, h: 12, c: '#2d3848' },
+                      ].map((bar, idx) => (
+                        <rect
+                          key={idx}
+                          x={bar.x}
+                          y={155 - bar.h}
+                          width="10"
+                          height={bar.h}
+                          rx="2"
+                          fill={bar.c}
+                        />
+                      ))}
+                      <line x1="648" y1="155" x2="795" y2="155" stroke="#f4eedf" strokeOpacity="0.2" />
+                      <text x="668" y="172" textAnchor="middle" fill="#e3b23c" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">P5</text>
+                      <text x="713" y="172" textAnchor="middle" fill="#34b38a" fontSize="8.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">P50 Median</text>
+                      <text x="768" y="172" textAnchor="middle" fill="#e3b23c" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">P95</text>
+                      <text x="722" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
+                        90% Confidence Interval
+                      </text>
+                    </svg>
+                  </div>
+                </section>
+
+                {/* CHAPTER 04: PORTFOLIO GUIDE */}
+                <section id="portfolio-guide" className="py-16">
+                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e07a5f] block mb-2 font-bold">
+                    04 · Practical Application &amp; Portfolio Construction
+                  </span>
+                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    How to incorporate DCF valuations into your own stock analysis and portfolio
+                  </h2>
+
+                  <div className="divide-y divide-[#f4eedf]/10 border-t border-b border-[#f4eedf]/10 mt-6">
+                    {[
+                      {
+                        num: '01',
+                        title: 'Demand a Margin of Safety on Cyclical & Value Stocks',
+                        desc: 'When today’s Market Price sits below the DCF Intrinsic Fair Value and near the lower half (P25–P50) of the Monte Carlo distribution, you have a structural Margin of Safety—you are paying less than the business is worth even if growth stays ordinary.'
+                      },
+                      {
+                        num: '02',
+                        title: 'Reverse-Engineer What the Market is Pricing In for Compounders',
+                        desc: 'High-quality franchises (such as HUL, Titan, or NVIDIA) often trade above baseline historical DCF. Use the Model Assumptions sliders inside the workspace to raise Revenue Growth or Margin until Fair Value matches today’s share price—then decide if that implied growth rate is achievable.'
+                      },
+                      {
+                        num: '03',
+                        title: 'Size Portfolio Positions Using the P5–P95 Dispersion Band',
+                        desc: 'Check the width of the 90% Monte Carlo confidence band. A tight P5–P95 band indicates predictable cash flows suited for a core 5–8% portfolio weight; a wide band means the stock is highly sensitive to WACC and terminal assumptions, warranting a smaller 1–3% position.'
+                      }
+                    ].map((row) => (
+                      <div key={row.num} className="py-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                        <div className="md:col-span-4 flex items-baseline gap-3">
+                          <span className="font-display text-sm font-bold text-[#e3b23c]">{row.num}.</span>
+                          <h3 className="font-display text-base sm:text-lg font-bold text-[#f4eedf] leading-snug">{row.title}</h3>
+                        </div>
+                        <p className="md:col-span-8 text-xs sm:text-sm text-[#a6b0c3] leading-relaxed">
+                          {row.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* CHAPTER 05: LIVE ENGINE SHOWCASE */}
+                <section id="live-showcase" className="pt-16">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+                    <div>
+                      <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e3b23c] block mb-2 font-bold">
+                        05 · Verified Engine Benchmarks
+                      </span>
+                      <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight">
+                        Inspect sample DCF valuations &amp; launch the workspace
+                      </h2>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {Object.keys(PREVIEW_DATA).map((key) => {
+                        const item = PREVIEW_DATA[key];
+                        const isSelected = previewStock === key;
+                        return (
+                          <button 
+                            key={key}
+                            type="button"
+                            onClick={() => setPreviewStock(key)}
+                            className={`text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#e3b23c] text-[#0f141c]'
+                                : 'bg-[#141b26] text-[#a6b0c3] hover:text-[#f4eedf] border border-[#f4eedf]/10'
+                            }`}
+                          >
+                            {item.tabLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-b border-[#f4eedf]/15 py-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pb-6 border-b border-[#f4eedf]/10">
+                      <div>
+                        <span className="text-xs text-[#a6b0c3] block mb-1">DCF Intrinsic Fair Value</span>
+                        <span className={`font-display text-3xl font-bold tabular-nums ${
+                          currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e3b23c]'
                         }`}>
                           {currentPreview.fairValue}
                         </span>
-                        <span className={`text-[11px] font-medium flex items-center gap-1 mt-1 ${
-                          currentPreview.upsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        <span className={`text-xs font-bold block mt-1 ${
+                          currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
                         }`}>
-                          {currentPreview.upsidePct >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
                           {currentPreview.upsideBadge}
                         </span>
                       </div>
 
-                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                        <span className="text-xs text-zinc-400 block mb-1">Market Price</span>
-                        <span className="text-xl sm:text-2xl font-black text-zinc-200 font-mono">
+                      <div>
+                        <span className="text-xs text-[#a6b0c3] block mb-1">Current Market Price</span>
+                        <span className="font-display text-3xl font-bold text-[#f4eedf] tabular-nums">
                           {currentPreview.currentPrice}
                         </span>
-                        <span className="text-[11px] text-zinc-400 block mt-1 line-clamp-1">
-                          {currentPreview.upsideNote}
+                        <span className="text-xs text-[#a6b0c3] block mt-1">
+                          {currentPreview.name}
                         </span>
                       </div>
 
-                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                        <span className="text-xs text-zinc-400 block mb-1">Dynamic WACC</span>
-                        <span className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
+                      <div>
+                        <span className="text-xs text-[#a6b0c3] block mb-1">Blended WACC</span>
+                        <span className="font-display text-3xl font-bold text-[#f4eedf] tabular-nums">
                           {currentPreview.wacc}
                         </span>
-                        <span className="text-[11px] text-zinc-400 block mt-1">
+                        <span className="text-xs text-[#a6b0c3] block mt-1">
                           {currentPreview.waccNote}
                         </span>
                       </div>
 
-                      <div className="bg-zinc-950/70 p-4 rounded-xl border border-zinc-800/80">
-                        <span className="text-xs text-zinc-400 block mb-1">Monte Carlo (90% CI)</span>
-                        <span className="text-base sm:text-lg font-bold text-indigo-300 font-mono">
+                      <div>
+                        <span className="text-xs text-[#a6b0c3] block mb-1">Monte Carlo (P5 – P95)</span>
+                        <span className="font-display text-2xl font-bold text-[#8ab4f8] tabular-nums">
                           {currentPreview.mcRange}
                         </span>
-                        <span className="text-[11px] text-zinc-400 block mt-1">10,000 iterations</span>
+                        <span className="text-xs text-[#a6b0c3] block mt-1">
+                          10,000 Cholesky runs
+                        </span>
                       </div>
                     </div>
 
-                    {/* Preview Tabs */}
-                    <div className="flex items-center gap-2 border-b border-zinc-800 mb-4 pb-2">
-                      {[
-                        { id: 'dcf', label: '10-Yr Cash Flow Trajectory', icon: <FiTrendingUp /> },
-                        { id: 'monte_carlo', label: 'Monte Carlo Bell Curve', icon: <FiCpu /> },
-                        { id: 'excel', label: 'Complete Excel Export', icon: <FiFileText /> },
-                      ].map((tab) => (
+                    <div className="py-6 space-y-4">
+                      <div className="flex justify-between text-xs font-semibold text-[#a6b0c3]">
+                        <span>Share Price vs. DCF Fair Value Scale</span>
+                        <span className="text-[#f4eedf]">{currentPreview.upsideNote}</span>
+                      </div>
+                      <div className="relative h-4 rounded-full bg-[#141b26] border border-[#f4eedf]/12 overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#34b38a]/35 to-[#34b38a]/15"
+                          style={{ width: `${prevFairPct}%` }}
+                        />
+                        <div
+                          className="absolute inset-y-0 right-0 bg-gradient-to-r from-[#e3b23c]/15 to-[#e07a5f]/35"
+                          style={{ left: `${prevFairPct}%` }}
+                        />
+                        <div
+                          className="absolute inset-y-0 w-1 bg-[#e3b23c]"
+                          style={{ left: `${prevFairPct}%` }}
+                        />
+                        <div
+                          className="absolute inset-y-0 w-1 bg-[#f4eedf]"
+                          style={{ left: `${prevPricePct}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center pt-2">
+                        <div className="flex gap-6 text-xs font-bold">
+                          <span className="text-[#e3b23c]">● DCF Fair Value: {currentPreview.fairValue}</span>
+                          <span className="text-[#f4eedf]">● Market Price: {currentPreview.currentPrice}</span>
+                        </div>
                         <button
-                          key={tab.id}
-                          onClick={() => setPreviewTab(tab.id)}
-                          className={`flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition ${
-                            previewTab === tab.id
-                              ? 'bg-zinc-800 text-white border border-zinc-700'
-                              : 'text-zinc-400 hover:text-zinc-200'
-                          }`}
+                          type="button"
+                          onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] font-bold text-xs shadow-lg transition cursor-pointer"
                         >
-                          {tab.icon}
-                          <span>{tab.label}</span>
+                          <span>Analyze {currentPreview.name} Live</span>
+                          <FiArrowRight />
                         </button>
-                      ))}
-                    </div>
-
-                    {/* Preview Tab Body */}
-                    <div className="bg-zinc-950/80 rounded-xl p-5 border border-zinc-800/60 font-mono text-xs">
-                      {previewTab === 'dcf' && (
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center text-zinc-400 pb-2 border-b border-zinc-800">
-                            <span>Metric</span>
-                            <span>Base (FY0)</span>
-                            <span>Year 1</span>
-                            <span>Year 3</span>
-                            <span>Year 5</span>
-                            <span>Terminal Year</span>
-                          </div>
-                          <div className="flex justify-between items-center text-zinc-200">
-                            <span className="font-semibold text-blue-400">Revenue</span>
-                            <span>{currentPreview.metrics.revBase}</span>
-                            <span>{currentPreview.metrics.revY1}</span>
-                            <span>{currentPreview.metrics.revY3}</span>
-                            <span>{currentPreview.metrics.revY5}</span>
-                            <span>{currentPreview.metrics.revTV}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-zinc-200">
-                            <span className="font-semibold text-emerald-400">Free Cash Flow (FCFF)</span>
-                            <span>{currentPreview.metrics.fcffBase}</span>
-                            <span>{currentPreview.metrics.fcffY1}</span>
-                            <span>{currentPreview.metrics.fcffY3}</span>
-                            <span>{currentPreview.metrics.fcffY5}</span>
-                            <span>{currentPreview.metrics.fcffTV}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-zinc-400">
-                            <span>Discount Factor</span>
-                            <span>{currentPreview.metrics.dfBase}</span>
-                            <span>{currentPreview.metrics.dfY1}</span>
-                            <span>{currentPreview.metrics.dfY3}</span>
-                            <span>{currentPreview.metrics.dfY5}</span>
-                            <span>{currentPreview.metrics.dfTV}</span>
-                          </div>
-                        </div>
-                      )}
-
-                  {previewTab === 'monte_carlo' && (
-                    <div className="flex flex-col items-center justify-center py-4 text-center">
-                      <div className="w-full max-w-lg h-24 flex items-end justify-between gap-1 px-4 mb-2">
-                        {[5, 12, 25, 45, 78, 120, 195, 290, 390, 480, 520, 470, 380, 275, 180, 110, 65, 35, 18, 8].map((h, i) => (
-                          <div 
-                            key={i} 
-                            style={{ height: `${(h / 520) * 100}%` }}
-                            className={`flex-1 rounded-t transition-all ${
-                              i >= 6 && i <= 14 ? 'bg-blue-500' : 'bg-zinc-700'
-                            }`}
-                          ></div>
-                        ))}
-                      </div>
-                      <div className="flex justify-between w-full max-w-lg text-[10px] text-zinc-400 border-t border-zinc-800 pt-2">
-                        <span>P5 Downside (VaR)</span>
-                        <span className="text-blue-400 font-bold">50% Median Confidence</span>
-                        <span>P95 Upside</span>
                       </div>
                     </div>
-                  )}
+                  </div>
+                </section>
 
-                  {previewTab === 'excel' && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-zinc-300 font-semibold mb-2">
-                        <FiCheckCircle className="text-emerald-400" />
-                        <span>Formatted Multi-Sheet Workbook Generated by ValuationLab:</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-zinc-400 text-[11px]">
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">1. Cover Summary</span>
-                          Executive valuation summary & verdict
-                        </div>
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">2. Historical Financials</span>
-                          Complete Income Stmt, Balance Sheet & Cash Flow
-                        </div>
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">3. WACC 2 Engine</span>
-                          Live CAPM Cost of Equity & Debt weights
-                        </div>
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">4. DCF Model</span>
-                          10-Yr forecast linked via live Excel formulas
-                        </div>
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">5. Sensitivity Tables</span>
-                          2D WACC × Growth & Margin matrix
-                        </div>
-                        <div className="bg-zinc-900 p-2.5 rounded-lg border border-zinc-800">
-                          <span className="font-bold text-zinc-200 block">6. Monte Carlo Charts</span>
-                          10,000 simulated prices & native bar chart
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
 
-            {/* Core Capabilities Grid */}
-            <div className="max-w-5xl w-full mb-16">
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold tracking-tight text-zinc-100 mb-2">
-                  Built for Precision Financial Valuation
-                </h3>
-                <p className="text-sm text-zinc-400">
-                  Every metric is transparent, defensible, and grounded in rigorous financial economics.
+            {/* Footer */}
+            <footer className="border-t border-[#f4eedf]/10 py-10 px-4 sm:px-8 text-center text-xs text-[#a6b0c3]">
+              <div className="max-w-4xl mx-auto space-y-2">
+                <p className="text-[#f4eedf]/80 font-display font-bold">
+                  ValuationLab — Institutional DCF &amp; Cholesky Monte Carlo Equity Research Platform
+                </p>
+                <p>
+                  Audited financial statements via Yahoo Finance; live sovereign bond yields via FRED API &amp; RBI. For analytical research only.
                 </p>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                {[
-                  { 
-                    title: 'Multi-Stage DCF', 
-                    desc: 'Dynamic mid-year discounted cash flow model with Gordon Growth terminal valuation.',
-                    tag: 'Damodaran Framework',
-                    icon: <FiTrendingUp className="w-5 h-5 text-blue-400" /> 
-                  },
-                  { 
-                    title: '10,000-Run Monte Carlo', 
-                    desc: 'Cholesky-correlated covariance engine simulating revenue volatility and margin shocks.',
-                    tag: 'Quant Risk Mapping',
-                    icon: <FiCpu className="w-5 h-5 text-indigo-400" /> 
-                  },
-                  { 
-                    title: 'Complete 3-Statement Model', 
-                    desc: 'Full historical Income Statement, Balance Sheet, and Cash Flow statement extraction.',
-                    tag: 'Full Accounting Depth',
-                    icon: <FiLayers className="w-5 h-5 text-emerald-400" /> 
-                  },
-                  { 
-                    title: 'Excel Export with Formulas', 
-                    desc: 'Downloadable multi-sheet model with native Excel formulas and embedded charts.',
-                    tag: 'Investment Banking Ready',
-                    icon: <FiFileText className="w-5 h-5 text-amber-400" /> 
-                  }
-                ].map((feature, i) => (
-                  <div key={i} className="bg-zinc-900/40 backdrop-blur-sm p-6 rounded-2xl border border-zinc-800/90 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group flex flex-col justify-between">
-                    <div>
-                      <div className="mb-4 bg-zinc-800/80 w-11 h-11 rounded-xl flex items-center justify-center border border-zinc-700/60 shadow-sm group-hover:scale-110 transition-transform">
-                        {feature.icon}
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
-                        {feature.tag}
-                      </span>
-                      <h4 className="text-base font-bold mb-2 text-zinc-100">{feature.title}</h4>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{feature.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* How It Works (3 Steps) */}
-            <div className="max-w-4xl w-full mb-16">
-              <div className="bg-zinc-900/30 rounded-2xl border border-zinc-800/70 p-8">
-                <h4 className="text-lg font-bold text-center text-zinc-200 mb-8">
-                  How ValuationLab Works
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-                  <div className="flex flex-col items-center">
-                    <div className="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-sm mb-3">
-                      1
-                    </div>
-                    <h5 className="font-bold text-sm text-zinc-200 mb-1">Search Any Stock</h5>
-                    <p className="text-xs text-zinc-400">Instant 0ms lookup across 2,750+ Indian NSE and US equities.</p>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-9 h-9 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold text-sm mb-3">
-                      2
-                    </div>
-                    <h5 className="font-bold text-sm text-zinc-200 mb-1">Automated Modeling</h5>
-                    <p className="text-xs text-zinc-400">Calculates dynamic WACC, projects cash flows, and simulates 10,000 trials.</p>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-9 h-9 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-sm mb-3">
-                      3
-                    </div>
-                    <h5 className="font-bold text-sm text-zinc-200 mb-1">Stress-Test & Export</h5>
-                    <p className="text-xs text-zinc-400">Slide growth & margins in real time, or download the full Excel model.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Trust Markers */}
-            <div className="text-center text-xs text-zinc-500 border-t border-zinc-900 pt-6 max-w-2xl">
-              ValuationLab uses live market data from Yahoo Finance and sovereign yield benchmarks via the FRED API & RBI.
-              For educational and analytical research purposes.
-            </div>
+            </footer>
           </div>
         )}
 
-        {/* Results Layout */}
+        {/* ===================================================================== */}
+        {/* COMPANY VALUATION WORKSPACE (FULL-WIDTH, NUMBERS-FIRST DASHBOARD)     */}
+        {/* ===================================================================== */}
         {analysisData && (
-          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-            {/* Left Sidebar */}
-            <div className="w-full md:w-80 flex-shrink-0 bg-zinc-900 border-r border-zinc-800/80 flex flex-col overflow-y-auto h-full p-4 space-y-4">
-              
-              <TickerInput 
-                vertical={true}
-                ticker={ticker}
-                setTicker={setTicker}
-                market={market}
-                setMarket={setMarket}
-                onAnalyze={handleAnalyze}
-                loading={loading}
-              />
+          <div className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+            
+            {/* Corporate Action Auto-Redirect Note (Clean notice) */}
+            {analysisData?.company?.redirect_note && (
+              <div className="px-4 py-3 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 text-[#f4eedf] text-xs flex items-center gap-2.5">
+                <span className="font-display font-bold uppercase tracking-wider text-[11px] text-[#e3b23c] shrink-0">
+                  Corporate Action Sync:
+                </span>
+                <span>{analysisData.company.redirect_note}</span>
+              </div>
+            )}
 
-              <div className="flex flex-col space-y-2">
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handleAnalyze()}
-                    className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 py-2 px-4 rounded font-medium flex items-center justify-center transition-colors text-sm"
-                  >
-                    <FiRefreshCw className="mr-2 text-xs" /> Re-run Analysis
-                  </button>
-                  <ExcelDownloadButton data={analysisData} />
+            {/* 1. TOP HEADLINE BAR: COMPANY TITLE + 4 ON-FACE KPI CARDS */}
+            <div className="space-y-4">
+              {/* Company Title Row */}
+              <div className="flex flex-wrap items-baseline justify-between gap-y-2 gap-x-4">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0 flex-1">
+                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight break-words max-w-full leading-tight">
+                    {formatCompanyName(analysisData.company?.name)}
+                  </h1>
+                  <span className="font-display font-bold text-base text-[#e3b23c] tracking-wide">
+                    {analysisData.company?.ticker}
+                  </span>
+                  <span className="text-xs sm:text-sm text-[#a6b0c3] font-medium">
+                    · {analysisData.company?.market === 'IN' ? '🇮🇳 NSE / BSE' : '🇺🇸 US Market'}
+                    {analysisData.company?.sector ? ` · ${analysisData.company.sector}` : ''}
+                  </span>
+                  {analysisData.market_data?.is_illiquid && (
+                    <span className="text-xs font-semibold text-[#e3b23c]">
+                      · ⚠️ Thinly Traded
+                    </span>
+                  )}
                 </div>
-                <button 
-                  onClick={() => {
+
+                <div className="text-xs text-[#a6b0c3] font-normal shrink-0">
+                  Model Framework:{' '}
+                  <strong className="text-[#f4eedf]">
+                    {analysisData.company?.is_financial ? 'Tier-1 Regulatory Capital FCFE' : '5-Year Unlevered FCFF + Cholesky Monte Carlo'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* 4 Straightforward On-Face Headline Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                
+                {/* Card 1: DCF Intrinsic Fair Value (Primary Highlight - Clean & Uniform Border) */}
+                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 relative">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c]">
+                      DCF Intrinsic Fair Value
+                    </span>
+                    {analysisData.diagnostics?.tv_share_of_ev != null && (
+                      <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums">
+                        TV {(analysisData.diagnostics.tv_share_of_ev * 100).toFixed(0)}% of EV
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-display text-4xl sm:text-[42px] font-bold text-[#e3b23c] tabular-nums leading-tight my-1">
+                    {wsSymbol}{wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className={`flex items-center text-xs font-bold tabular-nums ${
+                    wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                  }`}>
+                    {wsIsUndervalued ? <FiTrendingUp className="mr-1.5 text-sm shrink-0" /> : <FiTrendingDown className="mr-1.5 text-sm shrink-0" />}
+                    <span>
+                      {wsIsUndervalued ? '▲' : '▼'} {Math.abs(wsUpsidePct).toFixed(1)}% {wsIsUndervalued ? 'Upside (Undervalued)' : 'Downside (Above DCF)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 2: Current Market Price */}
+                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                      Current Market Price
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#a6b0c3] bg-[#0d121a] px-2 py-0.5 rounded border border-[#f4eedf]/10">
+                      {analysisData.company?.currency || 'USD'}
+                    </span>
+                  </div>
+                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1">
+                    {wsSymbol}{wsCurrentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs text-[#a6b0c3] flex items-center gap-2 tabular-nums">
+                    <span>Beta: <strong className="text-[#f4eedf]">{analysisData.market_data?.beta ? analysisData.market_data.beta.toFixed(2) : '1.00'}</strong></span>
+                    <span>•</span>
+                    <span>WACC: <strong className="text-[#e3b23c]">{((analysisData.wacc?.wacc || 0) * 100).toFixed(1)}%</strong></span>
+                  </div>
+                </div>
+
+                {/* Card 3: Monte Carlo Median */}
+                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                      Monte Carlo Median
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#8ab4f8] bg-[#5b8fd9]/10 px-2 py-0.5 rounded border border-[#5b8fd9]/25">
+                      10,000 Runs
+                    </span>
+                  </div>
+                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1">
+                    {wsSymbol}{wsMcMedian.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs text-[#a6b0c3] tabular-nums">
+                    90% CI: <strong className="text-[#f4eedf]">{wsSymbol}{wsP5.toLocaleString('en-US', { maximumFractionDigits: 0 })} – {wsSymbol}{wsP95.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
+                  </div>
+                </div>
+
+                {/* Card 4: Verdict & Multiple Signal */}
+                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                      Valuation Verdict
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums">
+                      {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : analysisData.company?.is_financial ? 'P/B' : 'EV/EBITDA'}:{' '}
+                      <strong className="text-[#f4eedf]">
+                        {analysisData.validation?.market_multiple ? `${analysisData.validation.market_multiple.toFixed(1)}x` : 'N/A'}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className={`font-display text-3xl sm:text-4xl font-bold leading-tight my-1 tracking-tight ${
+                    analysisData.verdict?.verdict?.includes('BUY')
+                      ? 'text-[#34b38a]'
+                      : analysisData.verdict?.verdict?.includes('SELL')
+                      ? 'text-[#e07a5f]'
+                      : 'text-[#e3b23c]'
+                  }`}>
+                    {analysisData.verdict?.verdict || 'N/A'}
+                  </div>
+                  <div className="text-xs text-[#a6b0c3] truncate" title={analysisData.verdict?.description}>
+                    {analysisData.verdict?.description || 'Probability-weighted valuation signal'}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* 2. MAIN FULL-WIDTH 12-COLUMN GRID: LEFT CONTROLS + RIGHT ANALYSIS TABS */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              
+              {/* Left 3 Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
+              <div className="lg:col-span-3 space-y-4">
+                <AssumptionSliders 
+                  key={`sliders-${resetKey}-${analysisData.company?.ticker}`}
+                  data={analysisData}
+                  onOverride={(newOverrides) => {
+                    setOverrides(newOverrides);
+                  }}
+                  onApply={(appliedOverrides) => {
+                    setOverrides(appliedOverrides);
+                    handleAnalyze(appliedOverrides, false);
+                  }}
+                  onReset={() => {
                     setOverrides({});
                     sessionStorage.removeItem('vl_overrides');
                     setResetKey(k => k + 1);
                     handleAnalyze({}, true);
                   }}
-                  className="w-full bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center border border-zinc-700/50"
-                >
-                  <FiRotateCcw className="mr-2" /> Restore Defaults
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <AssumptionSliders 
-                  key={`sliders-${resetKey}`}
-                  data={analysisData}
-                  onOverride={(newOverrides) => {
-                    setOverrides(newOverrides);
-                  }}
                   loading={loading}
                 />
-                
+
                 <MacroDisplay data={analysisData} />
               </div>
-            </div>
 
-            {/* Right Main Content */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Tab Navigation */}
-              <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 flex space-x-1 overflow-x-auto">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 py-3 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-400'
-                        : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-zinc-700'
-                    }`}
-                  >
-                    {tab.icon}
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
+              {/* Right 9 Columns: Tab Navigation + Active Data View */}
+              <div className="lg:col-span-9 min-w-0 space-y-4">
+                {/* Tab Bar */}
+                <div className="bg-[#141b26] rounded-2xl p-1.5 border border-[#f4eedf]/10 flex space-x-1 overflow-x-auto shadow-lg">
+                  {tabs.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
+                          isActive
+                            ? 'bg-[#e3b23c] text-[#0f141c] shadow-sm'
+                            : 'text-[#a6b0c3] hover:text-[#f4eedf] hover:bg-[#0d121a]/60'
+                        }`}
+                      >
+                        <span>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Active Tab Content */}
+                <div className="pb-10">
+                  <ErrorBoundary>
+                    {activeTab === 'overview' && (
+                      <OverviewTab 
+                        data={analysisData} 
+                        aiSummary={aiSummary}
+                        aiLoading={aiLoading}
+                        onFetchAISummary={handleFetchAISummary}
+                      />
+                    )}
+                    {activeTab === 'dcf' && (
+                      <DCFModelTab data={analysisData} overrides={overrides} />
+                    )}
+                    {activeTab === 'monte_carlo' && (
+                      <MonteCarloTab data={analysisData} />
+                    )}
+                    {activeTab === 'sensitivity' && (
+                      <SensitivityTab data={analysisData} />
+                    )}
+                    {activeTab === 'trends' && (
+                      <TrendsTab data={analysisData} />
+                    )}
+                  </ErrorBoundary>
+                </div>
               </div>
 
-              {/* Tab Panes */}
-              <div className="flex-1 overflow-y-auto p-6 bg-zinc-950">
-                {analysisData?.company?.redirect_note && (
-                  <div className="mb-4 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center gap-2">
-                    <span className="font-bold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 shrink-0">
-                      Corporate Action Auto-Redirect
-                    </span>
-                    <span>{analysisData.company.redirect_note}</span>
-                  </div>
-                )}
-                <ErrorBoundary>
-                  {activeTab === 'overview' && (
-                    <OverviewTab 
-                      data={analysisData} 
-                      aiSummary={aiSummary}
-                      aiLoading={aiLoading}
-                      onFetchAISummary={handleFetchAISummary}
-                    />
-                  )}
-                  {activeTab === 'dcf' && (
-                    <DCFModelTab data={analysisData} overrides={overrides} />
-                  )}
-                  {activeTab === 'monte_carlo' && (
-                    <MonteCarloTab data={analysisData} />
-                  )}
-                  {activeTab === 'sensitivity' && (
-                    <SensitivityTab data={analysisData} />
-                  )}
-                  {activeTab === 'trends' && (
-                    <TrendsTab data={analysisData} />
-                  )}
-                </ErrorBoundary>
-              </div>
             </div>
           </div>
         )}

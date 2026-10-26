@@ -492,7 +492,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     # Gatekeeper: reject ETFs, Commodity Funds, Mutual Funds, Indices, REITs, InvITs with a clear domain message
     is_excl, _, excl_msg = is_non_dcf_instrument(
         symbol=yf_ticker,
-        name=info.get("shortName") or info.get("longName"),
+        name=info.get("longName") or info.get("shortName"),
         quote_type=info.get("quoteType"),
         sector=info.get("sector"),
         industry=info.get("industry"),
@@ -652,7 +652,11 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     except Exception as e:
         logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
 
-    company_name = info.get("shortName") or info.get("longName") or yf_ticker
+    long_name = info.get("longName")
+    short_name = info.get("shortName")
+    raw_comp_name = long_name or short_name or yf_ticker
+    from engine.ticker_universe import clean_company_name
+    company_name = clean_company_name(raw_comp_name) or yf_ticker
     sector = info.get("sector")
     industry = info.get("industry")
 

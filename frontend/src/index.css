@@ -3,53 +3,116 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #09090b;   /* zinc-950 */
-  --bg-secondary: #18181b; /* zinc-900 */
-  --bg-card: #27272a;      /* zinc-800 */
-  --text-primary: #f4f4f5; /* zinc-100 */
-  --text-secondary: #a1a1aa; /* zinc-400 */
-  --accent-green: #10b981;
-  --accent-red: #ef4444;
-  --accent-blue: #3b82f6;
-  --accent-amber: #f59e0b;
+  --bg-primary: #0f141c;   /* Warm deep slate-night */
+  --bg-secondary: #151c27; /* Warm elevated surface */
+  --bg-card: #1b2432;      /* Warm card surface */
+  --text-primary: #f4eedf; /* Warm canvas cream */
+  --text-secondary: #a6b0c3;
+  --accent-green: #34b38a;
+  --accent-red: #e07a5f;
+  --accent-blue: #5b8fd9;
+  --accent-amber: #e3b23c;
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+.font-sans, .font-serif {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.font-display, .font-mono {
+  font-family: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  letter-spacing: -0.02em;
+}
+
+.font-heromono {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+::-webkit-scrollbar-thumb { background: #2c3748; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3e4c63; }
 
 /* Number formatting */
 .font-tabular { font-variant-numeric: tabular-nums; }
 
-/* Pulse animation for loading */
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+/* Wavy underline matching reference screenshot */
+.wavy-link {
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: rgba(244, 238, 223, 0.55);
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: all 0.2s ease;
 }
-.loading-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.wavy-link:hover {
+  text-decoration-color: #e3b23c;
+  color: #ffffff;
+}
 
-/* Tab transitions */
-.tab-content-enter { opacity: 0; transform: translateY(8px); }
-.tab-content-active { opacity: 1; transform: translateY(0); transition: all 0.3s ease; }
+/* Subtle linen canvas grain overlay for painted sections */
+.canvas-texture {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
+  background-size: 3px 3px;
+}
+
+/* Warm frosted glass card matching the reference screenshot */
+.frosted-card {
+  background: rgba(15, 23, 38, 0.42);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  border: 1px solid rgba(244, 238, 223, 0.22);
+  box-shadow: 0 20px 50px rgba(5, 10, 20, 0.35);
+}
+
+.frosted-pill {
+  background: rgba(18, 27, 43, 0.52);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(244, 238, 223, 0.22);
+}
+
+/* Custom Range Slider Styling */
+input[type=range].warm-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(244, 238, 223, 0.12);
+  outline: none;
+}
+input[type=range].warm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e3b23c;
+  border: 2px solid #0f141c;
+  box-shadow: 0 0 0 2px rgba(227, 178, 60, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+input[type=range].warm-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background: #f0c351;
+}
 
 /* Hide number input spinners */
 input[type=number]::-webkit-inner-spin-button, 
 input[type=number]::-webkit-outer-spin-button { 
-    -webkit-appearance: none; 
-    margin: 0; 
+  -webkit-appearance: none; 
+  margin: 0; 
 }
 input[type=number] {
-    -moz-appearance: textfield;
+  -moz-appearance: textfield;
 }
-
