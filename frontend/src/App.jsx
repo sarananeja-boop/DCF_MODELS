@@ -26,6 +26,7 @@ import SensitivityTab from './components/SensitivityTab';
 import TrendsTab from './components/TrendsTab';
 import ExcelDownloadButton from './components/ExcelDownloadButton';
 import ErrorBoundary from './components/ErrorBoundary';
+import stocksData from './data/stocks.json';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 if (API_BASE_URL) {
@@ -92,10 +93,24 @@ const PREVIEW_DATA = {
   }
 };
 
-// Helper function to format company names cleanly and prevent cutoff
-function formatCompanyName(name) {
-  if (!name) return '';
-  let n = String(name).trim();
+// Helper function to format company names cleanly and prevent cutoff or raw ticker display
+function formatCompanyName(name, tickerSymbol = '') {
+  if (!name && !tickerSymbol) return '';
+  let n = String(name || tickerSymbol).trim();
+  const cleanSym = String(tickerSymbol || n).replace(/\.(NS|BO)$/i, '').toUpperCase();
+
+  // If name looks like a raw ticker with .NS / .BO (e.g., "Jmfinancil.ns"), resolve from stocks.json
+  if (/\.(ns|bo)$/i.test(n) || n.toUpperCase() === cleanSym) {
+    const match = Array.isArray(stocksData)
+      ? stocksData.find((s) => s.s && s.s.replace(/\.(NS|BO)$/i, '').toUpperCase() === cleanSym)
+      : null;
+    if (match && match.n) {
+      n = match.n;
+    } else {
+      n = n.replace(/\.(ns|bo)$/i, '').toUpperCase();
+    }
+  }
+
   n = n.replace(/\bL\.?$/i, 'Ltd');
   return n;
 }
@@ -145,8 +160,19 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
 
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
-    const saved = sessionStorage.getItem('vl_analysisData');
-    return saved ? JSON.parse(saved) : null;
+    sessionStorage.removeItem('vl_analysisData'); // Clear stale legacy cache
+    const saved = sessionStorage.getItem('vl_analysisData_v2');
+    if (!saved) return null;
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
+        sessionStorage.removeItem('vl_analysisData_v2');
+        return null;
+      }
+      return parsed;
+    } catch (_) {
+      return null;
+    }
   });
   const [loading, setLoading] = useState(false);
   const [loadingTimer, setLoadingTimer] = useState(0);
@@ -155,13 +181,6 @@ export default function App() {
   const abortControllerRef = useRef(null);
   const activeRequestIdRef = useRef(0);
   const valuationCacheRef = useRef(new Map());
-
-  useEffect(() => {
-    if (analysisData?.company?.ticker) {
-      const key = `${analysisData.company.ticker.toUpperCase()}:${analysisData.company.market || market}`;
-      valuationCacheRef.current.set(key, analysisData);
-    }
-  }, []);
   
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('vl_activeTab') || 'overview');
   const [aiSummary, setAiSummary] = useState(() => sessionStorage.getItem('vl_aiSummary') || '');
@@ -181,8 +200,8 @@ export default function App() {
   const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.CESC;
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData');
+    if (analysisData) sessionStorage.setItem('vl_analysisData_v2', JSON.stringify(analysisData));
+    else sessionStorage.removeItem('vl_analysisData_v2');
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
@@ -218,9 +237,8 @@ export default function App() {
 
   useEffect(() => {
     const savedTicker = sessionStorage.getItem('vl_ticker');
-    const savedData = sessionStorage.getItem('vl_analysisData');
     
-    if (savedTicker && savedData && !analysisData) {
+    if (savedTicker) {
       const savedMarket = sessionStorage.getItem('vl_market') || 'auto';
       const savedOverrides = sessionStorage.getItem('vl_overrides') ? JSON.parse(sessionStorage.getItem('vl_overrides')) : {};
       
@@ -235,12 +253,10 @@ export default function App() {
       }).catch(err => {
         console.error("Auto-refresh failed:", err);
         sessionStorage.removeItem('vl_ticker');
-        sessionStorage.removeItem('vl_analysisData');
+        sessionStorage.removeItem('vl_analysisData_v2');
       }).finally(() => {
         setLoading(false);
       });
-    } else if (!savedData) {
-      sessionStorage.removeItem('vl_ticker');
     }
   }, []);
 
@@ -431,6 +447,7 @@ export default function App() {
     setAiSummary('');
     setActiveTab('overview');
     sessionStorage.removeItem('vl_analysisData');
+    sessionStorage.removeItem('vl_analysisData_v2');
     sessionStorage.removeItem('vl_ticker');
     sessionStorage.removeItem('vl_overrides');
     if (updateHistory === true) {
@@ -1506,7 +1523,7 @@ export default function App() {
               <div className="flex flex-wrap items-baseline justify-between gap-y-2 gap-x-4">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0 flex-1">
                   <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight break-words max-w-full leading-tight">
-                    {formatCompanyName(analysisData.company?.name)}
+                    {formatCompanyName(analysisData.company?.name, analysisData.company?.ticker)}
                   </h1>
                   <span className="font-display font-bold text-base text-[#e3b23c] tracking-wide">
                     {analysisData.company?.ticker}
