@@ -986,8 +986,8 @@ export default function App() {
 
               {/* Upper-Sky Headline: ValuationLabs prominently on top, Intrinsic Value typewriter line below */}
               <div className="relative z-20 max-w-4xl mx-auto text-center px-4 mt-7 sm:mt-11 mb-auto flex flex-col items-center">
-                <div className="flex items-center justify-center gap-2 mb-3 sm:mb-3.5">
-                  <span className="font-mono text-xs sm:text-sm font-bold tracking-[0.25em] uppercase text-[#f4eedf]">
+                <div className="flex items-center justify-center gap-2 mb-3.5 sm:mb-4.5">
+                  <span className="font-display text-xl sm:text-3xl md:text-4xl font-extrabold tracking-[0.22em] uppercase text-[#f4eedf] drop-shadow-[0_4px_24px_rgba(6,15,32,0.85)]">
                     Valuation<span className="text-[#e3b23c]">Labs</span>
                   </span>
                 </div>
