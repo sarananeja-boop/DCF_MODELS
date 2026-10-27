@@ -15,6 +15,8 @@ export default function ContactAndFeedback({ currentTicker = '' }) {
   const myEmail = 'sarandeepaneja@gmail.com';
   const linkedInUrl = 'https://www.linkedin.com/in/sarandeepaneja/';
 
+  const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mzeeeljk';
+
   const handleSubmit = async (e) => {
     e?.preventDefault();
     const cleanName = name.trim();
@@ -36,17 +38,41 @@ export default function ContactAndFeedback({ currentTicker = '' }) {
 
     setSubmitting(true);
     try {
-      await axios.post('/api/feedback', {
-        category,
-        message: cleanMessage,
-        name: cleanName,
-        email: cleanEmail,
-        ticker: currentTicker.trim() || null,
-      });
+      // 1. Send directly to Formspree (delivers straight to sarandeepaneja@gmail.com)
+      await axios.post(
+        FORMSPREE_ENDPOINT,
+        {
+          name: cleanName,
+          email: cleanEmail,
+          _replyto: cleanEmail,
+          topic: category,
+          message: cleanMessage,
+          ticker: currentTicker.trim() || undefined,
+          _subject: `[ValuationLab Feedback: ${category.toUpperCase()}] from ${cleanName}`,
+        },
+        {
+          headers: {
+            Accept: 'application/json',
+          },
+        }
+      );
+
+      // 2. Also keep a local archival copy on backend
+      try {
+        axios.post('/api/feedback', {
+          category,
+          message: cleanMessage,
+          name: cleanName,
+          email: cleanEmail,
+          ticker: currentTicker.trim() || null,
+        }).catch(() => {});
+      } catch (_) {}
+
       setSubmitted(true);
-      toast.success('Feedback submitted. Thank you!');
+      toast.success('Feedback sent to sarandeepaneja@gmail.com!');
     } catch (_) {
-      const subject = encodeURIComponent(`ValuationLab Feedback (${category})`);
+      // Fallback: If Formspree fails, offer direct mailto link
+      const subject = encodeURIComponent(`ValuationLab Feedback (${category}) from ${cleanName}`);
       const body = encodeURIComponent(
         `Category: ${category}\nName: ${cleanName}\nEmail: ${cleanEmail}\n\n${cleanMessage}`
       );
@@ -147,21 +173,23 @@ export default function ContactAndFeedback({ currentTicker = '' }) {
             <div className="py-6 space-y-4">
               <div className="flex items-center gap-2.5 text-[#34b38a] font-display font-bold text-lg">
                 <FiCheckCircle className="w-5 h-5 shrink-0" />
-                <span>Thank you for your feedback.</span>
+                <span>Thank you, your feedback has been sent.</span>
               </div>
               <p className="text-sm text-[#d1d7e0] leading-relaxed">
-                Your message has been recorded. We review all reports and suggestions as we continue improving the platform.
+                Your message has been delivered directly to <strong className="text-[#f4eedf]">{myEmail}</strong>. We review all reports as we continue improving the platform.
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setMessage('');
-                  setSubmitted(false);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-[#182334] hover:bg-[#223046] text-[#f4eedf] border border-[#f4eedf]/12 text-xs font-bold transition cursor-pointer"
-              >
-                Send Another Response
-              </button>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessage('');
+                    setSubmitted(false);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-[#182334] hover:bg-[#223046] text-[#f4eedf] border border-[#f4eedf]/12 text-xs font-bold transition cursor-pointer"
+                >
+                  Send Another Response
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -906,6 +906,70 @@ def search_ticker(q: str):
         return {"results": []}
 
 
+def _try_send_email_notification(entry: Dict[str, Any]) -> bool:
+    """Optionally send email notification if SMTP is configured in .env."""
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+    if not smtp_user or not smtp_pass:
+        return False
+    
+    import smtplib
+    from email.mime.text import MIMEText
+
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    recipient = os.getenv("FEEDBACK_RECIPIENT", "sarandeepaneja@gmail.com")
+
+    subject = f"[ValuationLab Feedback] {entry['category'].title()} from {entry['name']}"
+    body = (
+        f"New Feedback Received on ValuationLab:\n"
+        f"----------------------------------------\n"
+        f"Name: {entry['name']}\n"
+        f"Email: {entry['email']}\n"
+        f"Topic: {entry['category']}\n"
+        f"Ticker: {entry.get('ticker') or 'N/A'}\n"
+        f"Timestamp: {entry['timestamp']}\n\n"
+        f"Message:\n{entry['message']}\n"
+    )
+
+    try:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = smtp_user
+        msg["To"] = recipient
+
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        logger.info("Feedback email notification successfully sent to %s", recipient)
+        return True
+    except Exception as exc:
+        logger.warning("SMTP email notification failed: %s", exc)
+        return False
+
+
+@app.get("/api/feedback")
+def list_feedback():
+    """Retrieve all submitted user feedback."""
+    feedback_dir = os.path.join(os.path.dirname(__file__), "data")
+    filepath = os.path.join(feedback_dir, "feedback.jsonl")
+    if not os.path.exists(filepath):
+        return {"count": 0, "submissions": []}
+
+    entries = []
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
+        entries.reverse()  # Newest first
+        return {"count": len(entries), "submissions": entries}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/api/feedback")
 def submit_feedback(req: FeedbackRequest):
     """Save user feedback and bug reports to persistent storage."""
@@ -934,7 +998,14 @@ def submit_feedback(req: FeedbackRequest):
             entry.get("ticker") or "none",
             entry["message"][:60],
         )
-        return {"status": "success", "message": "Feedback received successfully. Thank you!"}
+
+        email_sent = _try_send_email_notification(entry)
+
+        return {
+            "status": "success",
+            "message": "Feedback received successfully. Thank you!",
+            "email_sent": email_sent,
+        }
     except Exception as exc:
         logger.exception("Failed to record feedback")
         raise HTTPException(status_code=500, detail=str(exc))
