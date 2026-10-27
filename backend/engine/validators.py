@@ -16,14 +16,19 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
     market_cap = stock_data.get('market_cap', 0.0)
     total_debt = wacc_data.get('total_debt', 0.0)
     
-    # Compute Cash
-    balance_sheet = stock_data.get('balance_sheet')
-    cash = 0.0
-    if balance_sheet is not None and not balance_sheet.empty:
-        if 'Cash And Cash Equivalents' in balance_sheet.columns:
-            cash_vals = balance_sheet['Cash And Cash Equivalents'].dropna()
-            if len(cash_vals) > 0:
-                cash = float(cash_vals.iloc[0])
+    # Compute Cash (including Short-Term Marketable Securities, consistent with EV bridge)
+    cash = float(metrics.get('cash_and_equivalents', 0.0) or 0.0)
+    if cash <= 0.0:
+        balance_sheet = stock_data.get('balance_sheet')
+        if balance_sheet is not None and not balance_sheet.empty:
+            if 'Cash Cash Equivalents And Short Term Investments' in balance_sheet.columns:
+                cash_vals = balance_sheet['Cash Cash Equivalents And Short Term Investments'].dropna()
+                if len(cash_vals) > 0:
+                    cash = float(cash_vals.iloc[0])
+            elif 'Cash And Cash Equivalents' in balance_sheet.columns:
+                cash_vals = balance_sheet['Cash And Cash Equivalents'].dropna()
+                if len(cash_vals) > 0:
+                    cash = float(cash_vals.iloc[0])
                 
     market_ev = market_cap + total_debt - cash
     enterprise_value = dcf_result.get('enterprise_value', 0.0)

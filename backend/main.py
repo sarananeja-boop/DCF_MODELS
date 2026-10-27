@@ -350,6 +350,8 @@ def analyze(req: AnalyzeRequest):
         tax_rate = market_profile.get("tax_rate", 0.2517 if market == "IN" else 0.21)
         stock_data["_tax_rate"] = tax_rate
         stock_data["market"] = market
+        unit_economics_convergence = False
+        gaap_sbc_note: Optional[str] = None
 
         if is_financial:
             logger.info("Routing %s to Financial Services (Bank/NBFC) Multi-Stage FCFE Model", ticker)
@@ -445,6 +447,11 @@ def analyze(req: AnalyzeRequest):
             # Determine latest and historical margin trajectory
             ebit_margins_hist = metrics.get("ebit_margins", [])
             latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
+            avg_gross_margin = float(metrics.get("avg_gross_margin", 0.0) or 0.0)
+            avg_fcf_margin = float(metrics.get("avg_fcf_margin", 0.0) or 0.0)
+            latest_fcf_margin = float(metrics.get("latest_fcf_margin", 0.0) or 0.0)
+            best_fcf_margin = max(avg_fcf_margin, latest_fcf_margin)
+            latest_sbc_pct = float(metrics.get("latest_sbc_pct", 0.0) or 0.0)
             
             if overrides.ebit_margin is not None:
                 target_margin = overrides.ebit_margin
@@ -454,6 +461,21 @@ def analyze(req: AnalyzeRequest):
                 # Avoid locking peak-cycle margins from commodity price spikes into perpetuity
                 target_margin = avg_ebit_margin
                 current_margin = latest_margin if abs(latest_margin - target_margin) > 0.01 else None
+            elif (
+                not is_extractive
+                and (avg_gross_margin >= 0.55 or best_fcf_margin >= 0.18)
+                and (best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.08)
+            ):
+                # High-gross-margin / R&D & SBC expensing compounders (e.g., Zscaler, CrowdStrike, Palo Alto, ServiceNow, Snowflake)
+                # Under US GAAP / Ind AS, software/R&D firms expense 100% of customer acquisition (S&M), R&D, and Stock-Based
+                # Compensation (SBC) upfront on the income statement, depressing GAAP EBIT even when actual Free Cash Flow
+                # (CFO - CapEx) and Gross Margins are strongly positive.
+                # Anchor mature operating margin to unit economics (Gross Margin & FCF Margin) while deducting normalized mature SBC (~5%).
+                unit_target = max(0.38 * avg_gross_margin, best_fcf_margin)
+                target_margin = float(np.clip(unit_target, 0.20, 0.38))
+                econ_start = max(latest_margin, min(latest_fcf_margin, avg_fcf_margin) - 0.05)
+                current_margin = float(np.clip(econ_start, 0.05, target_margin))
+                unit_economics_convergence = True
             else:
                 if latest_margin > 0:
                     if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
@@ -466,9 +488,19 @@ def analyze(req: AnalyzeRequest):
                         target_margin = avg_ebit_margin
                         current_margin = latest_margin if abs(latest_margin - target_margin) > 0.02 else None
                 else:
-                    # Currently loss-making: Damodaran turnaround convergence towards sustainable 10% target
+                    # Currently loss-making turnaround: scale target margin by gross margin structure (10% to 22%)
                     current_margin = latest_margin
-                    target_margin = 0.10
+                    target_margin = float(np.clip(0.30 * avg_gross_margin, 0.10, 0.22)) if avg_gross_margin > 0 else 0.10
+
+            if unit_economics_convergence or latest_sbc_pct >= 0.05:
+                gaap_sbc_note = (
+                    f"GAAP vs. Non-GAAP & SBC Note: Trailing GAAP EBIT margin is {latest_margin*100:.1f}% "
+                    f"(after deducting {latest_sbc_pct*100:.1f}% of revenue in Stock-Based Compensation and upfront R&D/S&M), "
+                    f"whereas reported Cash FCF margin (CFO − CapEx) is {latest_fcf_margin*100:.1f}% on {avg_gross_margin*100:.1f}% Gross Margin. "
+                    f"Unlike retail/Street Non-GAAP DCFs that ignore SBC dilution, this model treats SBC as a real economic cost while "
+                    f"converging operating margins from { (current_margin if current_margin is not None else target_margin)*100:.1f}% "
+                    f"toward mature unit-economic steady state ({target_margin*100:.1f}%)."
+                )
 
             discount_rate = (
                 overrides.wacc
@@ -503,6 +535,7 @@ def analyze(req: AnalyzeRequest):
                 base_growth=start_growth,
                 base_margin=target_margin,
                 base_wacc=discount_rate,
+                current_margin=current_margin,
             )
 
             # Sensitivity grids
@@ -719,9 +752,15 @@ def analyze(req: AnalyzeRequest):
                 "negative_ebitda": validation.get("trailing_ebitda", 1.0) <= 0,
                 "metric_used": validation.get("metric_used", "none"),
                 "margin_normalization_used": current_margin is not None,
+                "unit_economics_convergence": unit_economics_convergence,
                 "current_ebit_margin": float(current_margin) if current_margin is not None else float(metrics.get("avg_roe" if is_financial else "avg_ebit_margin", 0.14)),
                 "target_ebit_margin": float(target_margin),
                 "normalized_nwc_to_revenue": float(metrics.get("normalized_nwc_to_revenue", 0.0)),
+                "avg_gross_margin": float(metrics.get("avg_gross_margin", 0.0) or 0.0),
+                "avg_fcf_margin": float(metrics.get("avg_fcf_margin", 0.0) or 0.0),
+                "latest_fcf_margin": float(metrics.get("latest_fcf_margin", 0.0) or 0.0),
+                "latest_sbc_pct": float(metrics.get("latest_sbc_pct", 0.0) or 0.0),
+                "gaap_sbc_note": gaap_sbc_note,
             },
             "overrides_applied": {
                 "revenue_growth": overrides.revenue_growth,

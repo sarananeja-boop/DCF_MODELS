@@ -865,11 +865,22 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     dna = np.where(raw_dna < 0, -raw_dna, raw_dna)  # explicit positive
 
     # ------------------------------------------------------------------
-    # 3E – Net Working Capital
+    # 3E – Net Working Capital (Non-Cash Working Capital)
+    # Must exclude both Cash & Equivalents AND Short-Term Marketable Securities
+    # (Treasury bills, liquid mutual funds, etc.), which are non-operating cash assets
+    # already added in the Enterprise-to-Equity bridge.
     # ------------------------------------------------------------------
     current_assets = safe_get(balance_sheet, "Current Assets")[::-1]
     current_liabs = safe_get(balance_sheet, "Current Liabilities")[::-1]
-    cash_on_bs = safe_get(balance_sheet, "Cash And Cash Equivalents")[::-1]
+    cce_series = safe_get(balance_sheet, "Cash And Cash Equivalents", default=0)[::-1]
+    sti_series = safe_get(balance_sheet, "Other Short Term Investments", default=0)[::-1]
+    if "Cash Cash Equivalents And Short Term Investments" in balance_sheet.columns:
+        cash_sti_series = safe_get(
+            balance_sheet, "Cash Cash Equivalents And Short Term Investments", default=0
+        )[::-1]
+        cash_on_bs = np.maximum(cash_sti_series, cce_series + sti_series)
+    else:
+        cash_on_bs = cce_series + sti_series
     st_debt = safe_get(balance_sheet, "Current Debt", default=0)[::-1]
 
     nwc = (current_assets - cash_on_bs) - (current_liabs - st_debt)
@@ -925,6 +936,26 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     avg_capex_pct = float(np.mean(capex / np.where(revenue != 0, revenue, 1.0)))
     avg_dna_pct = float(np.mean(dna / np.where(revenue != 0, revenue, 1.0)))
     avg_dnwc_pct = float(np.mean(delta_nwc / np.where(revenue != 0, revenue, 1.0)))
+
+    # Gross Profit, Cash-Flow FCF (CFO - CapEx), and Stock-Based Compensation (SBC) metrics
+    gross_profit_arr = safe_get(income_stmt, "Gross Profit", default=0)[::-1]
+    if not np.any(gross_profit_arr) and "Cost Of Revenue" in income_stmt.columns:
+        cor_arr = safe_get(income_stmt, "Cost Of Revenue", default=0)[::-1]
+        gross_profit_arr = np.where(cor_arr > 0, revenue - cor_arr, 0.0)
+    gross_margins = gross_profit_arr / np.where(revenue != 0, revenue, 1.0)
+    avg_gross_margin = float(np.mean(gross_margins)) if np.any(gross_profit_arr) else 0.0
+
+    cfo_arr = safe_get(cash_flow, "Operating Cash Flow", default=0)[::-1]
+    fcf_arr = cfo_arr - capex
+    fcf_margins = fcf_arr / np.where(revenue != 0, revenue, 1.0)
+    avg_fcf_margin = float(np.mean(fcf_margins)) if np.any(cfo_arr) else 0.0
+    latest_fcf_margin = float(fcf_margins[-1]) if len(fcf_margins) > 0 else 0.0
+
+    raw_sbc = safe_get(cash_flow, "Stock Based Compensation", default=0)[::-1]
+    sbc_arr = np.where(raw_sbc < 0, -raw_sbc, raw_sbc)
+    sbc_margins = sbc_arr / np.where(revenue != 0, revenue, 1.0)
+    avg_sbc_pct = float(np.mean(sbc_margins)) if np.any(sbc_arr) else 0.0
+    latest_sbc_pct = float(sbc_margins[-1]) if len(sbc_margins) > 0 else 0.0
     
     nwc_to_rev = nwc / np.where(revenue != 0, revenue, 1.0)
     normalized_nwc_to_revenue = float(np.mean(nwc_to_rev))
@@ -932,6 +963,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # Exchanges (MCX, BSE, IEX), depositories (CDSL), and brokers (ANGELONE) hold client
         # clearing/settlement margin float in Current Assets & Liabilities. Clamp NWC/Rev to ±5%.
         normalized_nwc_to_revenue = float(np.clip(normalized_nwc_to_revenue, -0.05, 0.05))
+    else:
+        # Bound steady-state NWC/Revenue within [-8%, +15%] so extreme upfront deferred-revenue
+        # float (e.g. -40% in SaaS) or one-off working capital spikes do not distort perpetual UFCF.
+        normalized_nwc_to_revenue = float(np.clip(normalized_nwc_to_revenue, -0.08, 0.15))
 
     # Total debt and cash (most recent year – index [0] is newest before reversal,
     # but after [::-1] index [-1] is newest … however the original notebook uses
@@ -1067,6 +1102,14 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "avg_dna_pct": avg_dna_pct,
         "avg_dnwc_pct": avg_dnwc_pct,
         "normalized_nwc_to_revenue": normalized_nwc_to_revenue,
+        "gross_margins": gross_margins.tolist(),
+        "avg_gross_margin": avg_gross_margin,
+        "fcf_margins": fcf_margins.tolist(),
+        "avg_fcf_margin": avg_fcf_margin,
+        "latest_fcf_margin": latest_fcf_margin,
+        "sbc_pcts": sbc_margins.tolist(),
+        "avg_sbc_pct": avg_sbc_pct,
+        "latest_sbc_pct": latest_sbc_pct,
         # Snapshot values
         "n_years": n_years,
         "last_revenue": float(revenue[-1]),

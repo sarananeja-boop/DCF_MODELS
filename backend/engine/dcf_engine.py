@@ -162,8 +162,23 @@ def compute_wacc(
         cost_of_equity = raw_cost_of_equity
 
     # 4B – Cost of Debt with Damodaran Synthetic Rating & Continuous Spreads
+    cash_equiv: float = float(metrics.get("cash_and_equivalents", 0.0))
+    hist_dna = metrics.get("dna", [])
+    last_dna = float(hist_dna[-1]) if len(hist_dna) > 0 else 0.0
+    last_ebitda = last_ebit + last_dna
+    last_rev = float(metrics.get("last_revenue", 0.0))
+    latest_fcf = float(metrics.get("latest_fcf_margin", 0.0)) * last_rev
+
     if interest_expense > 0:
-        interest_coverage = float(last_ebit / interest_expense)
+        # For net-cash or cash-generative firms where GAAP EBIT is depressed by non-cash SBC/R&D/D&A,
+        # evaluate coverage using cash-flow/EBITDA backing so solvent net-cash firms are not rated 'D'.
+        if cash_equiv >= total_debt and max(last_ebitda, latest_fcf) > last_ebit:
+            effective_coverage_earnings = max(last_ebit, last_ebitda, latest_fcf * 0.75)
+        elif cash_equiv >= 0.5 * total_debt and last_ebitda > 0 and last_ebit <= 0:
+            effective_coverage_earnings = last_ebitda
+        else:
+            effective_coverage_earnings = last_ebit
+        interest_coverage = float(effective_coverage_earnings / interest_expense)
     else:
         interest_coverage = 999.0
 
@@ -297,8 +312,15 @@ def run_dcf(
     proj_dnwc: List[float] = []
     last_rev = last_revenue
 
-    # Linear fade from start_growth → terminal_growth
-    growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
+    # Growth fade from start_growth → terminal_growth
+    # For high-growth compounders (start_growth > terminal_growth + 10%, non-cyclical, non-extractive),
+    # use a concave multi-stage decay toward terminal_growth in Year N+1 so early-stage growth momentum
+    # does not hit a premature linear cliff in Year 5.
+    if (not is_extractive and not is_cyclical) and start_growth > terminal_growth + 0.10:
+        steps = np.arange(projection_years, dtype=float) / float(projection_years)
+        growth_schedule = start_growth - (start_growth - terminal_growth) * (steps ** 1.35)
+    else:
+        growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
     
     # Margin schedule
     if current_margin is not None:
@@ -370,11 +392,20 @@ def run_dcf(
     hist_ebit = metrics.get("ebit", [])
     last_ebit = hist_ebit[-1] if hist_ebit else (last_rev * ebit_margin)
     hist_nopat = last_ebit * (1 - tax_rate)
-    hist_roic = (hist_nopat / invested_capital) if (invested_capital > 0 and hist_nopat > 0) else discount_rate
-    
+    hist_roic = (hist_nopat / invested_capital) if (invested_capital > 0 and hist_nopat > 0) else 0.0
+    proj_roic = (
+        (proj_nopat[-1] / invested_capital)
+        if (invested_capital > 0 and len(proj_nopat) > 0 and proj_nopat[-1] > 0)
+        else discount_rate
+    )
+    effective_roic = max(hist_roic, proj_roic) if (current_margin is not None or hist_roic <= 0) else hist_roic
+
     # Economic competition bounds sustainable long-term ROIC
-    sustainable_roic = max(discount_rate, min(hist_roic, 0.25))
-    terminal_reinv_rate = min(0.85, max(0.15, terminal_growth / sustainable_roic))
+    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.55)
+    max_roic_cap = 0.35 if is_high_gm else 0.25
+    min_reinv_floor = 0.06 if is_high_gm else 0.12
+    sustainable_roic = max(discount_rate, min(effective_roic, max_roic_cap))
+    terminal_reinv_rate = min(0.85, max(min_reinv_floor, terminal_growth / sustainable_roic))
 
     # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
     if is_extractive and margin_schedule[-1] > 0:
@@ -441,12 +472,17 @@ def run_dcf(
     implied_exit_multiple = (terminal_value / terminal_ebitda) if (terminal_value and terminal_ebitda > 0) else None
 
     # Benchmark exit multiples by sector profile
+    avg_gm_val = float(metrics.get("avg_gross_margin", 0.0))
     if is_extractive:
         benchmark_exit_mult = 4.5
     elif is_cyclical:
         benchmark_exit_mult = 5.5
     elif stock_data.get("is_financial", False):
         benchmark_exit_mult = 8.0
+    elif avg_gm_val >= 0.55 and start_growth >= 0.15:
+        benchmark_exit_mult = 16.0
+    elif avg_gm_val >= 0.45 and start_growth >= 0.10:
+        benchmark_exit_mult = 12.5
     else:
         benchmark_exit_mult = 10.0
 
@@ -514,11 +550,13 @@ def run_dcf_batch(
     projection_years: int = 5,
     tax_rate: Optional[float] = None,
     use_mid_year: bool = True,
+    current_margin: Optional[float] = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Vectorized multi-stage DCF evaluation across all Monte Carlo draws simultaneously.
 
-    Mathematically identical to calling ``run_dcf`` in a loop for each draw
-    (with ``current_margin=None``), returning ``(implied_prices, enterprise_values, equity_values)``.
+    Mathematically aligned with ``run_dcf`` (including concave growth fade for high-growth
+    compounders and margin convergence from ``current_margin``), returning
+    ``(implied_prices, enterprise_values, equity_values)``.
     """
     n = len(sim_growth)
     avg_dna_pct: float = float(metrics["avg_dna_pct"])
@@ -544,7 +582,23 @@ def run_dcf_batch(
             "_tax_rate", 0.2517 if stock_data.get("market") == "IN" else 0.21
         )
 
-    growth_schedule = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+    linear_sched = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+    if not is_extractive and not is_cyclical:
+        steps = np.arange(projection_years, dtype=float) / float(projection_years)
+        concave_sched = sim_growth[:, None] - (sim_growth[:, None] - terminal_growth) * (
+            steps[None, :] ** 1.35
+        )
+        high_g_mask = (sim_growth > terminal_growth + 0.10)[:, None]
+        growth_schedule = np.where(high_g_mask, concave_sched, linear_sched)
+    else:
+        growth_schedule = linear_sched
+
+    if current_margin is not None:
+        base_m_mean = float(np.mean(sim_margin)) if n > 0 else float(current_margin)
+        sim_start_m = float(current_margin) + 0.5 * (sim_margin - base_m_mean)
+        margin_schedule = np.linspace(sim_start_m, sim_margin, projection_years, axis=1)
+    else:
+        margin_schedule = np.repeat(sim_margin[:, None], projection_years, axis=1)
 
     base_steady_state = avg_dna_pct * (1.0 + terminal_growth)
     if is_extractive:
@@ -563,17 +617,20 @@ def run_dcf_batch(
 
     last_rev = np.full(n, last_revenue, dtype=float)
     pv_ufcf = np.zeros(n, dtype=float)
+    last_nopat = np.zeros(n, dtype=float)
 
     for yr in range(projection_years):
         g = growth_schedule[:, yr]
+        m_yr = margin_schedule[:, yr]
         next_rev = last_rev * (1.0 + g)
-        nopat = next_rev * sim_margin * (1.0 - tax_rate)
+        nopat = next_rev * m_yr * (1.0 - tax_rate)
         dna_add = next_rev * avg_dna_pct
         capex_sub = next_rev * capex_schedule[yr]
         delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
         ufcf = nopat + dna_add - capex_sub - delta_nwc
         pv_ufcf += ufcf / discount_factors[:, yr]
         last_rev = next_rev
+        last_nopat = nopat
 
     bs = (
         metrics.get("statements", {}).get("balance_sheet", {})
@@ -593,10 +650,23 @@ def run_dcf_batch(
     hist_roic = np.where(
         (invested_capital > 0) & (hist_nopat > 0),
         hist_nopat / invested_capital,
+        0.0,
+    )
+    proj_roic = np.where(
+        (invested_capital > 0) & (last_nopat > 0),
+        last_nopat / invested_capital,
         sim_wacc,
     )
-    sustainable_roic = np.maximum(sim_wacc, np.minimum(hist_roic, 0.25))
-    terminal_reinv_rate = np.minimum(0.85, np.maximum(0.15, terminal_growth / sustainable_roic))
+    if current_margin is not None:
+        effective_roic = np.maximum(hist_roic, proj_roic)
+    else:
+        effective_roic = np.where(hist_roic > 0, hist_roic, proj_roic)
+
+    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.55)
+    max_roic_cap = 0.35 if is_high_gm else 0.25
+    min_reinv_floor = 0.06 if is_high_gm else 0.12
+    sustainable_roic = np.maximum(sim_wacc, np.minimum(effective_roic, max_roic_cap))
+    terminal_reinv_rate = np.minimum(0.85, np.maximum(min_reinv_floor, terminal_growth / sustainable_roic))
 
     if is_extractive:
         pos_m = sim_margin > 0

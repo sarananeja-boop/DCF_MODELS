@@ -165,6 +165,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const tvInvalid = dcf_result?.terminal_value_valid === false || diagnostics?.terminal_value_valid === false;
   const negHistFcf = Boolean(diagnostics?.historical_fcf_negative || validation?.metric_used === 'ev_revenue');
   const tvFlag = Boolean(diagnostics?.tv_share_flag);
+  const gaapSbcNote = diagnostics?.gaap_sbc_note;
   const rawEqVal = dcf_result?.raw_equity_value ?? ((dcf_result?.enterprise_value || 0) - totalDebt + totalCash);
 
   return (
@@ -173,7 +174,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       {/* =================================================================== */}
       {/* STRESSED / DISTRESSED DCF & DIAGNOSTIC EXPLANATION BANNER           */}
       {/* =================================================================== */}
-      {(isDistressed || tvInvalid || negHistFcf || tvFlag) && (
+      {(isDistressed || tvInvalid || negHistFcf || tvFlag || gaapSbcNote) && (
         <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/12 shadow-lg space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -218,7 +219,12 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
             )}
 
-            {negHistFcf && (
+            {gaapSbcNote ? (
+              <div className="border-l-2 border-[#34b38a] pl-3 py-0.5">
+                <strong className="text-[#f4eedf]">GAAP vs. Non-GAAP &amp; Stock-Based Compensation (SBC): </strong>
+                {gaapSbcNote.replace(/^GAAP vs\. Non-GAAP & SBC Note:\s*/i, '')}
+              </div>
+            ) : negHistFcf ? (
               <div className="border-l-2 border-[#e3b23c] pl-3 py-0.5">
                 <strong className="text-[#f4eedf]">Negative / Depressed Trailing Operating Profit: </strong>
                 {validation?.metric_used === 'ev_revenue' ? (
@@ -231,7 +237,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   </>
                 )}
               </div>
-            )}
+            ) : null}
 
             {tvFlag && diagnostics?.tv_share_note && (
               <div className="border-l-2 border-[#8ab4f8] pl-3 py-0.5">

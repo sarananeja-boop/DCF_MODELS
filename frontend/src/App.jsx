@@ -762,6 +762,33 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* 06. GAAP vs. Non-GAAP Cash Flows, Stock-Based Compensation (SBC) & SaaS Unit Economics */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#34b38a]">06 ·</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">GAAP vs. Non-GAAP Cash Flows, Stock-Based Compensation (SBC) &amp; SaaS Unit Economics</h4>
+                  </div>
+                  <span className="font-mono text-xs text-[#34b38a] font-medium">
+                    SBC Dilution &nbsp;|&nbsp; Unit-Economic Convergence
+                  </span>
+                </div>
+                <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Why Retail &amp; Street Non-GAAP DCFs Are Higher for SaaS/Cloud:</strong> Online calculators and Wall Street non-GAAP price targets start from reported Cash Flow (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong> (often 15%–35% of revenue in cloud/cybersecurity firms like Zscaler, CrowdStrike, or Snowflake) as if paying employees in stock were free.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Damodaran GAAP Discipline:</strong> Following institutional corporate finance principles, ValuationLabs treats employee stock grants as a real compensation cost that dilutes existing shareholders, building cash flows from after-tax operating profit (<span className="font-mono text-[#f4eedf]">NOPAT</span>) rather than treating equity dilution as free cash flow.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Unit-Economic Margin Convergence &amp; Non-Cash Working Capital:</strong> Because GAAP expenses 100% of multi-year R&amp;D and customer acquisition upfront, for high-gross-margin (≥55%), cash-generative compounders the engine models a concave growth fade and converges operating margins from cash-adjusted levels toward mature unit-economic margins (anchored by Gross Margin and FCF Margin), while stripping short-term marketable securities from working capital.</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-[#f4eedf]/12 bg-[#0f1520] flex justify-end">
@@ -1211,6 +1238,21 @@ export default function App() {
                       Deducts effective corporate income taxes, adds back non-cash depreciation and amortization, and subtracts required investments in physical CapEx and Working Capital.
                     </p>
                   </div>
+                </div>
+
+                {/* Institutional Note on GAAP EBIT vs. Non-GAAP FCF & Stock-Based Compensation (SBC) */}
+                <div className="bg-[#111826] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/12 text-xs sm:text-sm text-[#c5cedd] leading-relaxed">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <span className="font-display font-bold text-sm sm:text-base text-[#f4eedf]">
+                      Institutional Note: GAAP Operating Profit (EBIT) vs. Street Non-GAAP FCF &amp; Stock-Based Compensation (SBC)
+                    </span>
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-[#e3b23c] font-semibold">
+                      Damodaran Accounting Standard
+                    </span>
+                  </div>
+                  <p>
+                    Retail valuation sites and Wall Street non-GAAP price targets frequently value high-growth cloud and SaaS firms (e.g., Zscaler, CrowdStrike, Snowflake) using raw Cash Flow from Operations (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong>—often 15%–35% of revenue—as if employee equity dilution were free. ValuationLabs enforces Damodaran&apos;s GAAP discipline by treating SBC as a real compensation expense in <span className="font-mono text-[#f4eedf]">NOPAT</span>, while automatically modeling <strong className="text-[#f4eedf]">Unit-Economic Margin Convergence</strong> (anchored by Gross Margin and FCF Margin) and stripping short-term Treasury securities from working capital so high-gross-margin R&amp;D compounders are neither inflated by ignoring dilution nor penalized by upfront GAAP R&amp;D expensing.
+                  </p>
                 </div>
 
                 {/* Exhibit: Clean Financial Model (Zero Glowing Boxes, Sleek Typography) */}

@@ -98,8 +98,9 @@ The baseline historical parameters are calculated as weighted averages over the 
    $$\kappa_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{CapEx}_t}{\text{Revenue}_t}\right)$$
 
 5. **Net Working Capital Ratio ($\omega_{\text{norm}}$):**
-   $$\text{NWC}_t = (\text{Current Assets}_t - \text{Cash}_t) - (\text{Current Liabilities}_t - \text{Short-Term Debt}_t)$$
-   $$\omega_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{NWC}_t}{\text{Revenue}_t}\right)$$
+   $$\text{NWC}_t = \left(\text{Current Assets}_t - \text{Cash}_t - \text{Short-Term Marketable Securities}_t\right) - \left(\text{Current Liabilities}_t - \text{Short-Term Debt}_t\right)$$
+   $$\omega_{\text{norm}} = \text{clip}\left(\frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{NWC}_t}{\text{Revenue}_t}\right),\, -0.08,\, +0.15\right)$$
+   *(Both cash and short-term Treasury/liquid marketable securities are stripped from Current Assets so non-operating cash reserves are never misclassified as operating working capital drains, and steady-state $\omega_{\text{norm}}$ is bounded within $[-8\%, +15\%]$ so upfront SaaS deferred-revenue float or one-off working capital spikes do not distort perpetual cash flows).*
 
 ---
 
@@ -157,6 +158,8 @@ The nominal pre-tax cost of debt is floored at $4.00\%$:
 
 $$K_d = \max\left(0.04,\, R_f + \Delta_{\text{spread}}\right)$$
 $$\text{After-Tax } K_d = K_d \times (1 - \tau)$$
+
+> **Net-Cash & Positive-Cash-Flow Safeguard:** For asset-light technology or high-growth companies where GAAP $\text{EBIT}_0$ is temporarily negative due to non-cash Stock-Based Compensation ($\text{SBC}$) or upfront $\text{R\&D}$ expensing—while the balance sheet holds **Net Cash** ($\text{Cash \& Marketable Securities} \ge \text{Total Debt}$) and positive Operating Cash Flow / $\text{EBITDA}$—interest coverage is evaluated using cash-backed operating earnings ($\max(\text{EBIT}_0, \text{EBITDA}_0, 0.75 \times \text{FCF}_0)$). This prevents solvent, net-cash firms with convertible notes from being misclassified with a distressed `"D"` credit spread.
 
 ### 4.3 Capital Structure Weights & Blended WACC
 Market capitalization ($E = P_0 \times \text{Shares Outstanding}$) and Total Debt ($D = \text{Short-Term Debt} + \text{Long-Term Debt} + \text{Capital Leases}$) define the market value capital weights:
@@ -219,6 +222,21 @@ $$\text{Equity Value} = EV + \text{Cash} + \text{Marketable Securities} - \text{
 $$\text{Implied Per-Share Fair Value} = \max\left(0,\, \frac{\text{Equity Value}}{\text{Shares Outstanding}}\right)$$
 
 *(If debt exceeds enterprise value, shareholder liability is legally bounded at zero).*
+
+### 5.5 GAAP Operating Income (EBIT) vs. Non-GAAP Cash Flow, Stock-Based Compensation (SBC) & High-Growth Unit Economics
+A frequent question in institutional equity research is why a strict **Damodaran GAAP DCF** produces a more conservative intrinsic value for high-growth cloud, cybersecurity, and SaaS companies (e.g., Zscaler, CrowdStrike, Snowflake, ServiceNow) than retail DCF calculators or Wall Street non-GAAP price targets:
+
+1. **Treatment of Stock-Based Compensation ($\text{SBC}$) as a Real Economic Expense:**
+   * **Retail & Street Non-GAAP Models:** Typically start from reported Cash Flow from Operations minus CapEx ($\text{FCF} = \text{CFO} - \text{CapEx}$) or Non-GAAP Operating Income. Because $\text{CFO}$ adds back 100% of non-cash Stock-Based Compensation (which often represents $15\%\text{–}35\%$ of revenue in high-growth software firms), Non-GAAP models treat employee equity grants as "free" cash flow and ignore ongoing shareholder dilution.
+   * **ValuationLab Institutional GAAP Framework:** Following Aswath Damodaran's corporate finance principles, paying employees in shares is a real economic compensation cost (if equity grants ceased, cash salaries would have to replace them to retain engineering and sales talent). ValuationLab therefore builds Unlevered Free Cash Flow from after-tax operating profit ($\text{NOPAT}$) rather than raw $\text{CFO}$, refusing to treat massive stock dilution as free shareholder value.
+
+2. **Upfront $\text{R\&D}$ / $\text{S\&M}$ Expensing & Unit-Economic Margin Convergence:**
+   * Under US GAAP and Ind AS, industrial manufacturers capitalize growth investments ($\text{CapEx}$) on the Balance Sheet, whereas software and $\text{R\&D}$-intensive firms must expense 100% of software engineering ($\text{R\&D}$), customer acquisition ($\text{S\&M}$), and early-stage $\text{SBC}$ immediately on the Income Statement.
+   * Consequently, a company with $75\%+$ Gross Margins and $+25\%$ Cash FCF Margins can report near-zero or slightly negative GAAP $\text{EBIT}$ during hypergrowth.
+   * When ValuationLab detects a non-cyclical, high-gross-margin ($\ge 55\%$) or high-cash-flow ($\text{FCF Margin} \ge 18\%$) compounder whose GAAP $\text{EBIT}$ margin is depressed by $>8\%$ below its cash FCF margin, the engine automatically activates **Unit-Economic Operating Margin Convergence**:
+     $$\mu_{\text{start}} = \text{clip}\left(\max\left(\mu_{\text{GAAP}, 0},\, \min(\text{FCF Margin}_0, \overline{\text{FCF Margin}}) - 5.0\%\right),\, 5.0\%,\, \mu_{\text{target}}\right)$$
+     $$\mu_{\text{target}} = \text{clip}\left(\max\left(0.38 \times \overline{\text{Gross Margin}},\, \max(\text{FCF Margin}_0, \overline{\text{FCF Margin}})\right),\, 20.0\%,\, 38.0\%\right)$$
+   * Simultaneously, for high-growth compounders ($g_{\text{start}} > g_{\infty} + 10\%$), revenue growth follows a **concave multi-stage trajectory** ($g_t = g_{\text{start}} - (g_{\text{start}} - g_{\infty})(t/N)^{1.35}$) rather than a steep linear cliff, and Terminal Value is cross-checked against a sector-calibrated Year-5 $\text{EV/EBITDA}$ exit multiple ($16.0\times$ for high-gross-margin technology compounders).
 
 ---
 
