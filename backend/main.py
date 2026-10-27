@@ -6,6 +6,8 @@ through a REST API consumed by the Next.js / React frontend.
 """
 
 import os
+import json
+import datetime
 import logging
 from io import BytesIO
 from typing import Optional, Dict, Any, List
@@ -140,6 +142,15 @@ class AISummaryRequest(BaseModel):
 class ExcelExportRequest(BaseModel):
     """Accepts the full /api/analyze response."""
     analysis_data: Dict[str, Any]
+
+
+class FeedbackRequest(BaseModel):
+    category: str = Field("general", description="Category: bug, feature, model, or general")
+    message: str = Field(..., min_length=1, description="User feedback or error description")
+    name: str = Field(..., min_length=1, description="Name of the user")
+    email: str = Field(..., min_length=3, description="Email address of the user")
+    ticker: Optional[str] = Field(None, description="Optional ticker in context")
+    rating: Optional[int] = Field(None, description="Optional rating 1-5")
 
 
 class ErrorResponse(BaseModel):
@@ -890,6 +901,40 @@ def search_ticker(q: str):
         return {"results": results}
     except Exception:
         return {"results": []}
+
+
+@app.post("/api/feedback")
+def submit_feedback(req: FeedbackRequest):
+    """Save user feedback and bug reports to persistent storage."""
+    try:
+        feedback_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(feedback_dir, exist_ok=True)
+        filepath = os.path.join(feedback_dir, "feedback.jsonl")
+        
+        entry = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "category": req.category,
+            "message": req.message.strip(),
+            "name": req.name.strip() if req.name else None,
+            "email": req.email.strip() if req.email else None,
+            "ticker": req.ticker.strip().upper() if req.ticker else None,
+            "rating": req.rating,
+        }
+        
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+            
+        logger.info(
+            "Feedback recorded [%s] from %s (ticker: %s): %s",
+            entry["category"],
+            entry.get("email") or "anonymous",
+            entry.get("ticker") or "none",
+            entry["message"][:60],
+        )
+        return {"status": "success", "message": "Feedback received successfully. Thank you!"}
+    except Exception as exc:
+        logger.exception("Failed to record feedback")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------

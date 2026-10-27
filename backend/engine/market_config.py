@@ -167,10 +167,11 @@ def detect_market(ticker: str) -> str:
 
     Logic:
         - If the ticker ends with ``.NS`` or ``.BO`` → ``'IN'`` (India).
+        - If the clean ticker is registered in Indian corporate actions / redirects → ``'IN'``.
         - Otherwise → ``'US'``.
 
     Args:
-        ticker: A stock ticker string (e.g. ``'AAPL'``, ``'RELIANCE.NS'``).
+        ticker: A stock ticker string (e.g. ``'AAPL'``, ``'RELIANCE.NS'``, ``'NSE'``).
 
     Returns:
         ``'US'`` or ``'IN'``.
@@ -178,4 +179,10 @@ def detect_market(ticker: str) -> str:
     ticker_upper = ticker.strip().upper()
     if ticker_upper.endswith(".NS") or ticker_upper.endswith(".BO"):
         return "IN"
+    try:
+        from .ticker_universe import LEGACY_TICKER_REDIRECTS
+        if ticker_upper in LEGACY_TICKER_REDIRECTS:
+            return LEGACY_TICKER_REDIRECTS[ticker_upper][1]
+    except Exception:
+        pass
     return "US"

@@ -518,7 +518,18 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
             pass
 
     if current_price is None or shares_out is None:
-        # Self-healing fallback: check if the ticker underwent a corporate action / rename on the exchange
+        # Self-healing fallback 1: If Indian ticker failed on .NS, check if it is listed on BSE (.BO)
+        if market.upper() == "IN" and yf_ticker.endswith(".NS") and not redirect_note:
+            bse_alt = yf_ticker[:-3] + ".BO"
+            logger.info("Ticker %s missing data on NSE (.NS); checking BSE (%s)...", yf_ticker, bse_alt)
+            try:
+                res = fetch_stock_data(bse_alt, "IN")
+                res["redirect_note"] = f"{ticker} is listed on BSE under {bse_alt}"
+                return res
+            except Exception as bse_err:
+                logger.debug("BSE fallback %s also failed: %s", bse_alt, bse_err)
+
+        # Self-healing fallback 2: check if the ticker underwent a corporate action / rename on the exchange
         if not redirect_note:
             successor = search_successor_via_yahoo(yf_ticker, market, session)
             if successor:

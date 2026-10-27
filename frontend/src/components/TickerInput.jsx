@@ -39,9 +39,11 @@ export default function TickerInput({
 
   // Auto-sync live ticker universe from backend (/api/universe)
   useEffect(() => {
-    const CACHE_KEY = 'vl_universe_v2';
+    const CACHE_KEY = 'vl_universe_v3';
     const CACHE_TTL = 12 * 60 * 60 * 1000;
     try {
+      localStorage.removeItem('vl_universe_v2');
+      localStorage.removeItem('vl_universe_v1');
       const cachedRaw = localStorage.getItem(CACHE_KEY);
       if (cachedRaw) {
         const parsed = JSON.parse(cachedRaw);
@@ -155,7 +157,13 @@ export default function TickerInput({
 
   const fetchSuggestions = async (q, localMatches = []) => {
     if (!q || q.length < 2) return;
-    if (localMatches.length >= 5) return;
+    const cleanQ = q.trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+    const hasStrongMatch = localMatches.some(
+      (m) =>
+        m.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQ ||
+        m.name.toLowerCase().startsWith(q.trim().toLowerCase())
+    );
+    if (hasStrongMatch && localMatches.length >= 5) return;
 
     const cacheKey = q.trim().toLowerCase();
     if (searchCache.current.has(cacheKey)) {
@@ -226,7 +234,7 @@ export default function TickerInput({
 
   const handleSelectSuggestion = (sym, name, itemMarket) => {
     const isIN = itemMarket === 'IN' || sym.endsWith('.NS') || sym.endsWith('.BO');
-    const cleanSym = isIN ? sym.replace('.NS', '').replace('.BO', '') : sym;
+    const cleanSym = isIN ? (sym.endsWith('.BO') ? sym : sym.replace('.NS', '')) : sym;
     const resolvedMarket = isIN ? 'IN' : 'US';
     
     setMarket(resolvedMarket);
@@ -268,7 +276,8 @@ export default function TickerInput({
         {suggestions.length > 0 ? (
           <>
             {suggestions.map((item, idx) => {
-              const isIN = item.market === 'IN' || item.symbol.endsWith('.NS');
+              const isBSE = item.symbol.endsWith('.BO');
+              const isIN = item.market === 'IN' || item.symbol.endsWith('.NS') || isBSE;
               const cleanSymbol = item.symbol.replace('.NS', '').replace('.BO', '');
               return (
                 <div 
@@ -278,7 +287,7 @@ export default function TickerInput({
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded border border-[#f4eedf]/10 bg-[#161d2a] text-[#a6b0c3] shrink-0">
-                      {isIN ? 'NSE' : 'US'}
+                      {isIN ? (isBSE ? 'BSE' : 'NSE') : 'US'}
                     </span>
                     <div className="flex flex-col min-w-0 overflow-hidden">
                       <span className="font-display font-bold text-sm text-[#f4eedf] group-hover:text-[#e3b23c] transition-colors truncate">

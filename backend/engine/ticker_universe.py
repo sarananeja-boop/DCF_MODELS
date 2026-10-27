@@ -110,6 +110,7 @@ LEGACY_TICKER_REDIRECTS: Dict[str, Tuple[str, str, str]] = {
     "SHRIRAMEPC": ("SEPC.NS", "IN", "Shriram EPC renamed to SEPC (SEPC)"),
     "CAMSLTD": ("CAMS.NS", "IN", "Computer Age Management Services trades on NSE under CAMS"),
     "BRAINBEES": ("FIRSTCRY.NS", "IN", "Brainbees Solutions (FirstCry) trades on NSE under FIRSTCRY"),
+    "NSE": ("NSE.BO", "IN", "National Stock Exchange of India is listed on BSE under NSE.BO (SEBI prohibits self-listing)"),
     # --- Corrupted legacy symbol artifacts ---
     "3M(INDIA)": ("3MINDIA.NS", "IN", "Normalized corrupted ticker symbol to 3MINDIA"),
     "ABBOT(INDIA)": ("ABBOTINDIA.NS", "IN", "Normalized corrupted ticker symbol to ABBOTINDIA"),
@@ -278,6 +279,10 @@ ACTIVE_COMPANY_ENRICHMENTS: Dict[str, Dict[str, str]] = {
     "GOOG": {
         "name_override": "Alphabet Inc. Class C (Google)",
         "aliases": "Google YouTube",
+    },
+    "NSE.BO": {
+        "name_override": "National Stock Exchange of India Ltd",
+        "aliases": "NSE National Stock Exchange",
     },
 }
 
@@ -565,17 +570,36 @@ def _compute_version(universe: List[Dict[str, Any]]) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
+# Curated Indian equities listed exclusively on BSE (such as NSE, which cannot list on itself due to SEBI rules)
+CURATED_BSE_EQUITIES: List[Dict[str, Any]] = [
+    {
+        "s": "NSE.BO",
+        "n": "National Stock Exchange of India Ltd",
+        "m": "IN",
+        "id": "INE721I01024",
+        "a": "NSE National Stock Exchange",
+    }
+]
+
+
 def load_baseline_universe(path: str = _DEFAULT_STOCKS_JSON_PATH) -> List[Dict[str, Any]]:
     """Load the local baseline `stocks.json` file."""
+    data = []
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    data = loaded
     except Exception as exc:
         logger.warning("Failed to load baseline stocks.json: %s", exc)
-    return []
+
+    # Ensure curated BSE-exclusive equities (like NSE.BO) are always present
+    existing_syms = {str(x.get("s", "")).upper() for x in data}
+    for item in CURATED_BSE_EQUITIES:
+        if item["s"].upper() not in existing_syms:
+            data.append(item)
+    return data
 
 
 def fetch_live_nse_equities(timeout: int = 12) -> List[Dict[str, Any]]:
@@ -822,6 +846,12 @@ def sync_live_universe(persist_to_disk: bool = False, stocks_path: str = _DEFAUL
                 sym = LEGACY_TICKER_REDIRECTS[sym][0]
             if not is_non_dcf_instrument(sym, x.get("n"), "EQUITY")[0]:
                 live_us.append({"s": sym, "n": clean_company_name(x.get("n", sym)), "m": "US"})
+
+    # Ensure curated BSE-exclusive equities (such as NSE.BO) are preserved
+    existing_in_syms = {str(x.get("s", "")).upper() for x in live_in}
+    for item in CURATED_BSE_EQUITIES:
+        if item["s"].upper() not in existing_in_syms:
+            live_in.append(item)
 
     combined = live_us + live_in
     version = _compute_version(combined)

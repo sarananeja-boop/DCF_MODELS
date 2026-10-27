@@ -13,8 +13,11 @@ import {
   FiArrowRight,
   FiArrowUpRight,
   FiFileText,
-  FiX
+  FiX,
+  FiMail,
+  FiMessageSquare
 } from 'react-icons/fi';
+import { FaLinkedin } from 'react-icons/fa';
 
 import TickerInput from './components/TickerInput';
 import AssumptionSliders from './components/AssumptionSliders';
@@ -26,6 +29,7 @@ import SensitivityTab from './components/SensitivityTab';
 import TrendsTab from './components/TrendsTab';
 import ExcelDownloadButton from './components/ExcelDownloadButton';
 import ErrorBoundary from './components/ErrorBoundary';
+import ContactAndFeedback from './components/ContactAndFeedback';
 import stocksData from './data/stocks.json';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -195,6 +199,7 @@ export default function App() {
   const [monteCarloIterations] = useState(10000);
   const [resetKey, setResetKey] = useState(0);
   const [showMethodology, setShowMethodology] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const [previewStock, setPreviewStock] = useState('CESC');
   const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.CESC;
@@ -550,6 +555,15 @@ export default function App() {
                 <FiFileText className="w-3.5 h-3.5 text-[#e3b23c]" />
                 <span>Methodology</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
+                title="Leave feedback or report an error"
+              >
+                <FiMessageSquare className="w-3.5 h-3.5 text-[#e3b23c]" />
+                <span>Feedback</span>
+              </button>
               <button 
                 type="button"
                 onClick={() => handleGoHome(true)}
@@ -587,102 +601,163 @@ export default function App() {
             </div>
             
             <div className="p-6 sm:p-7 overflow-y-auto space-y-4 text-sm text-[#f4eedf]/90 leading-relaxed">
-              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-display text-xs font-bold text-[#e3b23c] font-mono">01.</span>
+              {/* 01. Linear Growth Fade & Operating Margin */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#e3b23c]">01 ·</span>
                     <h4 className="font-display font-bold text-base text-[#f4eedf]">Linear Growth Fade &amp; Operating Margin Convergence</h4>
                   </div>
-                  <span className="font-display text-xs text-[#e3b23c] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                  <span className="font-mono text-xs text-[#e3b23c] font-medium">
                     FCFF = NOPAT + D&amp;A − CapEx − ΔNWC
                   </span>
                 </div>
-                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
-                  Year-1 revenue growth fades linearly toward the long-run nominal GDP terminal rate over 5 years. Operating EBIT margin converges toward sustainable target/historical margins, computing Unlevered Free Cash Flow available to all capital providers.
-                </p>
+                <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e3b23c] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Growth Decay:</strong> Year-1 revenue growth steps down linearly over 5 years toward long-run nominal GDP growth, preventing perpetual runaway projections.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e3b23c] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Margin Normalization:</strong> Operating EBIT margin gradually converges toward proven sustainable historical margins rather than assuming cyclical peak profitability forever.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e3b23c] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Distributable Cash:</strong> Unlevered Free Cash Flow (FCFF) deducts effective corporate taxes, adds non-cash D&amp;A, and subtracts required CapEx and working capital reinvestment.</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#5b8fd9]/15 text-[#8ab4f8] border border-[#5b8fd9]/30">02</span>
-                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Dynamic Cost of Capital (WACC, CAPM &amp; Mid-Year Convention)</h4>
+              {/* 02. Dynamic Cost of Capital (WACC) */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#5b8fd9]">02 ·</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Dynamic Cost of Capital (WACC, CAPM &amp; Mid-Year)</h4>
                   </div>
-                  <span className="font-display text-xs text-[#8ab4f8] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
-                    Ke = Rf + β × ERP &nbsp;|&nbsp; t = 0.5, 1.5 …
+                  <span className="font-mono text-xs text-[#8ab4f8] font-medium">
+                    Cost of Equity &amp; Mid-Year Discounting
                   </span>
                 </div>
-                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
-                  Cost of Equity (<strong className="text-[#f4eedf]">Ke</strong>) is anchored to live 10-year sovereign bond yields (India 10Y G-Sec via RBI or US FRED Treasury), blended with after-tax debt cost via synthetic interest-coverage ratings. Cash flows are discounted using the Mid-Year convention (<span className="text-[#f4eedf]">t − 0.5</span>) because earnings accrue evenly throughout the year.
-                </p>
+                <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#8ab4f8] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Cost of Equity:</strong> Anchored directly to live 10-year sovereign bond yields (RBI 10Y G-Sec for India or US FRED 10Y Treasury), plus company beta scaled by the equity risk premium.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#8ab4f8] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Synthetic Debt Cost:</strong> Prices borrowing cost using synthetic interest-coverage ratings (Operating Profit divided by Interest Expense), net of corporate tax shield deductions.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#8ab4f8] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Mid-Year Discounting:</strong> Cash flows are discounted at fractional half-year points because businesses collect cash continuously throughout the fiscal year rather than on December 31.</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#34b38a]/15 text-[#34b38a] border border-[#34b38a]/30">03</span>
-                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Cholesky Decomposition (Σ = L·Lᵀ) &amp; Fat-Tailed Monte Carlo</h4>
+              {/* 03. Cholesky Decomposition & Monte Carlo */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#34b38a]">03 ·</span>
+                    <h4 className="font-display font-bold text-base text-[#f4eedf]">Correlated Monte Carlo &amp; Heavy-Tailed Shocks</h4>
                   </div>
-                  <span className="font-display text-xs text-[#34b38a] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
-                    10,000 Runs &nbsp;|&nbsp; df = 5 &nbsp;|&nbsp; 3× Oversampled
+                  <span className="font-mono text-xs text-[#34b38a] font-medium">
+                    10,000 Verified Simulations &nbsp;|&nbsp; 3× Oversampled
                   </span>
                 </div>
-                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
-                  Factors a 7×7 empirical correlation matrix (linking Revenue Growth, EBIT Margin, Risk-Free Rate, Beta, ERP, and Debt Costs). Draws 3× oversampled heavy-tailed shocks from Student&apos;s t-distribution (<span className="text-[#f4eedf]">df = 5</span>), rejects invalid economic states (WACC ≤ g), and outputs the 10,000-trial probability distribution (P5 Bear, P50 Median, P95 Bull).
-                </p>
+                <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">7-Variable Covariance Matrix:</strong> Links Revenue Growth, Margins, Risk-Free Rates, Beta, Equity Risk Premium, and Borrowing Costs so all economic variables co-move realistically together.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Heavy-Tailed Crisis Distributions:</strong> Replaces naive Gaussian bell curves with fat-tailed Student's t shocks, accurately stress-testing severe macro downturns and black swans.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Strict Economic Filters:</strong> Oversamples 30,000 raw trials and discards economically invalid worlds (such as discount rates lower than GDP growth or negative borrowing rates) to deliver 10,000 verified DCF distributions.</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#e07a5f]/15 text-[#e07a5f] border border-[#e07a5f]/30">04</span>
+              {/* 04. Financial Institution Auto-Switch */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#e07a5f]">04 ·</span>
                     <h4 className="font-display font-bold text-base text-[#f4eedf]">Bank &amp; Financial Institution Auto-Switch (FCFE &amp; Justified P/B)</h4>
                   </div>
-                  <span className="font-display text-xs text-[#e07a5f] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                  <span className="font-mono text-xs text-[#e07a5f] font-medium">
                     Tier-1 Capital &nbsp;|&nbsp; Direct-to-Equity FCFE
                   </span>
                 </div>
-                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
-                  For banks and NBFCs, customer deposits and borrowings are operational working capital rather than debt. The engine automatically switches to a 100%-equity Tier-1 Regulatory Capital FCFE model where terminal equity value is validated through Justified Price-to-Book: <span className="text-[#f4eedf]">P/B = (ROE − g) / (Ke − g)</span>.
-                </p>
+                <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e07a5f] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Operating Deposits:</strong> For Banks and NBFCs, customer deposits and borrowings are operational working capital rather than traditional corporate debt.</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e07a5f] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Tier-1 Regulatory Model:</strong> The engine automatically switches to a 100%-equity Tier-1 capital model that values equity directly via Free Cash Flow to Equity (FCFE).</p>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#e07a5f] mt-2 shrink-0" />
+                    <p><strong className="text-[#f4eedf] font-semibold">Justified P/B Check:</strong> Terminal equity value is grounded in sustainable Return on Equity via <span className="text-[#f4eedf] font-mono">P/B = (ROE − g) / (Ke − g)</span>.</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-display text-xs font-bold px-2 py-0.5 rounded-md bg-[#e3b23c]/15 text-[#e3b23c] border border-[#e3b23c]/30">05</span>
+              {/* 05. Model Validation & Guardrails */}
+              <div className="bg-[#0d121a] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f4eedf]/8 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#e3b23c]">05 ·</span>
                     <h4 className="font-display font-bold text-base text-[#f4eedf]">Model Validation, Multiples Cross-Check &amp; Distress Logic</h4>
                   </div>
-                  <span className="font-display text-xs text-[#e3b23c] font-semibold bg-[#141b26] px-2.5 py-1 rounded-lg border border-[#f4eedf]/10">
+                  <span className="font-mono text-xs text-[#e3b23c] font-medium">
                     EV/EBITDA &nbsp;|&nbsp; P/B &nbsp;|&nbsp; Distress Guardrails
                   </span>
                 </div>
-                <p className="text-[#c5cedd] text-sm leading-relaxed mt-2">
-                  Every DCF valuation is cross-checked against market multiples (<strong className="text-[#f4eedf]">EV/EBITDA</strong> for profitable corporates, <strong className="text-[#f4eedf]">EV/Sales</strong> when trailing EBITDA ≤ 0, and <strong className="text-[#f4eedf]">P/B vs. Justified P/B</strong> for Banks/NBFCs) using the divergence formula <span className="text-[#f4eedf]">|Model Multiple − Market Multiple| / Market Multiple</span>:
+                <p className="text-[#c5cedd] text-xs sm:text-sm">
+                  Every DCF is automatically cross-referenced against current market trading multiples to detect market mispricings and model divergence:
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3 text-xs">
-                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
-                    <div className="font-display font-bold text-[#34b38a] mb-0.5">✓ VERIFIED (&lt; 50% Divergence Gap)</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2 text-xs">
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#34b38a]/20">
+                    <div className="font-display font-bold text-[#34b38a] mb-1 flex items-center gap-1.5">
+                      <span>✓ VERIFIED</span>
+                      <span className="text-[10px] text-[#a6b0c3] font-normal">(&lt;50% gap)</span>
+                    </div>
                     <p className="text-[#a6b0c3] leading-relaxed">
-                      DCF implied multiple is within 50% of the current market multiple, confirming baseline cash-flow projections align with peer market pricing.
+                      Tight alignment between DCF implied multiples and current market multiples, confirming reasonable baseline cash flow assumptions.
                     </p>
                   </div>
-                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
-                    <div className="font-display font-bold text-[#e3b23c] mb-0.5">⚠️ WARNING (50% – 80% Divergence Gap)</div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#e3b23c]/20">
+                    <div className="font-display font-bold text-[#e3b23c] mb-1 flex items-center gap-1.5">
+                      <span>⚠️ WARNING</span>
+                      <span className="text-[10px] text-[#a6b0c3] font-normal">(50%–80% gap)</span>
+                    </div>
                     <p className="text-[#a6b0c3] leading-relaxed">
-                      Moderate divergence between DCF and market multiple (or Terminal Value &gt; 75% of EV). Signals that the market is pricing in higher growth/margins than historical baseline.
+                      Moderate divergence or Terminal Value &gt;75% of EV. Indicates market prices in growth acceleration beyond historical averages.
                     </p>
                   </div>
-                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
-                    <div className="font-display font-bold text-[#e07a5f] mb-0.5">⚠️ FLAGGED (&gt; 80% Divergence Gap)</div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#e07a5f]/20">
+                    <div className="font-display font-bold text-[#e07a5f] mb-1 flex items-center gap-1.5">
+                      <span>⚠️ FLAGGED</span>
+                      <span className="text-[10px] text-[#a6b0c3] font-normal">(&gt;80% gap)</span>
+                    </div>
                     <p className="text-[#a6b0c3] leading-relaxed">
-                      Extreme valuation disconnect (&gt;80% gap) or negative operating EBITDA, indicating the stock trades on aggressive future turnaround/growth expectations.
+                      High disconnect or negative operating EBITDA, signaling the stock trades on speculative sentiment or aggressive turnaround expectations.
                     </p>
                   </div>
-                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#f4eedf]/8">
-                    <div className="font-display font-bold text-[#e07a5f] mb-0.5">🚨 DCF UNRELIABLE / DISTRESSED</div>
+                  <div className="bg-[#141b26] p-3 rounded-xl border border-[#e07a5f]/40">
+                    <div className="font-display font-bold text-[#e07a5f] mb-1 flex items-center gap-1.5">
+                      <span>🚨 DISTRESSED</span>
+                      <span className="text-[10px] text-[#a6b0c3] font-normal">(DCF Unreliable)</span>
+                    </div>
                     <p className="text-[#a6b0c3] leading-relaxed">
-                      Triggered when Balance Sheet Debt exceeds Implied Enterprise Value (<span className="text-[#f4eedf]">Equity Value ≤ 0</span>), when Year-5 FCF is negative (<span className="text-[#f4eedf]">TV = 0</span>), or when &gt;20% of Monte Carlo trials result in equity wipeout.
+                      Triggered when debt exceeds Enterprise Value (<span className="text-[#f4eedf]">Equity ≤ 0</span>), Year-5 FCF is negative, or &gt;20% of simulations wipe out equity.
                     </p>
                   </div>
                 </div>
@@ -694,6 +769,50 @@ export default function App() {
                 type="button"
                 onClick={() => setShowMethodology(false)}
                 className="px-5 py-2.5 text-xs font-bold bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] rounded-xl transition cursor-pointer shadow-md"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback & Contact Modal (Accessible from workspace & header anytime) */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 bg-[#080c12]/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-[#141b26] border border-[#f4eedf]/20 rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#f4eedf]/12 bg-[#0f1520]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 flex items-center justify-center text-[#e3b23c]">
+                  <FiMessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base sm:text-lg font-bold text-[#f4eedf] tracking-tight">
+                    ValuationLab Feedback &amp; Contact
+                  </h3>
+                  <p className="text-xs text-[#a6b0c3]">
+                    Report errors, suggest features, or connect with Sarandeep directly
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(false)}
+                className="p-2 text-[#a6b0c3] hover:text-[#f4eedf] hover:bg-[#1f2937] rounded-xl transition-colors cursor-pointer"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 sm:p-8 overflow-y-auto space-y-6">
+              <ContactAndFeedback currentTicker={analysisData?.company?.ticker || ticker} />
+            </div>
+
+            <div className="px-6 py-3.5 border-t border-[#f4eedf]/12 bg-[#0f1520] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(false)}
+                className="px-5 py-2 text-xs font-bold bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] rounded-xl transition cursor-pointer shadow-md"
               >
                 Done
               </button>
@@ -792,53 +911,86 @@ export default function App() {
                 <div className="absolute inset-0 bg-gradient-to-b from-[#071124]/35 via-transparent to-[#0c1017]/95" />
               </div>
 
-              {/* Top-Center Floating Solid Pill Navbar */}
-              <div className="relative z-20 pt-6 sm:pt-8 px-4 flex justify-center">
-                <nav className="bg-[#141b26]/90 border border-[#f4eedf]/12 rounded-2xl px-4 py-2 flex items-center gap-4 sm:gap-6 shadow-2xl backdrop-blur-md">
-                  <button
-                    type="button"
+              {/* Top-Center Floating Solid Pill Navbar (Extended Length, Institutional & Sleek) */}
+              <div className="relative z-20 pt-6 sm:pt-8 px-4 flex justify-center w-full">
+                <nav className="w-full max-w-4xl bg-[#121824]/92 border border-[#f4eedf]/15 rounded-full px-5 sm:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-4 sm:gap-6 shadow-[0_12px_45px_rgba(0,0,0,0.65)] backdrop-blur-xl">
+                  {/* Left Brand Unit */}
+                  <div 
                     onClick={() => handleGoHome(true)}
-                    className="w-8 h-8 rounded-lg bg-[#f4eedf]/10 border border-[#f4eedf]/15 flex items-center justify-center text-[#f4eedf] hover:bg-[#f4eedf]/20 transition cursor-pointer"
-                    title="ValuationLab"
+                    className="flex items-center gap-2.5 cursor-pointer group select-none shrink-0"
+                    title="ValuationLabs"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 3v18h18" />
-                      <path d="m19 9-5 5-4-4-3 3" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollToSection('dcf-explainer')}
-                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
-                  >
-                    Methodology
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollToSection('cholesky-section')}
-                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
-                  >
-                    Cholesky &amp; WACC
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollToSection('portfolio-guide')}
-                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
-                  >
-                    Portfolio Guide
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollToSection('live-showcase')}
-                    className="text-xs sm:text-sm font-medium text-[#f4eedf]/90 hover:text-white transition cursor-pointer"
-                  >
-                    Live Models
-                  </button>
+                    <div className="w-8 h-8 rounded-full bg-[#182232] border border-[#f4eedf]/15 group-hover:border-[#e3b23c]/50 flex items-center justify-center text-[#e3b23c] transition-all">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 3v18h18" />
+                        <path d="m19 9-5 5-4-4-3 3" />
+                      </svg>
+                    </div>
+                    <span className="font-display text-sm sm:text-base font-bold tracking-tight text-[#f4eedf]">
+                      Valuation<span className="text-[#e3b23c]">Labs</span>
+                    </span>
+                  </div>
+
+                  {/* Centered Navigation Links with Generous Spacing */}
+                  <div className="hidden sm:flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-[#c5cedd]">
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('dcf-explainer')}
+                      className="px-3.5 py-1.5 rounded-full hover:text-[#f4eedf] hover:bg-[#1a2334] transition cursor-pointer"
+                    >
+                      Methodology
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('cholesky-section')}
+                      className="px-3.5 py-1.5 rounded-full hover:text-[#f4eedf] hover:bg-[#1a2334] transition cursor-pointer"
+                    >
+                      Cholesky &amp; WACC
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('portfolio-guide')}
+                      className="px-3.5 py-1.5 rounded-full hover:text-[#f4eedf] hover:bg-[#1a2334] transition cursor-pointer"
+                    >
+                      Portfolio Guide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('live-showcase')}
+                      className="px-3.5 py-1.5 rounded-full hover:text-[#f4eedf] hover:bg-[#1a2334] transition cursor-pointer"
+                    >
+                      Live Models
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('contact-feedback')}
+                      className="px-3.5 py-1.5 rounded-full hover:text-[#f4eedf] hover:bg-[#1a2334] transition cursor-pointer"
+                    >
+                      Feedback &amp; Contact
+                    </button>
+                  </div>
+
+                  {/* Right Action: Methodology Guide Quick Access */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowMethodology(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#f4eedf] hover:text-[#e3b23c] bg-[#1a2332] hover:bg-[#222e42] border border-[#f4eedf]/15 rounded-full transition cursor-pointer shadow-sm"
+                    >
+                      <FiFileText className="w-3.5 h-3.5 text-[#e3b23c]" />
+                      <span>Full Guide</span>
+                    </button>
+                  </div>
                 </nav>
               </div>
 
-              {/* Upper-Sky Headline (Live Typewriter Effect on Refresh / Mount) */}
-              <div className="relative z-20 max-w-4xl mx-auto text-center px-4 mt-6 sm:mt-10 mb-auto">
+              {/* Upper-Sky Headline: ValuationLabs prominently on top, Intrinsic Value typewriter line below */}
+              <div className="relative z-20 max-w-4xl mx-auto text-center px-4 mt-7 sm:mt-11 mb-auto flex flex-col items-center">
+                <div className="flex items-center justify-center gap-2 mb-3 sm:mb-3.5">
+                  <span className="font-mono text-xs sm:text-sm font-bold tracking-[0.25em] uppercase text-[#f4eedf]">
+                    Valuation<span className="text-[#e3b23c]">Labs</span>
+                  </span>
+                </div>
                 <TypewriterHeadline />
               </div>
 
@@ -908,593 +1060,1308 @@ export default function App() {
             </section>
 
             {/* ===================================================================== */}
-            {/* BELOW THE HERO: METHODOLOGY & PORTFOLIO GUIDE                         */}
+            {/* PLATFORM AIM & ACTIVE CAPABILITIES (NEW INTRODUCTORY SECTION)         */}
             {/* ===================================================================== */}
-            <div className="max-w-[1560px] w-full mx-auto px-6 lg:px-12 py-20 grid grid-cols-1 lg:grid-cols-12 gap-12 xl:gap-16 items-start">
-              
-              {/* STICKY LEFT-HAND READING GUIDE RAIL (Spacious, Clear & Open) */}
-              <aside className="hidden lg:block lg:col-span-4 sticky top-12 pr-6 border-r border-[#f4eedf]/10 space-y-8">
-                <div>
-                  <span className="text-xs font-display uppercase tracking-[0.22em] text-[#e3b23c] block mb-3 font-bold">
-                    Methodology Guide
-                  </span>
-                  <h3 className="font-display text-2xl font-bold text-[#f4eedf] tracking-tight mb-3">
-                    How Our Valuation Engine Works
-                  </h3>
-                  <p className="text-sm text-[#a6b0c3] leading-relaxed">
-                    Walk through the exact mathematical pipeline we run when you analyze a stock—from operating margins and discount rates to Cholesky Monte Carlo simulations.
-                  </p>
-                </div>
+            {/* PLATFORM AIM & ACTIVE CAPABILITIES (EDITORIAL, OPEN & BULLETED)       */}
+            {/* ===================================================================== */}
+            <section id="platform-aim" className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-12">
+              <div className="border-b border-[#f4eedf]/10 pb-8 mb-10">
+                <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#e3b23c] font-bold block mb-3">
+                  Purpose &amp; Active Capabilities
+                </span>
+                <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight">
+                  Democratizing First-Principles Valuation
+                </h2>
+                <p className="text-base sm:text-lg text-[#c5cedd] mt-3 max-w-3xl leading-relaxed">
+                  Why ValuationLabs exists, what we stand for, and the quantitative financial modeling engine ready in your browser today.
+                </p>
+              </div>
 
-                <nav className="space-y-3">
-                  {[
-                    { id: 'dcf-explainer', num: '01', title: 'Operating Margin & Free Cash Flow (FCFF)', subtitle: 'Linear growth fade & revenue-to-FCFF waterfall' },
-                    { id: 'wacc-section', num: '02', title: 'Discount Rate (WACC, CAPM & Mid-Year)', subtitle: 'Sovereign 10Y yields, synthetic spreads & mid-year discounting' },
-                    { id: 'cholesky-section', num: '03', title: 'Cholesky Decomposition & 10,000 Runs', subtitle: '7×7 empirical correlation matrix & Student’s t-shocks' },
-                    { id: 'portfolio-guide', num: '04', title: 'Incorporating DCF in Stock Analysis', subtitle: 'Margin of safety, compounders & portfolio sizing' },
-                    { id: 'live-showcase', num: '05', title: 'Verified Live Engine Benchmarks', subtitle: 'Sample DCF models & workspace launch' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => scrollToSection(item.id)}
-                      className="w-full text-left p-3.5 rounded-2xl bg-[#141b26]/50 hover:bg-[#141b26] border border-[#f4eedf]/8 hover:border-[#e3b23c]/40 transition-all cursor-pointer group flex items-start gap-3.5 shadow-sm"
-                    >
-                      <span className="w-8 h-8 rounded-xl bg-[#0d121a] text-[#e3b23c] border border-[#f4eedf]/10 group-hover:bg-[#e3b23c] group-hover:text-[#0f141c] flex items-center justify-center font-display font-bold text-xs shrink-0 transition-colors">
-                        {item.num}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-display font-bold text-sm text-[#f4eedf] group-hover:text-[#e3b23c] transition-colors leading-snug">
-                          {item.title}
-                        </div>
-                        <div className="text-xs text-[#a6b0c3] mt-1 leading-normal">
-                          {item.subtitle}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </nav>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-14 items-start">
+                {/* Left Column: Our Aim */}
+                <div className="space-y-6 flex flex-col justify-between h-full">
+                  <div>
+                    <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-widest text-[#e3b23c] font-bold block mb-2">
+                      Our Aim
+                    </span>
+                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight leading-snug mb-3 md:min-h-[4.5rem] flex items-start">
+                      Grounding stock analysis in real cash flows, not market sentiment.
+                    </h3>
+                    <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed mb-6 md:min-h-[5.5rem]">
+                      Daily stock prices fluctuate on headlines, momentum, and short-term quarterly speculation. Our purpose is to cut through the noise and give every investor the institutional-grade quantitative tools to value companies from first principles.
+                    </p>
 
-                {/* Mathematical Guardrails Reference Card */}
-                <div className="p-4 rounded-2xl bg-[#0d121a] border border-[#f4eedf]/10 space-y-2.5">
-                  <span className="text-[10px] font-display uppercase tracking-wider text-[#e3b23c] font-bold block">
-                    Institutional Standards
-                  </span>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
-                      <span className="text-[#a6b0c3]">Discount Period</span>
-                      <span className="font-display font-bold text-[#f4eedf]">Mid-Year (t − 0.5)</span>
-                    </div>
-                    <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
-                      <span className="text-[#a6b0c3]">Terminal Anchor</span>
-                      <span className="font-display font-bold text-[#f4eedf]">Nominal GDP Cap</span>
-                    </div>
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-[#a6b0c3]">Fat-Tailed Shocks</span>
-                      <span className="font-display font-bold text-[#34b38a]">Student&apos;s t (df = 5)</span>
-                    </div>
+                    <ul className="space-y-5 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">First-Principles Valuation:</strong> Grounding equity research strictly in real cash flows, operating earnings, and audited balance sheets rather than hype or momentum.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Institutional Rigor for Everyone:</strong> Automating the exact Damodaran-aligned cash flow frameworks and debt rating mechanics previously restricted to costly hedge-fund terminals.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Probabilistic Reality over Targets:</strong> Moving past fragile single price targets by computing full 10,000-scenario confidence distributions across the full bear-to-bull spectrum.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Complete Modeling Transparency:</strong> Open assumptions, zero black-box formulas, and audited financial line items you can inspect in your browser and export to Excel.
+                        </p>
+                      </li>
+                    </ul>
                   </div>
                 </div>
-              </aside>
 
-              {/* MAIN CONTINUOUS EDITORIAL FLOW (8 COLUMNS) */}
-              <div className="lg:col-span-8 divide-y divide-[#f4eedf]/12">
+                {/* Right Column: What ValuationLabs Offers Currently */}
+                <div className="space-y-6 flex flex-col justify-between h-full">
+                  <div>
+                    <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-widest text-[#5b8fd9] font-bold block mb-2">
+                      Active Capabilities
+                    </span>
+                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight leading-snug mb-3 md:min-h-[4.5rem] flex items-start">
+                      Institutional financial modeling pipelines ready in your browser.
+                    </h3>
+                    <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed mb-6 md:min-h-[5.5rem]">
+                      Production-ready quantitative valuation workflows executing instantly on live market data across NSE, BSE, and US Equities, backed by audited filings and live sovereign anchors.
+                    </p>
 
-                {/* CHAPTER 01: OPERATING MARGIN, GROWTH FADE & FREE CASH FLOW (FCFF) */}
-                <section id="dcf-explainer" className="pb-16">
-                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#34b38a] block mb-2 font-bold">
+                    <ul className="space-y-5 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#34b38a] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Automated 5-Year DCF Engine:</strong> Extracts audited SEC and NSE filings to model linear growth decay and calculate true Free Cash Flow to Firm (FCFF).
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#5b8fd9] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Dynamic Macro WACC:</strong> Anchors discount rates to live 10-Year sovereign bond yields from the RBI and US Federal Reserve, factoring in company beta and capital structure.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">10,000-Run Monte Carlo:</strong> Uses correlated matrix decomposition with heavy-tailed market shock distributions to stress-test real-world economic risks.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e07a5f] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Reverse-DCF &amp; Excel Export:</strong> Adjusts growth and margin sliders in real time to reveal implied market expectations, with instant one-click multi-tab Excel export.
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* ===================================================================== */}
+            {/* METHODOLOGY GUIDE (OPEN EDITORIAL, PROPORTIONATE CHARTS)              */}
+            {/* ===================================================================== */}
+            <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 space-y-16 sm:space-y-20">
+
+              {/* CHAPTER 01: OPERATING MARGIN, GROWTH FADE & FREE CASH FLOW (FCFF) */}
+              <section id="dcf-explainer" className="space-y-8">
+                <div>
+                  <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#34b38a] block mb-3 font-bold">
                     01 · Cash Flow &amp; Operating Margin Architecture
                   </span>
-                  <h2 className="font-display text-2xl sm:text-4xl font-bold text-[#f4eedf] tracking-tight mb-4 leading-tight">
-                    What a DCF valuation actually measures — from Revenue Growth and Operating Margin to Free Cash Flow
+                  <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    From Revenue Growth to Distributable Free Cash Flow
                   </h2>
-                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
-                    Every day, the stock market quotes a <strong className="text-[#f4eedf] font-semibold">share price</strong> driven by sentiment and headlines. A <strong className="text-[#f4eedf] font-semibold">Discounted Cash Flow (DCF)</strong> model measures the <strong className="text-[#e3b23c] font-semibold">intrinsic value of the business itself</strong> based on the actual cash it can distribute after paying taxes and reinvesting in operations.
+                  <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed max-w-4xl">
+                    Every day, the stock market quotes a <strong className="text-[#f4eedf] font-semibold">share price</strong> driven by sentiment and headlines. A <strong className="text-[#f4eedf] font-semibold">Discounted Cash Flow (DCF)</strong> model measures the <strong className="text-[#e3b23c] font-semibold">intrinsic value of the business itself</strong> based on the actual cash it produces after paying taxes and reinvesting in operations.
                   </p>
+                </div>
 
-                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-center pt-4">
-                    <div className="xl:col-span-5 space-y-5">
-                      <div className="border-l-2 border-[#34b38a] pl-4">
-                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
-                          Linear Revenue Growth Fade (Years 1 → 5)
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
-                          No company grows at 20%+ forever. Our engine takes Year-1 Revenue Growth (<span className="font-display font-bold text-[#f4eedf]">g₁</span>) and <strong className="text-[#f4eedf] font-medium">linearly fades</strong> it each year toward the economy&apos;s long-run nominal GDP growth rate (<span className="font-display font-bold text-[#f4eedf]">g_terminal</span>).
-                        </p>
-                      </div>
-
-                      <div className="border-l-2 border-[#e3b23c] pl-4">
-                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
-                          Operating EBIT Margin Convergence &amp; Reinvestment
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
-                          Operating Margin (<span className="font-display font-bold text-[#f4eedf]">EBIT / Revenue</span>) measures how much profit is kept per ₹100 or $100 of sales. After deducting corporate taxes to get <strong className="text-[#f4eedf] font-medium">NOPAT</strong>, we add back non-cash D&amp;A and subtract physical CapEx and Working Capital (<span className="font-display font-bold text-[#f4eedf]">ΔNWC</span>) required to sustain growth.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Visual SVG Diagram: Growth Fade & Margin-to-FCFF Pipeline */}
-                    <div className="xl:col-span-7 bg-[#141b26] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/10">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-[11px] font-display uppercase tracking-wider text-[#a6b0c3] font-bold">
-                          5-Year Linear Growth Fade &amp; FCFF Waterfall
-                        </span>
-                        <span className="text-[11px] font-display font-bold text-[#34b38a]">
-                          FCFF = NOPAT + D&amp;A − CapEx − ΔNWC
-                        </span>
-                      </div>
-                      <svg viewBox="0 0 600 230" className="w-full h-auto">
-                        <text x="15" y="22" fill="#f4eedf" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
-                          A. Revenue Growth Linear Decay (Yr 1 → Yr 5)
-                        </text>
-                        <line x1="25" y1="175" x2="270" y2="175" stroke="#f4eedf" strokeOpacity="0.2" strokeWidth="1" />
-                        <line x1="25" y1="40" x2="25" y2="175" stroke="#f4eedf" strokeOpacity="0.2" strokeWidth="1" />
-                        <line x1="25" y1="145" x2="270" y2="145" stroke="#e3b23c" strokeDasharray="4 4" strokeWidth="1.2" />
-                        <text x="175" y="138" fill="#e3b23c" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
-                          Terminal g (GDP Cap)
-                        </text>
-                        <polyline
-                          fill="none"
-                          stroke="#34b38a"
-                          strokeWidth="3"
-                          points="45,58 95,80 145,102 195,123 245,145"
-                        />
-                        {[
-                          { x: 45, y: 58, yr: 'Yr 1', val: '16%' },
-                          { x: 95, y: 80, yr: 'Yr 2', val: '13.4%' },
-                          { x: 145, y: 102, yr: 'Yr 3', val: '10.8%' },
-                          { x: 195, y: 123, yr: 'Yr 4', val: '8.1%' },
-                          { x: 245, y: 145, yr: 'Yr 5', val: '5.5%' },
-                        ].map((pt, idx) => (
-                          <g key={idx}>
-                            <circle cx={pt.x} cy={pt.y} r="4.5" fill="#34b38a" />
-                            <text x={pt.x} y={pt.y - 9} textAnchor="middle" fill="#f4eedf" fontSize="9" fontFamily="Space Grotesk, sans-serif">
-                              {pt.val}
-                            </text>
-                            <text x={pt.x} y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
-                              {pt.yr}
-                            </text>
-                          </g>
-                        ))}
-
-                        <line x1="295" y1="20" x2="295" y2="205" stroke="#f4eedf" strokeOpacity="0.1" strokeWidth="1" />
-
-                        <text x="315" y="22" fill="#f4eedf" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
-                          B. Operating Margin to Free Cash Flow
-                        </text>
-                        <rect x="320" y="45" width="42" height="130" rx="4" fill="#5b8fd9" fillOpacity="0.85" />
-                        <text x="341" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">Revenue</text>
-                        <text x="341" y="40" textAnchor="middle" fill="#8ab4f8" fontSize="9" fontFamily="Space Grotesk, sans-serif">100%</text>
-
-                        <rect x="378" y="105" width="42" height="70" rx="4" fill="#e3b23c" fillOpacity="0.85" />
-                        <text x="399" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">EBIT</text>
-                        <text x="399" y="99" textAnchor="middle" fill="#e3b23c" fontSize="9" fontFamily="Space Grotesk, sans-serif">Margin</text>
-
-                        <rect x="436" y="122" width="42" height="53" rx="4" fill="#e07a5f" fillOpacity="0.8" />
-                        <text x="457" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">NOPAT</text>
-                        <text x="457" y="116" textAnchor="middle" fill="#e07a5f" fontSize="9" fontFamily="Space Grotesk, sans-serif">−Tax</text>
-
-                        <rect x="494" y="135" width="42" height="40" rx="4" fill="#a6b0c3" fillOpacity="0.5" />
-                        <text x="515" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">−CapEx</text>
-                        <text x="515" y="129" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Space Grotesk, sans-serif">+D&amp;A</text>
-
-                        <rect x="548" y="118" width="42" height="57" rx="4" fill="#34b38a" />
-                        <text x="569" y="192" textAnchor="middle" fill="#34b38a" fontSize="9.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">FCFF</text>
-                        <text x="569" y="112" textAnchor="middle" fill="#34b38a" fontSize="9" fontWeight="700" fontFamily="Space Grotesk, sans-serif">Cash</text>
-                      </svg>
-                    </div>
+                {/* Clean 3-Column Editorial Explanations (Perfect Horizontal Alignment) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-2 items-start">
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Linear Growth Decay
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Year-1 revenue growth steps down systematically each year toward the long-term nominal GDP growth rate of the economy. This prevents the model from assuming unrealistic perpetual compounding.
+                    </p>
                   </div>
-                </section>
 
-                {/* CHAPTER 02: DISCOUNT RATE (WACC, CAPM & MID-YEAR DISCOUNTING) */}
-                <section id="wacc-section" className="py-16">
-                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#5b8fd9] block mb-2 font-bold">
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Margin Normalization
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Operating EBIT margins converge gradually toward sustainable historical industry averages rather than assuming temporary boom-cycle peak profitability lasts forever.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Distributable Cash Flow
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Deducts effective corporate income taxes, adds back non-cash depreciation and amortization, and subtracts required investments in physical CapEx and Working Capital.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Exhibit: Clean Financial Model (Zero Glowing Boxes, Sleek Typography) */}
+                <div className="bg-[#0c121d] rounded-2xl p-6 sm:p-9 border border-[#f4eedf]/10 space-y-6">
+                  <div className="flex flex-wrap justify-between items-center gap-3 pb-5 border-b border-[#f4eedf]/10">
+                    <span className="text-xs sm:text-sm font-mono uppercase tracking-wider text-[#f4eedf] font-bold">
+                      5-Year Revenue Decay &amp; Distributable Cash Flow Waterfall
+                    </span>
+                    <span className="text-xs sm:text-sm font-mono text-[#8b9bb4]">
+                      FCFF = NOPAT + D&amp;A − CapEx − ΔNWC
+                    </span>
+                  </div>
+
+                  <svg viewBox="0 0 960 335" className="w-full h-auto select-none">
+                    <defs>
+                      <linearGradient id="decayAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.16" />
+                        <stop offset="70%" stopColor="#38bdf8" stopOpacity="0.03" />
+                        <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <filter id="glowBlue" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="3" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+
+                      <filter id="glowGreen" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="3" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+
+                      {/* Subtle Bar Gradients */}
+                      <linearGradient id="barRevGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1e293b" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity="0.95" />
+                      </linearGradient>
+                      <linearGradient id="barEbitGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#252422" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#131418" stopOpacity="0.95" />
+                      </linearGradient>
+                      <linearGradient id="barNopatGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1c212c" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#0d1219" stopOpacity="0.95" />
+                      </linearGradient>
+                      <linearGradient id="barReinvestGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#231a1f" stopOpacity="0.85" />
+                        <stop offset="100%" stopColor="#130f14" stopOpacity="0.95" />
+                      </linearGradient>
+                      <linearGradient id="barFcffGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#064e3b" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#022c22" stopOpacity="0.95" />
+                      </linearGradient>
+
+                      <style>
+                        {`
+                          @keyframes flowDashDecay {
+                            to { stroke-dashoffset: -32; }
+                          }
+                          @keyframes flowDashSteps {
+                            to { stroke-dashoffset: -16; }
+                          }
+                          @keyframes pulseGlowBar {
+                            0%, 100% { stroke-opacity: 0.6; }
+                            50% { stroke-opacity: 1; }
+                          }
+                          .flow-decay {
+                            animation: flowDashDecay 2.4s linear infinite;
+                          }
+                          .flow-steps {
+                            animation: flowDashSteps 1.2s linear infinite;
+                          }
+                          .pulse-bar {
+                            animation: pulseGlowBar 2s ease-in-out infinite;
+                          }
+                        `}
+                      </style>
+                    </defs>
+
+                    {/* LEFT EXHIBIT: 5-Year Revenue Growth Decay (With Live Motion) */}
+                    <g>
+                      <text x="35" y="30" fill="#f4eedf" fontSize="15" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        A. Revenue Growth Linear Decay (Yr 1 → Yr 5)
+                      </text>
+
+                      {/* Subtle Background Guidelines */}
+                      <line x1="50" y1="80" x2="430" y2="80" stroke="#f4eedf" strokeOpacity="0.06" strokeDasharray="3 3" />
+                      <line x1="50" y1="140" x2="430" y2="140" stroke="#f4eedf" strokeOpacity="0.06" strokeDasharray="3 3" />
+                      <line x1="50" y1="200" x2="430" y2="200" stroke="#f4eedf" strokeOpacity="0.06" strokeDasharray="3 3" />
+                      <line x1="50" y1="245" x2="430" y2="245" stroke="#f4eedf" strokeOpacity="0.18" strokeWidth="1" />
+                      <line x1="50" y1="55" x2="50" y2="245" stroke="#f4eedf" strokeOpacity="0.18" strokeWidth="1" />
+
+                      {/* Y-Axis Value Labels */}
+                      <text x="42" y="84" textAnchor="end" fill="#64748b" fontSize="10.5" fontFamily="monospace">20%</text>
+                      <text x="42" y="144" textAnchor="end" fill="#64748b" fontSize="10.5" fontFamily="monospace">10%</text>
+                      <text x="42" y="249" textAnchor="end" fill="#64748b" fontSize="10.5" fontFamily="monospace">0%</text>
+
+                      {/* Terminal GDP Cap Line & Clean Unboxed Label */}
+                      <line x1="50" y1="200" x2="430" y2="200" stroke="#e3b23c" strokeDasharray="4 4" strokeWidth="1.2" strokeOpacity="0.5" />
+                      <text x="58" y="218" fill="#e3b23c" fontSize="11" fontWeight="600" fontFamily="Space Grotesk, sans-serif">
+                        ── Terminal GDP Cap: 5.5%
+                      </text>
+
+                      {/* Smooth Bezier Shaded Area Under Curve */}
+                      <path
+                        fill="url(#decayAreaGrad)"
+                        d="M 70 80 C 120 95, 130 105, 155 110 C 200 120, 215 135, 240 140 C 285 150, 300 165, 325 170 C 370 180, 385 195, 410 198 L 410 245 L 70 245 Z"
+                      />
+
+                      {/* Static Base Curve Line */}
+                      <path
+                        fill="none"
+                        stroke="#0369a1"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        d="M 70 80 C 120 95, 130 105, 155 110 C 200 120, 215 135, 240 140 C 285 150, 300 165, 325 170 C 370 180, 385 195, 410 198"
+                      />
+
+                      {/* Live Moving Dashed Flow Down the Curve */}
+                      <path
+                        fill="none"
+                        stroke="#38bdf8"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeDasharray="8 8"
+                        className="flow-decay"
+                        d="M 70 80 C 120 95, 130 105, 155 110 C 200 120, 215 135, 240 140 C 285 150, 300 165, 325 170 C 370 180, 385 195, 410 198"
+                      />
+
+                      {/* Traveling Beacon Moving Down Curve */}
+                      <circle r="4.5" fill="#38bdf8" filter="url(#glowBlue)">
+                        <animateMotion
+                          path="M 70 80 C 120 95, 130 105, 155 110 C 200 120, 215 135, 240 140 C 285 150, 300 165, 325 170 C 370 180, 385 195, 410 198"
+                          dur="3.2s"
+                          repeatCount="indefinite"
+                        />
+                      </circle>
+                      <circle r="9" fill="none" stroke="#38bdf8" strokeWidth="1.5">
+                        <animateMotion
+                          path="M 70 80 C 120 95, 130 105, 155 110 C 200 120, 215 135, 240 140 C 285 150, 300 165, 325 170 C 370 180, 385 195, 410 198"
+                          dur="3.2s"
+                          repeatCount="indefinite"
+                        />
+                        <animate attributeName="r" values="4;12;4" dur="1.6s" repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.6s" repeatCount="indefinite" />
+                      </circle>
+
+                      {/* Nodes & Clean Values */}
+                      {[
+                        { x: 70, y: 80, yr: 'Year 1', rate: '16.0%' },
+                        { x: 155, y: 110, yr: 'Year 2', rate: '13.4%' },
+                        { x: 240, y: 140, yr: 'Year 3', rate: '10.8%' },
+                        { x: 325, y: 170, yr: 'Year 4', rate: '8.1%' },
+                        { x: 410, y: 198, yr: 'Year 5', rate: '5.5%' },
+                      ].map((pt, idx) => (
+                        <g key={idx}>
+                          {/* Outer Subtle Ring */}
+                          <circle cx={pt.x} cy={pt.y} r="6" fill="none" stroke="#38bdf8" strokeOpacity="0.4" strokeWidth="1.2" />
+                          {/* Inner Dot */}
+                          <circle cx={pt.x} cy={pt.y} r="3" fill="#38bdf8" />
+                          
+                          {/* Clean Unboxed Value Label */}
+                          <text x={pt.x} y={pt.y - 12} textAnchor="middle" fill="#f1f5f9" fontSize="11.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                            {pt.rate}
+                          </text>
+
+                          {/* Year Label - Clean 2-Line Separation */}
+                          <text x={pt.x} y="268" textAnchor="middle" fill="#cbd5e1" fontSize="11.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">
+                            {pt.yr}
+                          </text>
+                          <text x={pt.x} y="284" textAnchor="middle" fill="#64748b" fontSize="10" fontFamily="monospace">
+                            g = {pt.rate}
+                          </text>
+                        </g>
+                      ))}
+                    </g>
+
+                    {/* Middle Divider */}
+                    <line x1="462" y1="20" x2="462" y2="305" stroke="#f4eedf" strokeOpacity="0.1" strokeWidth="1" />
+
+                    {/* RIGHT EXHIBIT: Free Cash Flow Step Waterfall (With Live Cash Journey Motion) */}
+                    <g>
+                      <text x="495" y="30" fill="#f4eedf" fontSize="15" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        B. Operating Margin to Distributable Free Cash Flow
+                      </text>
+
+                      {/* Baseline */}
+                      <line x1="495" y1="245" x2="935" y2="245" stroke="#f4eedf" strokeOpacity="0.18" strokeWidth="1" />
+
+                      {/* 1. Revenue Bar */}
+                      <rect x="505" y="75" width="64" height="170" rx="8" fill="url(#barRevGrad)" stroke="rgba(148, 163, 184, 0.35)" strokeWidth="1.2" />
+                      <line x1="509" y1="76" x2="565" y2="76" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="1.5" strokeLinecap="round" />
+                      <text x="537" y="63" textAnchor="middle" fill="#cbd5e1" fontSize="13" fontWeight="700" fontFamily="Space Grotesk, sans-serif">100%</text>
+
+                      {/* Flowing Step Connector Rev -> EBIT */}
+                      <path d="M 569 150 L 595 150" stroke="#f4eedf" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1.5" className="flow-steps" />
+
+                      {/* 2. EBIT Bar */}
+                      <rect x="595" y="150" width="64" height="95" rx="8" fill="url(#barEbitGrad)" stroke="rgba(227, 178, 60, 0.45)" strokeWidth="1.2" />
+                      <line x1="599" y1="151" x2="655" y2="151" stroke="rgba(227, 178, 60, 0.55)" strokeWidth="1.5" strokeLinecap="round" />
+                      <text x="627" y="138" textAnchor="middle" fill="#fde68a" fontSize="13" fontWeight="700" fontFamily="Space Grotesk, sans-serif">24%</text>
+
+                      {/* Flowing Step Connector EBIT -> NOPAT */}
+                      <path d="M 659 170 L 685 170" stroke="#f4eedf" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1.5" className="flow-steps" />
+
+                      {/* 3. NOPAT Bar */}
+                      <rect x="685" y="170" width="64" height="75" rx="8" fill="url(#barNopatGrad)" stroke="rgba(148, 163, 184, 0.35)" strokeWidth="1.2" />
+                      <line x1="689" y1="171" x2="745" y2="171" stroke="#ffffff" strokeOpacity="0.25" strokeWidth="1.5" strokeLinecap="round" />
+                      <text x="717" y="158" textAnchor="middle" fill="#cbd5e1" fontSize="13" fontWeight="700" fontFamily="Space Grotesk, sans-serif">18%</text>
+
+                      {/* Flowing Step Connector NOPAT -> Reinvest */}
+                      <path d="M 749 190 L 775 190" stroke="#f4eedf" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1.5" className="flow-steps" />
+
+                      {/* 4. Reinvestment Bar */}
+                      <rect x="775" y="190" width="64" height="55" rx="8" fill="url(#barReinvestGrad)" stroke="rgba(224, 122, 95, 0.45)" strokeWidth="1.2" />
+                      <line x1="779" y1="191" x2="835" y2="191" stroke="rgba(224, 122, 95, 0.5)" strokeWidth="1.5" strokeLinecap="round" />
+                      <text x="807" y="178" textAnchor="middle" fill="#fca5a5" fontSize="13" fontWeight="700" fontFamily="Space Grotesk, sans-serif">−6%</text>
+
+                      {/* Flowing Step Connector Reinvest -> FCFF */}
+                      <path d="M 839 175 L 865 175" stroke="#34d399" strokeDasharray="3 3" strokeWidth="1.5" className="flow-steps" />
+
+                      {/* 5. FCFF Bar */}
+                      <rect x="865" y="175" width="68" height="70" rx="8" fill="url(#barFcffGrad)" stroke="#34d399" strokeWidth="1.5" className="pulse-bar" />
+                      <line x1="869" y1="176" x2="929" y2="176" stroke="#6ee7b7" strokeOpacity="0.7" strokeWidth="2" strokeLinecap="round" />
+                      <text x="899" y="162" textAnchor="middle" fill="#34d399" fontSize="13.5" fontWeight="800" fontFamily="Space Grotesk, sans-serif">12%</text>
+
+                      {/* Traveling Cash Flow Particle showing journey from Revenue to FCFF cash */}
+                      <g>
+                        <circle r="4" fill="#34d399" filter="url(#glowGreen)">
+                          <animateMotion
+                            path="M 537 75 L 537 150 L 627 150 L 627 170 L 717 170 L 717 190 L 807 190 L 807 175 L 899 175 L 899 220"
+                            dur="4.5s"
+                            repeatCount="indefinite"
+                          />
+                        </circle>
+                        <circle r="8" fill="none" stroke="#34d399" strokeWidth="1.2">
+                          <animateMotion
+                            path="M 537 75 L 537 150 L 627 150 L 627 170 L 717 170 L 717 190 L 807 190 L 807 175 L 899 175 L 899 220"
+                            dur="4.5s"
+                            repeatCount="indefinite"
+                          />
+                          <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.2s" repeatCount="indefinite" />
+                          <animate attributeName="r" values="5;10;5" dur="1.2s" repeatCount="indefinite" />
+                        </circle>
+                      </g>
+
+                      {/* X-Axis Labels - Two Distinct Lines with 40px+ Inter-Column Breathing Room (Zero Cramping) */}
+                      {/* 1. Revenue */}
+                      <text x="537" y="268" textAnchor="middle" fill="#cbd5e1" fontSize="11.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">Revenue</text>
+                      <text x="537" y="284" textAnchor="middle" fill="#64748b" fontSize="10" fontFamily="monospace">100% Base</text>
+
+                      {/* 2. Operating EBIT */}
+                      <text x="627" y="268" textAnchor="middle" fill="#cbd5e1" fontSize="11.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">Operating</text>
+                      <text x="627" y="284" textAnchor="middle" fill="#fde68a" fontSize="10" fontWeight="700" fontFamily="monospace">EBIT (24%)</text>
+
+                      {/* 3. After-Tax NOPAT */}
+                      <text x="717" y="268" textAnchor="middle" fill="#cbd5e1" fontSize="11.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">After-Tax</text>
+                      <text x="717" y="284" textAnchor="middle" fill="#cbd5e1" fontSize="10" fontWeight="700" fontFamily="monospace">NOPAT (18%)</text>
+
+                      {/* 4. Reinvestment */}
+                      <text x="807" y="268" textAnchor="middle" fill="#cbd5e1" fontSize="11.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">Reinvest</text>
+                      <text x="807" y="284" textAnchor="middle" fill="#fca5a5" fontSize="10" fontWeight="700" fontFamily="monospace">CapEx (−6%)</text>
+
+                      {/* 5. FCFF Cash */}
+                      <text x="899" y="268" textAnchor="middle" fill="#34d399" fontSize="12" fontWeight="700" fontFamily="Space Grotesk, sans-serif">FCFF Cash</text>
+                      <text x="899" y="284" textAnchor="middle" fill="#34d399" fontSize="10" fontWeight="800" fontFamily="monospace">Distributable</text>
+                    </g>
+                  </svg>
+                </div>
+              </section>
+
+              {/* CHAPTER 02: DISCOUNT RATE (WACC, CAPM & MID-YEAR DISCOUNTING) */}
+              <section id="wacc-section" className="space-y-8">
+                <div>
+                  <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#5b8fd9] block mb-3 font-bold">
                     02 · Time Value of Money &amp; Cost of Capital (WACC)
                   </span>
-                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
-                    How the Discount Rate (WACC) works — and why higher interest rates compress fair value
+                  <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    How the Discount Rate (WACC) Determines Present Value
                   </h2>
-                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
-                    ₹100 or $100 received five years from now is worth less than the same amount in your pocket today because of inflation and opportunity cost. The <strong className="text-[#f4eedf] font-semibold">Weighted Average Cost of Capital (WACC)</strong> is the annual hurdle rate used to translate future cash flows into present-day value.
+                  <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed max-w-4xl">
+                    ₹100 or $100 received five years from now is worth less than the same amount in your pocket today because of inflation and opportunity cost. The <strong className="text-[#f4eedf] font-semibold">Weighted Average Cost of Capital (WACC)</strong> is the annual hurdle rate used to discount future cash flows back to today&apos;s purchasing power.
                   </p>
+                </div>
 
-                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-center">
-                    <div className="xl:col-span-5 space-y-5">
-                      <div className="border-l-2 border-[#5b8fd9] pl-4">
-                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
-                          Cost of Equity via CAPM (Ke = Rf + β × ERP)
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
-                          Anchored to live <strong className="text-[#f4eedf]">10-Year Sovereign Bond Yields</strong> (India 10Y G-Sec via RBI or US 10Y Treasury via FRED), plus the equity risk premium scaled by the stock&apos;s historical volatility (<span className="font-display font-bold text-[#f4eedf]">Beta</span>).
-                        </p>
-                      </div>
-
-                      <div className="border-l-2 border-[#e3b23c] pl-4">
-                        <h3 className="font-display text-base font-bold text-[#f4eedf]">
-                          After-Tax Cost of Debt &amp; Mid-Year Discounting
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#a6b0c3] mt-1 leading-relaxed">
-                          Debt is priced using a synthetic interest-coverage rating (<span className="font-display font-bold text-[#f4eedf]">EBIT / Interest Expense</span>) minus the corporate tax shield. Because companies earn cash throughout the year rather than on December 31st, we discount at <strong className="text-[#f4eedf]">Mid-Year periods (t = 0.5, 1.5, … 4.5)</strong>.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="xl:col-span-7 bg-[#141b26] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/10">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-[11px] font-display uppercase tracking-wider text-[#a6b0c3] font-bold">
-                          WACC Synthesis &amp; Mid-Year Present Value Decay
-                        </span>
-                        <span className="text-[11px] font-display font-bold text-[#e3b23c]">
-                          PV = FCFF_t / (1 + WACC)^(t − 0.5)
-                        </span>
-                      </div>
-                      <svg viewBox="0 0 600 215" className="w-full h-auto">
-                        <rect x="15" y="25" width="165" height="68" rx="8" fill="#0d121a" stroke="#5b8fd9" strokeOpacity="0.6" />
-                        <text x="27" y="45" fill="#8ab4f8" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">COST OF EQUITY (Ke)</text>
-                        <text x="27" y="63" fill="#f4eedf" fontSize="11" fontFamily="Space Grotesk, sans-serif">Rf + β × (Rm − Rf)</text>
-                        <text x="27" y="80" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">10Y G-Sec / Treasury + Beta</text>
-
-                        <rect x="15" y="115" width="165" height="68" rx="8" fill="#0d121a" stroke="#e3b23c" strokeOpacity="0.6" />
-                        <text x="27" y="135" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">AFTER-TAX DEBT (Kd)</text>
-                        <text x="27" y="153" fill="#f4eedf" fontSize="11" fontFamily="Space Grotesk, sans-serif">(Rf + Spread) × (1 − T)</text>
-                        <text x="27" y="170" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">Synthetic Coverage Rating</text>
-
-                        <path d="M180 59 L225 98" stroke="#5b8fd9" strokeWidth="1.8" fill="none" />
-                        <path d="M180 149 L225 110" stroke="#e3b23c" strokeWidth="1.8" fill="none" />
-
-                        <rect x="225" y="76" width="115" height="56" rx="10" fill="#182232" stroke="#f4eedf" strokeOpacity="0.3" />
-                        <text x="282" y="99" textAnchor="middle" fill="#e3b23c" fontSize="11" fontWeight="700" fontFamily="Space Grotesk, sans-serif">BLENDED WACC</text>
-                        <text x="282" y="117" textAnchor="middle" fill="#f4eedf" fontSize="10" fontFamily="Space Grotesk, sans-serif">Hurdle Rate</text>
-
-                        <path d="M340 104 L375 104" stroke="#f4eedf" strokeOpacity="0.4" strokeWidth="1.5" />
-
-                        <text x="385" y="25" fill="#f4eedf" fontSize="10.5" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
-                          Nominal FCF (Outline) vs. Present Value Today (Solid)
-                        </text>
-                        {[
-                          { x: 395, nomH: 75, pvH: 71, lbl: 't=0.5' },
-                          { x: 438, nomH: 85, pvH: 73, lbl: 't=1.5' },
-                          { x: 481, nomH: 96, pvH: 75, lbl: 't=2.5' },
-                          { x: 524, nomH: 108, pvH: 76, lbl: 't=3.5' },
-                          { x: 565, nomH: 120, pvH: 77, lbl: 't=4.5' },
-                        ].map((b, i) => (
-                          <g key={i}>
-                            <rect
-                              x={b.x - 12}
-                              y={170 - b.nomH}
-                              width="24"
-                              height={b.nomH}
-                              rx="3"
-                              fill="none"
-                              stroke="#a6b0c3"
-                              strokeOpacity="0.45"
-                              strokeDasharray="2 2"
-                            />
-                            <rect
-                              x={b.x - 12}
-                              y={170 - b.pvH}
-                              width="24"
-                              height={b.pvH}
-                              rx="3"
-                              fill="#34b38a"
-                            />
-                            <text x={b.x} y="187" textAnchor="middle" fill="#a6b0c3" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">
-                              {b.lbl}
-                            </text>
-                          </g>
-                        ))}
-                      </svg>
-                    </div>
+                {/* Clean 3-Column Editorial Explanations (Perfect Horizontal Alignment) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-2 items-start">
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Cost of Equity (CAPM)
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Anchored directly to live 10-Year sovereign bond yields (RBI 10Y G-Sec for Indian equities or US 10Y Treasury for US stocks), plus company beta multiplied by the equity risk premium.
+                    </p>
                   </div>
-                </section>
 
-                {/* CHAPTER 03: CHOLESKY DECOMPOSITION & FAT-TAILED MONTE CARLO */}
-                <section id="cholesky-section" className="py-16">
-                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e3b23c] block mb-2 font-bold">
-                    03 · Cholesky Decomposition (Σ = L·Lᵀ) &amp; Fat-Tailed Monte Carlo
-                  </span>
-                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
-                    Why we use Cholesky Decomposition instead of naive random numbers
-                  </h2>
-                  <p className="text-[#a6b0c3] text-sm sm:text-base leading-relaxed mb-8 max-w-3xl">
-                    In the real world, financial variables do not move independently—when a company&apos;s revenue growth accelerates, operating leverage usually expands its EBIT margin at the same time (<span className="font-display font-bold text-[#e3b23c]">ρ &gt; 0</span>). ValuationLab uses <strong className="text-[#f4eedf] font-semibold">Cholesky Matrix Decomposition</strong> paired with <strong className="text-[#f4eedf] font-semibold">fat-tailed Student&apos;s t-shocks (df = 5)</strong> across 10,000 valid simulations.
-                  </p>
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      After-Tax Cost of Debt
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Borrowing rates are priced using synthetic credit spreads based on interest coverage ratios (Operating Profit divided by Interest Expense), reduced by the corporate tax shield deduction.
+                    </p>
+                  </div>
 
-                  <div className="bg-[#141b26] rounded-2xl p-5 sm:p-7 border border-[#f4eedf]/12 mb-8">
-                    <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-                      <span className="text-xs font-display uppercase tracking-wider text-[#e3b23c] font-bold">
-                        Architecture Diagram · 7-Variable Cholesky Decomposition Pipeline (L @ z)
-                      </span>
-                      <span className="text-xs font-display font-semibold text-[#a6b0c3]">
-                        30,000 Oversampled Draws → 10,000 Economically Valid DCF Worlds
-                      </span>
-                    </div>
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Mid-Year Discounting
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Because companies earn cash continuously throughout the operating year rather than on December 31, cash flows are discounted at fractional half-year periods for mathematical accuracy.
+                    </p>
+                  </div>
+                </div>
 
-                    <svg viewBox="0 0 820 230" className="w-full h-auto">
-                      <rect x="10" y="20" width="185" height="190" rx="10" fill="#0d121a" stroke="#f4eedf" strokeOpacity="0.18" />
-                      <text x="24" y="43" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        1. CORRELATION MATRIX (Σ)
-                      </text>
-                      <text x="24" y="61" fill="#f4eedf" fontSize="10.5" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
-                        7 Stochastic Risk Drivers:
-                      </text>
-                      <text x="24" y="80" fill="#34b38a" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Rev Growth (g) ↔ Margin (m)</text>
-                      <text x="34" y="95" fill="#e3b23c" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">Empirical Corr: ρ = Cov(g,m)</text>
-                      <text x="24" y="114" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Risk-Free Rate (Rf)</text>
-                      <text x="24" y="130" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Regression Beta (β)</text>
-                      <text x="24" y="146" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Equity Risk Prem (ERP)</text>
-                      <text x="24" y="162" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Cost of Debt (Kd)</text>
-                      <text x="24" y="178" fill="#a6b0c3" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">• Equity Weight (We)</text>
+                {/* Exhibit: Clean Financial Model (Zero Glowing Boxes, Sleek Typography) */}
+                <div className="bg-[#0c121d] rounded-2xl p-6 sm:p-9 border border-[#f4eedf]/10 space-y-6">
+                  <div className="flex flex-wrap justify-between items-center gap-3 pb-5 border-b border-[#f4eedf]/10">
+                    <span className="text-xs sm:text-sm font-mono uppercase tracking-wider text-[#f4eedf] font-bold">
+                      Capital Structure Blending &amp; Mid-Year Time Discounting Exhibit
+                    </span>
+                    <span className="text-xs sm:text-sm font-mono text-[#8b9bb4]">
+                      Present Value = Future Cash Flow / (1 + WACC)^(t − 0.5)
+                    </span>
+                  </div>
 
-                      <path d="M195 115 L222 115" stroke="#e3b23c" strokeWidth="2" />
+                  <svg viewBox="0 0 960 370" className="w-full h-auto select-none">
+                    <defs>
+                      {/* Frosted Glass Backplates */}
+                      <linearGradient id="panelGlassGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#1e293b" stopOpacity="0.4" />
+                        <stop offset="50%" stopColor="#0f172a" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#0a0f18" stopOpacity="0.5" />
+                      </linearGradient>
 
-                      <rect x="222" y="20" width="195" height="190" rx="10" fill="#0d121a" stroke="#5b8fd9" strokeOpacity="0.45" />
-                      <text x="236" y="43" fill="#8ab4f8" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        2. CHOLESKY FACTOR (Σ = L·Lᵀ)
-                      </text>
-                      <rect x="236" y="55" width="70" height="62" rx="4" fill="#151e2c" stroke="#5b8fd9" strokeOpacity="0.3" />
-                      <text x="246" y="72" fill="#34b38a" fontSize="10" fontFamily="Space Grotesk, sans-serif">1   0   0</text>
-                      <text x="246" y="89" fill="#e3b23c" fontSize="10" fontFamily="Space Grotesk, sans-serif">ρ  √1−ρ² 0</text>
-                      <text x="246" y="106" fill="#8ab4f8" fontSize="10" fontFamily="Space Grotesk, sans-serif">0   0   1</text>
+                      {/* Ke & Kd Frosted Card Gradients */}
+                      <linearGradient id="keCardGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#0284c7" stopOpacity="0.14" />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity="0.65" />
+                      </linearGradient>
 
-                      <text x="316" y="76" fill="#f4eedf" fontSize="10.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">× z (t, df=5)</text>
-                      <text x="316" y="93" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">Heavy-tailed</text>
-                      <text x="316" y="106" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">market shocks</text>
+                      <linearGradient id="kdCardGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#d97706" stopOpacity="0.14" />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity="0.65" />
+                      </linearGradient>
 
-                      <text x="236" y="140" fill="#f4eedf" fontSize="9.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">
-                        Correlated: X = μ + L · z
-                      </text>
-                      <text x="236" y="158" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
-                        Preserves historical co-movement
-                      </text>
-                      <text x="236" y="173" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
-                        while modeling fat-tail shocks.
+                      <linearGradient id="waccHubGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1e293b" stopOpacity="0.85" />
+                        <stop offset="100%" stopColor="#090d16" stopOpacity="0.95" />
+                      </linearGradient>
+
+                      {/* Frosted Glass Pillar (Outer 100% Future Cash Envelope) */}
+                      <linearGradient id="pillarGlassGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(255, 255, 255, 0.05)" />
+                        <stop offset="50%" stopColor="rgba(255, 255, 255, 0.015)" />
+                        <stop offset="100%" stopColor="rgba(255, 255, 255, 0.03)" />
+                      </linearGradient>
+
+                      {/* Luminous Liquid Emerald Glass (Present Value Today) */}
+                      <linearGradient id="pvLiquidGlass" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.6" />
+                        <stop offset="35%" stopColor="#059669" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="#022c22" stopOpacity="0.2" />
+                      </linearGradient>
+
+                      <filter id="glowAmber" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+
+                      <filter id="glowSky" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+
+                      <style>
+                        {`
+                          @keyframes flowDashWacc {
+                            to { stroke-dashoffset: -24; }
+                          }
+                          @keyframes flowDashWaccFast {
+                            to { stroke-dashoffset: -16; }
+                          }
+                          @keyframes flowDashCurve {
+                            to { stroke-dashoffset: -20; }
+                          }
+                          @keyframes pulseWaccHub {
+                            0%, 100% { stroke-opacity: 0.5; }
+                            50% { stroke-opacity: 1; }
+                          }
+                          .flow-wacc {
+                            animation: flowDashWacc 2s linear infinite;
+                          }
+                          .flow-wacc-fast {
+                            animation: flowDashWaccFast 1.2s linear infinite;
+                          }
+                          .flow-curve {
+                            animation: flowDashCurve 2.2s linear infinite;
+                          }
+                          .pulse-hub {
+                            animation: pulseWaccHub 2.5s ease-in-out infinite;
+                          }
+                        `}
+                      </style>
+                    </defs>
+
+                    {/* ========================================================= */}
+                    {/* LEFT PANEL: Capital Structure Hurdle Rate Formulation     */}
+                    {/* ========================================================= */}
+                    <g>
+                      <text x="25" y="28" fill="#f4eedf" fontSize="15" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        A. Capital Structure Hurdle Rate Formulation
                       </text>
 
-                      <path d="M417 115 L444 115" stroke="#5b8fd9" strokeWidth="2" />
+                      {/* Matching Glassmorphic Panel Backplate */}
+                      <rect x="15" y="45" width="445" height="310" rx="16" fill="url(#panelGlassGrad)" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
+                      <line x1="30" y1="46" x2="445" y2="46" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" strokeLinecap="round" />
 
-                      <rect x="444" y="20" width="165" height="190" rx="10" fill="#0d121a" stroke="#34b38a" strokeOpacity="0.4" />
-                      <text x="458" y="43" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        3. GUARDRAILS
+                      {/* Card 1: Cost of Equity (Ke) - 75% Capital Weight (Spacious & Zero Text Leakage) */}
+                      <rect x="26" y="62" width="256" height="118" rx="12" fill="url(#keCardGrad)" stroke="rgba(56, 189, 248, 0.3)" strokeWidth="1.2" />
+                      <rect x="26" y="62" width="4" height="118" rx="2" fill="#38bdf8" />
+                      <text x="42" y="85" fill="#38bdf8" fontSize="11" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        COST OF EQUITY (Ke)
                       </text>
-                      <text x="458" y="65" fill="#f4eedf" fontSize="10" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
-                        3× Oversampling (30k)
+                      <text x="270" y="85" textAnchor="end" fill="#7dd3fc" fontSize="10.5" fontWeight="600" fontFamily="monospace">
+                        75% Weight
                       </text>
-                      <text x="458" y="84" fill="#a6b0c3" fontSize="9.5" fontFamily="Plus Jakarta Sans, sans-serif">
-                        Rejects invalid worlds:
+                      <text x="42" y="120" fill="#f8fafc" fontSize="24" fontWeight="800" fontFamily="Space Grotesk, sans-serif">
+                        13.4%
                       </text>
-                      <text x="458" y="103" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
-                        ✗ WACC ≤ Terminal g
+                      <text x="42" y="145" fill="#94a3b8" fontSize="11" fontFamily="Space Grotesk, sans-serif">
+                        Rf 7.1% + (1.15 β × 5.5% ERP)
                       </text>
-                      <text x="458" y="120" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
-                        ✗ WACC − g &lt; 1.5%
-                      </text>
-                      <text x="458" y="137" fill="#e07a5f" fontSize="9.5" fontFamily="Space Grotesk, sans-serif">
-                        ✗ Negative Kd or Ke
-                      </text>
-                      <text x="458" y="165" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        ✓ Slices 10,000 Valid
-                      </text>
-                      <text x="458" y="180" fill="#34b38a" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        5-Yr DCF Valuations
+                      <text x="42" y="163" fill="#64748b" fontSize="10" fontFamily="Space Grotesk, sans-serif">
+                        10Y Sovereign Yield + Equity Spread
                       </text>
 
-                      <path d="M609 115 L636 115" stroke="#34b38a" strokeWidth="2" />
-
-                      <rect x="636" y="20" width="174" height="190" rx="10" fill="#0d121a" stroke="#e3b23c" strokeOpacity="0.5" />
-                      <text x="650" y="43" fill="#e3b23c" fontSize="10" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
-                        4. FAIR VALUE BAND
+                      {/* Card 2: After-Tax Cost of Debt (Kd) - 25% Capital Weight (Spacious & Zero Text Leakage) */}
+                      <rect x="26" y="202" width="256" height="118" rx="12" fill="url(#kdCardGrad)" stroke="rgba(227, 178, 60, 0.3)" strokeWidth="1.2" />
+                      <rect x="26" y="202" width="4" height="118" rx="2" fill="#e3b23c" />
+                      <text x="42" y="225" fill="#e3b23c" fontSize="11" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        AFTER-TAX DEBT (Kd)
                       </text>
-                      {[
-                        { x: 652, h: 16, c: '#2d3848' },
-                        { x: 666, h: 32, c: '#e3b23c' },
-                        { x: 680, h: 54, c: '#5b8fd9' },
-                        { x: 694, h: 78, c: '#5b8fd9' },
-                        { x: 708, h: 95, c: '#34b38a' },
-                        { x: 722, h: 82, c: '#5b8fd9' },
-                        { x: 736, h: 60, c: '#5b8fd9' },
-                        { x: 750, h: 38, c: '#5b8fd9' },
-                        { x: 764, h: 24, c: '#e3b23c' },
-                        { x: 778, h: 12, c: '#2d3848' },
-                      ].map((bar, idx) => (
-                        <rect
-                          key={idx}
-                          x={bar.x}
-                          y={155 - bar.h}
-                          width="10"
-                          height={bar.h}
-                          rx="2"
-                          fill={bar.c}
+                      <text x="270" y="225" textAnchor="end" fill="#fde68a" fontSize="10.5" fontWeight="600" fontFamily="monospace">
+                        25% Weight
+                      </text>
+                      <text x="42" y="260" fill="#f8fafc" fontSize="24" fontWeight="800" fontFamily="Space Grotesk, sans-serif">
+                        6.6%
+                      </text>
+                      <text x="42" y="285" fill="#94a3b8" fontSize="11" fontFamily="Space Grotesk, sans-serif">
+                        8.8% Borrowing × (1 − 25% Tax)
+                      </text>
+                      <text x="42" y="303" fill="#64748b" fontSize="10" fontFamily="Space Grotesk, sans-serif">
+                        Synthetic Spread + Corporate Shield
+                      </text>
+
+                      {/* Connecting Curves: Base Underlay */}
+                      <path d="M 282 121 C 298 121, 298 178, 310 178" stroke="rgba(56, 189, 248, 0.25)" strokeWidth="2" fill="none" />
+                      <path d="M 282 261 C 298 261, 298 192, 310 192" stroke="rgba(227, 178, 60, 0.25)" strokeWidth="2" fill="none" />
+
+                      {/* Connecting Curves: Animated Flowing Dashes */}
+                      <path d="M 282 121 C 298 121, 298 178, 310 178" stroke="#38bdf8" strokeWidth="2.5" strokeDasharray="6 6" className="flow-wacc" fill="none" />
+                      <path d="M 282 261 C 298 261, 298 192, 310 192" stroke="#e3b23c" strokeWidth="2.5" strokeDasharray="6 6" className="flow-wacc" fill="none" />
+
+                      {/* Traveling Particles from Ke & Kd into WACC Hub */}
+                      <circle r="3.5" fill="#38bdf8" filter="url(#glowSky)">
+                        <animateMotion
+                          path="M 282 121 C 298 121, 298 178, 310 178"
+                          dur="2.4s"
+                          repeatCount="indefinite"
                         />
-                      ))}
-                      <line x1="648" y1="155" x2="795" y2="155" stroke="#f4eedf" strokeOpacity="0.2" />
-                      <text x="668" y="172" textAnchor="middle" fill="#e3b23c" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">P5</text>
-                      <text x="713" y="172" textAnchor="middle" fill="#34b38a" fontSize="8.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif">P50 Median</text>
-                      <text x="768" y="172" textAnchor="middle" fill="#e3b23c" fontSize="8.5" fontFamily="Space Grotesk, sans-serif">P95</text>
-                      <text x="722" y="192" textAnchor="middle" fill="#a6b0c3" fontSize="9" fontFamily="Plus Jakarta Sans, sans-serif">
-                        90% Confidence Interval
-                      </text>
-                    </svg>
-                  </div>
-                </section>
+                      </circle>
+                      <circle r="3.5" fill="#e3b23c" filter="url(#glowAmber)">
+                        <animateMotion
+                          path="M 282 261 C 298 261, 298 192, 310 192"
+                          dur="2.4s"
+                          repeatCount="indefinite"
+                        />
+                      </circle>
 
-                {/* CHAPTER 04: PORTFOLIO GUIDE */}
-                <section id="portfolio-guide" className="py-16">
-                  <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e07a5f] block mb-2 font-bold">
+                      {/* Blended WACC Command Hub */}
+                      <rect x="310" y="118" width="138" height="146" rx="14" fill="url(#waccHubGrad)" stroke="rgba(227, 178, 60, 0.75)" strokeWidth="1.5" className="pulse-hub" />
+                      <line x1="320" y1="119" x2="438" y2="119" stroke="#fde68a" strokeOpacity="0.5" strokeWidth="1.5" strokeLinecap="round" />
+                      <text x="379" y="142" textAnchor="middle" fill="#e3b23c" fontSize="10.5" fontWeight="800" fontFamily="monospace">
+                        BLENDED WACC
+                      </text>
+                      <text x="379" y="178" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="800" fontFamily="Space Grotesk, sans-serif">
+                        11.7%
+                      </text>
+                      <text x="379" y="200" textAnchor="middle" fill="#fde68a" fontSize="11" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        Annual Hurdle Rate
+                      </text>
+                      <text x="379" y="228" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="Space Grotesk, sans-serif">
+                        (0.75 × Ke) + (0.25 × Kd)
+                      </text>
+                      <text x="379" y="246" textAnchor="middle" fill="#64748b" fontSize="9" fontFamily="Space Grotesk, sans-serif">
+                        Capital Structure Blended
+                      </text>
+
+                      {/* Streaming Outflow Arrow into Discounting Exhibit */}
+                      <path d="M 448 191 L 490 191" stroke="#e3b23c" strokeOpacity="0.85" strokeWidth="2" strokeDasharray="4 4" className="flow-wacc-fast" />
+                      <circle r="3.5" fill="#e3b23c">
+                        <animateMotion
+                          path="M 448 191 L 490 191"
+                          dur="1.2s"
+                          repeatCount="indefinite"
+                        />
+                      </circle>
+                    </g>
+
+                    {/* Middle Divider */}
+                    <line x1="475" y1="20" x2="475" y2="355" stroke="#f4eedf" strokeOpacity="0.08" strokeWidth="1" />
+
+                    {/* ========================================================================= */}
+                    {/* RIGHT PANEL: Present Value Discounting (True Liquid Glassmorphism)        */}
+                    {/* ========================================================================= */}
+                    <g>
+                      <text x="495" y="28" fill="#f4eedf" fontSize="15" fontWeight="700" fontFamily="Space Grotesk, sans-serif">
+                        B. Time Value Discounting: Present Value Decay
+                      </text>
+
+                      {/* Matching Glassmorphic Panel Backplate */}
+                      <rect x="490" y="45" width="455" height="310" rx="16" fill="url(#panelGlassGrad)" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
+                      <line x1="505" y1="46" x2="930" y2="46" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" strokeLinecap="round" />
+
+                      {/* Clean Top Header Row (Zero Collision: Title on Left, Legend on Far Right) */}
+                      <text x="510" y="70" fill="#94a3b8" fontSize="10.5" fontWeight="700" fontFamily="Space Grotesk, sans-serif" letterSpacing="0.05em">
+                        NOMINAL: ₹100 FUTURE CASH BASE
+                      </text>
+                      <g transform="translate(725, 62)">
+                        <rect x="0" y="0" width="8" height="8" rx="2" fill="#10b981" />
+                        <text x="13" y="8" fill="#34d399" fontSize="10.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">Present Value</text>
+                        <rect x="94" y="0" width="8" height="8" rx="2" fill="none" stroke="rgba(255, 255, 255, 0.4)" strokeDasharray="2 2" />
+                        <text x="107" y="8" fill="#94a3b8" fontSize="10.5" fontWeight="600" fontFamily="Space Grotesk, sans-serif">Discount Loss</text>
+                      </g>
+
+                      {/* Header Divider Hairline */}
+                      <line x1="505" y1="84" x2="930" y2="84" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
+
+                      {/* 100% Future Cash Nominal Benchmark Guideline (Label on Far-Right Margin - Zero Column Collision) */}
+                      <line x1="515" y1="120" x2="925" y2="120" stroke="rgba(255, 255, 255, 0.12)" strokeDasharray="3 3" strokeWidth="1" />
+                      <text x="928" y="123" fill="#64748b" fontSize="9.5" fontFamily="monospace">
+                        100%
+                      </text>
+
+                      {/* Baseline */}
+                      <line x1="515" y1="265" x2="925" y2="265" stroke="#f4eedf" strokeOpacity="0.15" strokeWidth="1" />
+
+                      {/* 5 Frosted Glass Pillars (Liquid Emerald Present Value inside Frosted Glass Envelopes) */}
+                      {[
+                        { x: 545, pvTop: 130, lossPct: '−7%', pvAmount: '₹93', yr: 'Yr 1', t: 't = 0.5', ret: '93% Value' },
+                        { x: 625, pvTop: 144, lossPct: '−18%', pvAmount: '₹82', yr: 'Yr 2', t: 't = 1.5', ret: '82% Value' },
+                        { x: 705, pvTop: 158, lossPct: '−27%', pvAmount: '₹73', yr: 'Yr 3', t: 't = 2.5', ret: '73% Value' },
+                        { x: 785, pvTop: 172, lossPct: '−36%', pvAmount: '₹64', yr: 'Yr 4', t: 't = 3.5', ret: '64% Value' },
+                        { x: 865, pvTop: 183, lossPct: '−43%', pvAmount: '₹57', yr: 'Yr 5', t: 't = 4.5', ret: '57% Value' },
+                      ].map((b, i) => (
+                        <g key={i}>
+                          {/* Floating Discount Haircut Pill (In Dedicated Space Between Header & Pillar - ZERO Overlap) */}
+                          <rect
+                            x={b.x - 18}
+                            y={95}
+                            width="36"
+                            height="18"
+                            rx="4"
+                            fill="rgba(251, 191, 36, 0.12)"
+                            stroke="rgba(251, 191, 36, 0.3)"
+                            strokeWidth="0.8"
+                          />
+                          <text
+                            x={b.x}
+                            y={108}
+                            textAnchor="middle"
+                            fill="#fbbf24"
+                            fontSize="10"
+                            fontWeight="700"
+                            fontFamily="Space Grotesk, sans-serif"
+                          >
+                            {b.lossPct}
+                          </text>
+
+                          {/* Outer Frosted Glass Pillar (100% Future Cash Container) */}
+                          <rect
+                            x={b.x - 23}
+                            y={120}
+                            width="46"
+                            height={145}
+                            rx="8"
+                            fill="url(#pillarGlassGrad)"
+                            stroke="rgba(255, 255, 255, 0.1)"
+                            strokeWidth="1"
+                          />
+
+                          {/* Liquid Emerald Glass Fill (Present Value in Today's Pocket) */}
+                          <rect
+                            x={b.x - 22}
+                            y={b.pvTop}
+                            width="44"
+                            height={265 - b.pvTop}
+                            rx="7"
+                            fill="url(#pvLiquidGlass)"
+                            stroke="rgba(52, 211, 153, 0.7)"
+                            strokeWidth="1.2"
+                          />
+
+                          {/* Luminous Specular Top Edge */}
+                          <line
+                            x1={b.x - 17}
+                            y1={b.pvTop + 1}
+                            x2={b.x + 17}
+                            y2={b.pvTop + 1}
+                            stroke="#a7f3d0"
+                            strokeOpacity="0.9"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                          />
+
+                          {/* Currency Value in Today's Real Purchasing Power */}
+                          <text
+                            x={b.x}
+                            y={b.pvTop + 24}
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fontSize="14"
+                            fontWeight="800"
+                            fontFamily="Space Grotesk, sans-serif"
+                          >
+                            {b.pvAmount}
+                          </text>
+
+                          {/* Clean 3-Line X-Axis Labels (Generous Margins, Zero Cramping) */}
+                          <text
+                            x={b.x}
+                            y="288"
+                            textAnchor="middle"
+                            fill="#f8fafc"
+                            fontSize="12"
+                            fontWeight="700"
+                            fontFamily="Space Grotesk, sans-serif"
+                          >
+                            {b.yr}
+                          </text>
+                          <text
+                            x={b.x}
+                            y="306"
+                            textAnchor="middle"
+                            fill="#64748b"
+                            fontSize="10"
+                            fontWeight="600"
+                            fontFamily="monospace"
+                          >
+                            {b.t}
+                          </text>
+                          <text
+                            x={b.x}
+                            y="324"
+                            textAnchor="middle"
+                            fill="#34d399"
+                            fontSize="10.5"
+                            fontWeight="700"
+                            fontFamily="Space Grotesk, sans-serif"
+                          >
+                            {b.ret}
+                          </text>
+                        </g>
+                      ))}
+
+                      {/* Smooth Discount Factor Trajectory Curve (Flowing Cleanly Along Specular Tops) */}
+                      <path
+                        fill="none"
+                        stroke="#38bdf8"
+                        strokeWidth="2"
+                        strokeDasharray="5 5"
+                        className="flow-curve"
+                        d="M 545 130 C 585 137, 585 144, 625 144 C 665 151, 665 158, 705 158 C 745 165, 745 172, 785 172 C 825 178, 825 183, 865 183"
+                      />
+
+                      {/* Traveling Cyan Discount Beacon */}
+                      <circle r="3.5" fill="#38bdf8" filter="url(#glowSky)">
+                        <animateMotion
+                          path="M 545 130 C 585 137, 585 144, 625 144 C 665 151, 665 158, 705 158 C 745 165, 745 172, 785 172 C 825 178, 825 183, 865 183"
+                          dur="3.2s"
+                          repeatCount="indefinite"
+                        />
+                      </circle>
+                    </g>
+                  </svg>
+                </div>
+              </section>
+
+              {/* CHAPTER 03: CHOLESKY DECOMPOSITION & FAT-TAILED MONTE CARLO */}
+              <section id="cholesky-section" className="space-y-8">
+                <div>
+                  <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#e3b23c] block mb-3 font-bold">
+                    03 · Correlated Monte Carlo &amp; Stress Testing
+                  </span>
+                  <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    Why We Model 10,000 Worlds Instead of One Target
+                  </h2>
+                  <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed max-w-4xl">
+                    In the real world, financial variables do not move independently. When revenue growth accelerates, operating leverage often expands EBIT margins at the same time. ValuationLabs uses <strong className="text-[#f4eedf] font-semibold">Cholesky Matrix Decomposition</strong> paired with <strong className="text-[#f4eedf] font-semibold">heavy-tailed distributions</strong> across 10,000 verified simulations.
+                  </p>
+                </div>
+
+                {/* Clean 3-Column Editorial Explanations (Perfect Horizontal Alignment) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-2 items-start">
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Covariance Modeling
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Preserves real-world statistical relationships between Revenue Growth, Margins, Sovereign Yields, Beta, Equity Risk Premium, and Debt Costs based on empirical market co-movements.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Fat-Tailed Crisis Risk
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Replaces naive Gaussian bell curves with fat-tailed distributions to accurately capture sudden economic turbulence, credit freezes, and severe bear-market black swans.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#f4eedf] leading-snug md:min-h-[3.25rem] flex items-start">
+                      Economic Sanity Filter
+                    </h3>
+                    <p className="text-base text-[#d1d7e0] leading-relaxed">
+                      Filters 30,000 candidate draws to discard impossible states (such as hurdle rates dropping below terminal GDP growth or negative borrowing costs), retaining 10,000 valid valuations.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Exhibit: Clean Financial Model (Zero Glowing Boxes, Sleek Typography) */}
+                <div className="bg-[#0c121d] rounded-2xl p-6 sm:p-9 border border-[#f4eedf]/10 space-y-6">
+                  <div className="flex flex-wrap justify-between items-center gap-3 pb-5 border-b border-[#f4eedf]/10">
+                    <span className="text-xs sm:text-sm font-mono uppercase tracking-[0.2em] text-[#f4eedf] font-bold">
+                      Quantitative Simulation Architecture
+                    </span>
+                    <span className="text-xs sm:text-sm font-mono text-[#8b9bb4]">
+                      30,000 Raw Draws ➔ 10,000 Economically Valid Worlds
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                    {/* Step 1 */}
+                    <div className="space-y-3">
+                      <span className="font-mono text-xs font-bold text-[#e3b23c] uppercase tracking-wider block">
+                        STEP 01
+                      </span>
+                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
+                        Covariance Matrix (7 Drivers)
+                      </h4>
+                      <p className="text-base text-[#d1d7e0] leading-relaxed">
+                        Models empirical co-movements across revenue growth, operating margins, 10Y sovereign yields, company beta, equity risk premium, and corporate borrowing rates.
+                      </p>
+                      <div className="text-xs text-[#e3b23c] font-semibold pt-1">
+                        Preserves real-world relationships
+                      </div>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="space-y-3">
+                      <span className="font-mono text-xs font-bold text-[#5b8fd9] uppercase tracking-wider block">
+                        STEP 02
+                      </span>
+                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
+                        Cholesky Transformation
+                      </h4>
+                      <p className="text-base text-[#d1d7e0] leading-relaxed">
+                        Factorizes the covariance matrix into a lower-triangular matrix, transforming independent shocks into correlated economic environments with heavy-tailed downside risk.
+                      </p>
+                      <div className="text-xs text-[#8ab4f8] font-semibold pt-1">
+                        Captures multi-variable contagion
+                      </div>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="space-y-3">
+                      <span className="font-mono text-xs font-bold text-[#e07a5f] uppercase tracking-wider block">
+                        STEP 03
+                      </span>
+                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
+                        Economic Guardrails
+                      </h4>
+                      <p className="text-base text-[#d1d7e0] leading-relaxed">
+                        Discards absurd universes where discount rates fall below long-term GDP growth, hurdle rates are negative, or operating margins exceed realistic physical limits.
+                      </p>
+                      <div className="text-xs text-[#34b38a] font-semibold pt-1 flex items-center gap-1">
+                        <span>✓</span>
+                        <span>10,000 verified worlds retained</span>
+                      </div>
+                    </div>
+
+                    {/* Step 4 */}
+                    <div className="space-y-3">
+                      <span className="font-mono text-xs font-bold text-[#34b38a] uppercase tracking-wider block">
+                        STEP 04
+                      </span>
+                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
+                        Fair Value Spectrum
+                      </h4>
+                      <p className="text-base text-[#d1d7e0] leading-relaxed">
+                        Constructs a full 90% confidence distribution, mapping fair value from the 5th percentile bear case to the 95th percentile bull case.
+                      </p>
+                      {/* Mini histogram with subtle sleek glassmorphic tones */}
+                      <div className="pt-2">
+                        <svg viewBox="0 0 160 40" className="w-full h-10">
+                          {[
+                            { x: 10, h: 8, c: '#334155' },
+                            { x: 24, h: 16, c: '#475569' },
+                            { x: 38, h: 26, c: '#0284c7' },
+                            { x: 52, h: 34, c: '#0284c7' },
+                            { x: 66, h: 40, c: '#059669' },
+                            { x: 80, h: 36, c: '#059669' },
+                            { x: 94, h: 28, c: '#0284c7' },
+                            { x: 108, h: 18, c: '#0284c7' },
+                            { x: 122, h: 12, c: '#475569' },
+                            { x: 136, h: 6, c: '#334155' },
+                          ].map((bar, i) => (
+                            <rect
+                              key={i}
+                              x={bar.x}
+                              y={40 - bar.h}
+                              width="9"
+                              height={bar.h}
+                              rx="2.5"
+                              fill={bar.c}
+                            />
+                          ))}
+                        </svg>
+                        <div className="flex justify-between items-center text-[10.5px] font-mono text-[#cbd5e1] pt-1">
+                          <span className="text-[#94a3b8] font-semibold">P5 Bear</span>
+                          <span className="text-[#34d399] font-bold">P50 Median</span>
+                          <span className="text-[#94a3b8] font-semibold">P95 Bull</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* CHAPTER 04: PORTFOLIO GUIDE (Clean 2-Column Editorial, Balanced Height & Zero Dead Space) */}
+              <section id="portfolio-guide" className="space-y-8">
+                <div>
+                  <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#e07a5f] block mb-3 font-bold">
                     04 · Practical Application &amp; Portfolio Construction
                   </span>
-                  <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-4">
-                    How to incorporate DCF valuations into your own stock analysis and portfolio
+                  <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight mb-4">
+                    Four Rules for Applying DCF Valuations in Your Portfolio
                   </h2>
+                  <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed max-w-4xl">
+                    Actionable institutional principles for applying DCF fair value estimates, multiple cross-checks, and probability distributions in your daily investing decisions.
+                  </p>
+                </div>
 
-                  <div className="divide-y divide-[#f4eedf]/10 border-t border-b border-[#f4eedf]/10 mt-6">
-                    {[
-                      {
-                        num: '01',
-                        title: 'Demand a Margin of Safety on Cyclical & Value Stocks',
-                        desc: 'When today’s Market Price sits below the DCF Intrinsic Fair Value and near the lower half (P25–P50) of the Monte Carlo distribution, you have a structural Margin of Safety—you are paying less than the business is worth even if growth stays ordinary.'
-                      },
-                      {
-                        num: '02',
-                        title: 'Reverse-Engineer What the Market is Pricing In for Compounders',
-                        desc: 'High-quality franchises (such as HUL, Titan, or NVIDIA) often trade above baseline historical DCF. Use the Model Assumptions sliders inside the workspace to raise Revenue Growth or Margin until Fair Value matches today’s share price—then decide if that implied growth rate is achievable.'
-                      },
-                      {
-                        num: '03',
-                        title: 'Interpret Model Validation Badges (VERIFIED, WARNING, FLAGGED & DISTRESSED)',
-                        desc: 'The engine cross-checks DCF Implied EV/EBITDA (or P/B for Banks/NBFCs) against Current Market Multiples. VERIFIED (<50% gap) confirms tight alignment with peer pricing; WARNING (50%–80% gap) indicates the market prices in higher growth/margins than historical averages; FLAGGED (>80% gap) signals an extreme growth premium or negative EBITDA turnaround; and DCF UNRELIABLE / DISTRESSED alerts you when Balance Sheet Debt exceeds Enterprise Value (Equity Value ≤ 0) or >20% of Monte Carlo simulations result in equity wipeout.'
-                      },
-                      {
-                        num: '04',
-                        title: 'Size Portfolio Positions Using the P5–P95 Dispersion Band',
-                        desc: 'Check the width of the 90% Monte Carlo confidence band. A tight P5–P95 band indicates predictable cash flows suited for a core 5–8% portfolio weight; a wide band means the stock is highly sensitive to WACC and terminal assumptions, warranting a smaller 1–3% position.'
-                      }
-                    ].map((row) => (
-                      <div key={row.num} className="py-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                        <div className="md:col-span-4 flex items-baseline gap-3">
-                          <span className="font-display text-sm font-bold text-[#e3b23c]">{row.num}.</span>
-                          <h3 className="font-display text-base sm:text-lg font-bold text-[#f4eedf] leading-snug">{row.title}</h3>
-                        </div>
-                        <p className="md:col-span-8 text-xs sm:text-sm text-[#a6b0c3] leading-relaxed">
-                          {row.desc}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                {/* CHAPTER 05: LIVE ENGINE SHOWCASE */}
-                <section id="live-showcase" className="pt-16">
-                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-                    <div>
-                      <span className="text-xs font-display uppercase tracking-[0.2em] text-[#e3b23c] block mb-2 font-bold">
-                        05 · Verified Engine Benchmarks
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-14 items-start">
+                  {/* Rule 01 */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm sm:text-base font-bold text-[#e3b23c]">01</span>
+                      <span className="text-xs sm:text-sm font-mono text-[#e3b23c] uppercase tracking-wider font-semibold">
+                        · Value &amp; Cyclical Strategy
                       </span>
-                      <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight">
-                        Inspect sample DCF valuations &amp; launch the workspace
-                      </h2>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {Object.keys(PREVIEW_DATA).map((key) => {
-                        const item = PREVIEW_DATA[key];
-                        const isSelected = previewStock === key;
-                        return (
-                          <button 
-                            key={key}
-                            type="button"
-                            onClick={() => setPreviewStock(key)}
-                            className={`text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#e3b23c] text-[#0f141c]'
-                                : 'bg-[#141b26] text-[#a6b0c3] hover:text-[#f4eedf] border border-[#f4eedf]/10'
-                            }`}
-                          >
-                            {item.tabLabel}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <h3 className="font-display text-xl sm:text-2xl lg:text-[26px] font-bold text-[#f4eedf] leading-snug md:min-h-[4.25rem] flex items-start">
+                      Demand a Margin of Safety on Cyclical &amp; Value Stocks
+                    </h3>
+                    <ul className="space-y-4 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Entry Signal:</strong> Accumulate when today&apos;s market price trades below DCF Fair Value and sits near the lower half (25th to 50th percentile) of the Monte Carlo simulation distribution.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Target Discount:</strong> Require a 15% to 25% margin of safety before initiating a position to protect against ordinary or sub-par economic growth.
+                        </p>
+                      </li>
+                    </ul>
                   </div>
 
-                  <div className="border-t border-b border-[#f4eedf]/15 py-6">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pb-6 border-b border-[#f4eedf]/10">
-                      <div>
-                        <span className="text-xs text-[#a6b0c3] block mb-1">DCF Intrinsic Fair Value</span>
-                        <span className={`font-display text-3xl font-bold tabular-nums ${
-                          currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e3b23c]'
-                        }`}>
-                          {currentPreview.fairValue}
-                        </span>
-                        <span className={`text-xs font-bold block mt-1 ${
-                          currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
-                        }`}>
-                          {currentPreview.upsideBadge}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-xs text-[#a6b0c3] block mb-1">Current Market Price</span>
-                        <span className="font-display text-3xl font-bold text-[#f4eedf] tabular-nums">
-                          {currentPreview.currentPrice}
-                        </span>
-                        <span className="text-xs text-[#a6b0c3] block mt-1">
-                          {currentPreview.name}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-xs text-[#a6b0c3] block mb-1">Blended WACC</span>
-                        <span className="font-display text-3xl font-bold text-[#f4eedf] tabular-nums">
-                          {currentPreview.wacc}
-                        </span>
-                        <span className="text-xs text-[#a6b0c3] block mt-1">
-                          {currentPreview.waccNote}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-xs text-[#a6b0c3] block mb-1">Monte Carlo (P5 – P95)</span>
-                        <span className="font-display text-2xl font-bold text-[#8ab4f8] tabular-nums">
-                          {currentPreview.mcRange}
-                        </span>
-                        <span className="text-xs text-[#a6b0c3] block mt-1">
-                          10,000 Cholesky runs
-                        </span>
-                      </div>
+                  {/* Rule 02 */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm sm:text-base font-bold text-[#5b8fd9]">02</span>
+                      <span className="text-xs sm:text-sm font-mono text-[#5b8fd9] uppercase tracking-wider font-semibold">
+                        · Compounders &amp; Moats
+                      </span>
                     </div>
+                    <h3 className="font-display text-xl sm:text-2xl lg:text-[26px] font-bold text-[#f4eedf] leading-snug md:min-h-[4.25rem] flex items-start">
+                      Reverse-Engineer What the Market is Pricing In
+                    </h3>
+                    <ul className="space-y-4 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#5b8fd9] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Reverse-DCF Technique:</strong> Use interactive model sliders to raise growth or margins until Fair Value matches today&apos;s share price, revealing implied market expectations.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#5b8fd9] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#f4eedf] font-semibold">Sanity Question:</strong> Ask: <em>&quot;Can this franchise realistically deliver this implied growth rate for 5 consecutive years against competitors?&quot;</em>
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
 
-                    <div className="py-6 space-y-4">
-                      <div className="flex justify-between text-xs font-semibold text-[#a6b0c3]">
-                        <span>Share Price vs. DCF Fair Value Scale</span>
-                        <span className="text-[#f4eedf]">{currentPreview.upsideNote}</span>
-                      </div>
-                      <div className="relative h-4 rounded-full bg-[#141b26] border border-[#f4eedf]/12 overflow-hidden">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#34b38a]/35 to-[#34b38a]/15"
-                          style={{ width: `${prevFairPct}%` }}
-                        />
-                        <div
-                          className="absolute inset-y-0 right-0 bg-gradient-to-r from-[#e3b23c]/15 to-[#e07a5f]/35"
-                          style={{ left: `${prevFairPct}%` }}
-                        />
-                        <div
-                          className="absolute inset-y-0 w-1 bg-[#e3b23c]"
-                          style={{ left: `${prevFairPct}%` }}
-                        />
-                        <div
-                          className="absolute inset-y-0 w-1 bg-[#f4eedf]"
-                          style={{ left: `${prevPricePct}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between items-center pt-2">
-                        <div className="flex gap-6 text-xs font-bold">
-                          <span className="text-[#e3b23c]">● DCF Fair Value: {currentPreview.fairValue}</span>
-                          <span className="text-[#f4eedf]">● Market Price: {currentPreview.currentPrice}</span>
-                        </div>
-                        <button
+                  {/* Rule 03 */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm sm:text-base font-bold text-[#34b38a]">03</span>
+                      <span className="text-xs sm:text-sm font-mono text-[#34b38a] uppercase tracking-wider font-semibold">
+                        · Multiple Cross-Check
+                      </span>
+                    </div>
+                    <h3 className="font-display text-xl sm:text-2xl lg:text-[26px] font-bold text-[#f4eedf] leading-snug md:min-h-[4.25rem] flex items-start">
+                      Interpret Model Validation Badges at a Glance
+                    </h3>
+                    <ul className="space-y-4 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#34b38a] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#34b38a] font-semibold">Verified Badge:</strong> Less than 50% gap between DCF value and peer EV/EBITDA multiples indicates strong institutional model alignment.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#e3b23c] font-semibold">Warning / Flagged:</strong> 50% to 80%+ multiple gap indicates the market is pricing in either massive speculative growth or negative operating earnings.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e07a5f] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#e07a5f] font-semibold">Distressed Flag:</strong> Excessive debt or greater than 20% wipeout probability means standard cash flow discounting is unreliable.
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Rule 04: Perfectly Aligned 3-Point Counterpart to Rule 03 */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm sm:text-base font-bold text-[#e07a5f]">04</span>
+                      <span className="text-xs sm:text-sm font-mono text-[#e07a5f] uppercase tracking-wider font-semibold">
+                        · Risk-Adjusted Position Sizing
+                      </span>
+                    </div>
+                    <h3 className="font-display text-xl sm:text-2xl lg:text-[26px] font-bold text-[#f4eedf] leading-snug md:min-h-[4.25rem] flex items-start">
+                      Position Sizing: Bet Bigger on Certainty
+                    </h3>
+                    <ul className="space-y-4 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#34b38a] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#34b38a] font-semibold">Narrow Range (5%–8% Core Position):</strong> When the gap between bear-case and bull-case valuations is tight, cash flows are predictable. Low uncertainty justifies a high-conviction core portfolio allocation.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#e3b23c] font-semibold">Wide Range (1%–3% Tactical Position):</strong> When the gap between bear and bull is wide (cyclicals or high-beta growth), macro swings dominate fair value. Keep bet sizes small to protect overall portfolio capital.
+                        </p>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-2 h-2 rounded-full bg-[#5b8fd9] mt-2.5 shrink-0" />
+                        <p>
+                          <strong className="text-[#5b8fd9] font-semibold">Disciplined Rebalancing &amp; Trimming:</strong> When market prices surge past the 75th percentile valuation on momentum, systematically harvest gains back to target weighting rather than chasing multiple expansion.
+                        </p>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
+              {/* CHAPTER 05: LIVE ENGINE SHOWCASE (Full Width, Snug Top Spacing) */}
+              <section id="live-showcase" className="space-y-8 pt-6 border-t border-[#f4eedf]/10">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div>
+                    <span className="text-sm sm:text-base md:text-lg font-mono uppercase tracking-[0.22em] text-[#e3b23c] block mb-3 font-bold">
+                      05 · Verified Engine Benchmarks
+                    </span>
+                    <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-[#f4eedf] tracking-tight">
+                      Inspect Sample DCF Valuations Live
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {Object.keys(PREVIEW_DATA).map((key) => {
+                      const item = PREVIEW_DATA[key];
+                      const isSelected = previewStock === key;
+                      return (
+                        <button 
+                          key={key}
                           type="button"
-                          onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] font-bold text-xs shadow-lg transition cursor-pointer"
+                          onClick={() => setPreviewStock(key)}
+                          className={`text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#e3b23c] text-[#0c1017]'
+                              : 'bg-[#182334] text-[#a6b0c3] hover:text-[#f4eedf] border border-[#f4eedf]/10'
+                          }`}
                         >
-                          <span>Analyze {currentPreview.name} Live</span>
-                          <FiArrowRight />
+                          {item.tabLabel}
                         </button>
-                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="bg-[#101722] rounded-2xl p-6 sm:p-8 border border-[#f4eedf]/12 shadow-xl space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pb-6 border-b border-[#f4eedf]/10">
+                    <div>
+                      <span className="text-xs text-[#a6b0c3] block mb-1">DCF Intrinsic Fair Value</span>
+                      <span className={`font-display text-3xl sm:text-4xl font-bold tabular-nums ${
+                        currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e3b23c]'
+                      }`}>
+                        {currentPreview.fairValue}
+                      </span>
+                      <span className={`text-xs font-bold block mt-1 ${
+                        currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                      }`}>
+                        {currentPreview.upsideBadge}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-[#a6b0c3] block mb-1">Current Market Price</span>
+                      <span className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums">
+                        {currentPreview.currentPrice}
+                      </span>
+                      <span className="text-xs text-[#a6b0c3] block mt-1">
+                        {currentPreview.name}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-[#a6b0c3] block mb-1">Blended WACC</span>
+                      <span className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums">
+                        {currentPreview.wacc}
+                      </span>
+                      <span className="text-xs text-[#a6b0c3] block mt-1">
+                        {currentPreview.waccNote}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-[#a6b0c3] block mb-1">Monte Carlo (P5 – P95)</span>
+                      <span className="font-display text-2xl sm:text-3xl font-bold text-[#8ab4f8] tabular-nums">
+                        {currentPreview.mcRange}
+                      </span>
+                      <span className="text-xs text-[#a6b0c3] block mt-1">
+                        10,000 Cholesky runs
+                      </span>
                     </div>
                   </div>
-                </section>
 
-              </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between text-xs font-semibold text-[#a6b0c3]">
+                      <span>Share Price vs. DCF Fair Value Scale</span>
+                      <span className="text-[#f4eedf]">{currentPreview.upsideNote}</span>
+                    </div>
+                    <div className="relative h-4 rounded-full bg-[#0d121a] border border-[#f4eedf]/12 overflow-hidden">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-[#34b38a]/25"
+                        style={{ width: `${prevFairPct}%` }}
+                      />
+                      <div
+                        className="absolute inset-y-0 right-0 bg-[#e07a5f]/25"
+                        style={{ left: `${prevFairPct}%` }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-1.5 bg-[#e3b23c]"
+                        style={{ left: `${prevFairPct}%` }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-1.5 bg-[#f4eedf]"
+                        style={{ left: `${prevPricePct}%` }}
+                      />
+                    </div>
+                    <div className="flex flex-wrap justify-between items-center gap-4 pt-2">
+                      <div className="flex gap-6 text-xs font-bold">
+                        <span className="text-[#e3b23c]">● DCF Fair Value: {currentPreview.fairValue}</span>
+                        <span className="text-[#f4eedf]">● Market Price: {currentPreview.currentPrice}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] font-bold text-xs shadow-md transition cursor-pointer"
+                      >
+                        <span>Analyze {currentPreview.name} Live</span>
+                        <FiArrowRight />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* CHAPTER 06: PLATFORM ROADMAP, CONTACT ME & COMMUNITY FEEDBACK */}
+              <ContactAndFeedback currentTicker={ticker} />
+
             </div>
 
             {/* Footer */}
             <footer className="border-t border-[#f4eedf]/10 py-10 px-4 sm:px-8 text-center text-xs text-[#a6b0c3]">
-              <div className="max-w-4xl mx-auto space-y-2">
+              <div className="max-w-4xl mx-auto space-y-4">
+                <div className="flex flex-wrap items-center justify-center gap-6 text-xs font-semibold text-[#f4eedf]/80">
+                  <a
+                    href="https://www.linkedin.com/in/sarandeepaneja/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 hover:text-[#e3b23c] transition"
+                  >
+                    <FaLinkedin className="text-[#0a66c2] text-sm" />
+                    <span>Sarandeep Aneja on LinkedIn</span>
+                  </a>
+                  <span className="text-[#f4eedf]/20">·</span>
+                  <a
+                    href="mailto:sarandeepaneja@gmail.com"
+                    className="flex items-center gap-1.5 hover:text-[#e3b23c] transition"
+                  >
+                    <FiMail className="text-[#e3b23c] text-sm" />
+                    <span>sarandeepaneja@gmail.com</span>
+                  </a>
+                  <span className="text-[#f4eedf]/20">·</span>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('contact-feedback')}
+                    className="hover:text-[#e3b23c] transition cursor-pointer"
+                  >
+                    Leave Feedback &amp; Report Errors
+                  </button>
+                </div>
                 <p className="text-[#f4eedf]/80 font-display font-bold">
                   ValuationLab — Institutional DCF &amp; Cholesky Monte Carlo Equity Research Platform
                 </p>
                 <p>
-                  Audited financial statements via Yahoo Finance; live sovereign bond yields via FRED API &amp; RBI. For analytical research only.
+                  Audited financial statements via Yahoo Finance; live sovereign bond yields via FRED API &amp; RBI. We continually update the platform with new valuation models and features.
                 </p>
               </div>
             </footer>
@@ -1724,6 +2591,41 @@ export default function App() {
               </div>
 
             </div>
+
+            {/* Workspace Footer */}
+            <footer className="border-t border-[#f4eedf]/10 pt-8 pb-12 px-4 sm:px-6 text-xs text-[#a6b0c3]">
+              <div className="max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-[#f4eedf]/80 font-medium">
+                  ValuationLab — {analysisData?.company?.name || analysisData?.company?.ticker} DCF Analysis &amp; Monte Carlo Modeling
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-semibold">
+                  <a
+                    href="https://www.linkedin.com/in/sarandeepaneja/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[#a6b0c3] hover:text-[#e3b23c] transition"
+                  >
+                    <FaLinkedin className="text-[#0a66c2]" />
+                    <span>Sarandeep Aneja on LinkedIn</span>
+                  </a>
+                  <a
+                    href="mailto:sarandeepaneja@gmail.com"
+                    className="flex items-center gap-1.5 text-[#a6b0c3] hover:text-[#e3b23c] transition"
+                  >
+                    <FiMail className="text-[#e3b23c]" />
+                    <span>sarandeepaneja@gmail.com</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedbackModal(true)}
+                    className="text-[#e3b23c] hover:underline cursor-pointer font-bold flex items-center gap-1"
+                  >
+                    <FiMessageSquare className="text-xs" />
+                    <span>Leave Feedback / Report Error</span>
+                  </button>
+                </div>
+              </div>
+            </footer>
           </div>
         )}
       </main>
