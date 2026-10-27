@@ -14,6 +14,51 @@ const mapRawStocks = (list) =>
 
 let STOCK_UNIVERSE = mapRawStocks(rawStocks);
 
+const scoreRelevance = (item, queryStr) => {
+  const cleanQ = (queryStr || '').trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+  if (!cleanQ) return 999;
+  const symClean = item.symbol.replace(/\.(NS|BO)$/i, '').toUpperCase();
+  const nameClean = (item.name || '').toUpperCase();
+  const aliasClean = (item.aliases || '').toUpperCase();
+
+  // Tier 1: Exact ticker match -> absolute top priority (Score 0)
+  if (symClean === cleanQ) return 0;
+
+  // Tier 2: Exact alias match -> (Score 10)
+  const aliasTokens = aliasClean.split(/\s+/);
+  if (aliasTokens.includes(cleanQ)) return 10;
+
+  // Tier 3: Ticker starts with query -> (Score 20 + length difference penalty)
+  if (symClean.startsWith(cleanQ)) {
+    return 20 + (symClean.length - cleanQ.length);
+  }
+
+  // Tier 4: Company name starts with query -> (Score 50)
+  if (nameClean.startsWith(cleanQ) || nameClean.includes(' ' + cleanQ)) {
+    return 50;
+  }
+
+  // Tier 5: Alias starts with query -> (Score 70)
+  if (aliasTokens.some((t) => t.startsWith(cleanQ))) {
+    return 70;
+  }
+
+  // Tier 6: Multi-word query tokens match name or ticker -> (Score 80)
+  const queryTokens = cleanQ.split(/\s+/).filter(Boolean);
+  if (queryTokens.length > 1 && queryTokens.every((tok) => symClean.includes(tok) || nameClean.includes(tok))) {
+    return 80;
+  }
+
+  // Tier 7: Ticker contains query substring -> (Score 100 + position penalty)
+  const idx = symClean.indexOf(cleanQ);
+  if (idx !== -1) return 100 + idx;
+
+  // Tier 8: Name contains query substring -> (Score 200)
+  if (nameClean.includes(cleanQ)) return 200;
+
+  return 999;
+};
+
 export default function TickerInput({ 
   ticker, 
   setTicker, 
@@ -93,12 +138,7 @@ export default function TickerInput({
     const cleanLower = lower.replace(/\.(ns|bo)$/, '').trim();
     const queryTokens = cleanLower.split(/\s+/).filter(Boolean);
 
-    const exactMatches = [];
-    const exactAliasMatches = [];
-    const prefixSymbolMatches = [];
-    const namePrefixMatches = [];
-    const containSymbolMatches = [];
-    const multiTokenAndAliasMatches = [];
+    const matches = [];
 
     for (let i = 0; i < STOCK_UNIVERSE.length; i++) {
       const item = STOCK_UNIVERSE[i];
@@ -106,45 +146,39 @@ export default function TickerInput({
       const symFull = item.symbol.toLowerCase();
       const name = item.name.toLowerCase();
       const aliases = item.aliases || '';
-      const aliasTokens = aliases ? aliases.split(/\s+/) : [];
 
-      if (symClean === cleanLower || symFull === lower) {
-        exactMatches.push(item);
-      } else if (aliasTokens.includes(cleanLower)) {
-        exactAliasMatches.push(item);
-      } else if (symClean.startsWith(cleanLower) || symFull.startsWith(lower)) {
-        prefixSymbolMatches.push(item);
-      } else if (name.startsWith(cleanLower) || name.includes(' ' + cleanLower)) {
-        namePrefixMatches.push(item);
-      } else if (aliases && (aliases.startsWith(cleanLower) || aliases.includes(' ' + cleanLower))) {
-        multiTokenAndAliasMatches.push(item);
-      } else if (
-        queryTokens.length > 1 &&
-        queryTokens.every((tok) => symClean.includes(tok) || name.includes(tok) || aliases.includes(tok))
-      ) {
-        multiTokenAndAliasMatches.push(item);
-      } else if (symClean.includes(cleanLower) || symFull.includes(lower)) {
-        containSymbolMatches.push(item);
+      const isMatch =
+        symClean === cleanLower ||
+        symFull === lower ||
+        aliases.split(/\s+/).includes(cleanLower) ||
+        symClean.startsWith(cleanLower) ||
+        symFull.startsWith(lower) ||
+        name.startsWith(cleanLower) ||
+        name.includes(' ' + cleanLower) ||
+        aliases.startsWith(cleanLower) ||
+        aliases.includes(' ' + cleanLower) ||
+        (queryTokens.length > 1 && queryTokens.every((tok) => symClean.includes(tok) || name.includes(tok) || aliases.includes(tok))) ||
+        symClean.includes(cleanLower) ||
+        symFull.includes(lower);
+
+      if (isMatch) {
+        matches.push(item);
       }
     }
 
-    prefixSymbolMatches.sort((a, b) => {
-      const aLen = a.symbol.replace('.NS', '').length;
-      const bLen = b.symbol.replace('.NS', '').length;
-      return aLen - bLen;
+    // Sort strictly by relevance score to query `q`
+    matches.sort((a, b) => {
+      const scoreA = scoreRelevance(a, q);
+      const scoreB = scoreRelevance(b, q);
+      if (scoreA !== scoreB) {
+        return scoreA - scoreB;
+      }
+      return a.symbol.length - b.symbol.length;
     });
 
-    const combined = [
-      ...exactMatches,
-      ...exactAliasMatches,
-      ...prefixSymbolMatches,
-      ...namePrefixMatches,
-      ...multiTokenAndAliasMatches,
-      ...containSymbolMatches,
-    ];
     const seenBase = new Set();
     const unique = [];
-    for (const item of combined) {
+    for (const item of matches) {
       const baseKey = `${item.market}:${item.symbol.replace('.NS', '').replace('.BO', '')}`;
       if (!seenBase.has(baseKey)) {
         seenBase.add(baseKey);
@@ -178,11 +212,10 @@ export default function TickerInput({
       const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 12000 });
       const remoteResults = response.data.results || [];
       
-      const seenBase = new Set(
-        localMatches.map((m) => `${m.market}:${m.symbol.replace('.NS', '').replace('.BO', '')}`)
-      );
-      const combined = [...localMatches];
-      for (const item of remoteResults) {
+      const seenBase = new Set();
+      const combined = [];
+      const allCandidates = [...remoteResults, ...localMatches];
+      for (const item of allCandidates) {
         const isIN = item.market === 'IN' || item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO');
         const mkt = isIN ? 'IN' : 'US';
         const baseKey = `${mkt}:${item.symbol.replace('.NS', '').replace('.BO', '')}`;
@@ -192,9 +225,21 @@ export default function TickerInput({
             symbol: item.symbol,
             name: item.name,
             market: mkt,
+            aliases: item.aliases || '',
           });
         }
       }
+
+      // Strict ranking by relevance so exact matches always surface to the top (#1)
+      combined.sort((a, b) => {
+        const scoreA = scoreRelevance(a, q);
+        const scoreB = scoreRelevance(b, q);
+        if (scoreA !== scoreB) {
+          return scoreA - scoreB;
+        }
+        return a.symbol.length - b.symbol.length;
+      });
+
       const finalSuggestions = combined.slice(0, 8);
       searchCache.current.set(cacheKey, finalSuggestions);
       setSuggestions(finalSuggestions);

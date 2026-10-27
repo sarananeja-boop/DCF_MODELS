@@ -52,6 +52,7 @@ from engine.ticker_universe import (
     get_universe_payload,
     is_non_dcf_instrument,
     resolve_ticker,
+    ACTIVE_COMPANY_ENRICHMENTS,
 )
 
 # Local modules
@@ -851,9 +852,11 @@ def search_ticker(q: str):
                 base_k = f"{res_mkt}:{res_sym.replace('.NS', '').replace('.BO', '')}"
                 if base_k not in seen_base:
                     seen_base.add(base_k)
+                    enr = ACTIVE_COMPANY_ENRICHMENTS.get(res_sym, {})
+                    disp_name = enr.get("name_override") or res_note
                     results.append({
                         "symbol": res_sym,
-                        "name": res_note,
+                        "name": disp_name,
                         "market": res_mkt,
                     })
 

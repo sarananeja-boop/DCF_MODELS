@@ -110,7 +110,7 @@ LEGACY_TICKER_REDIRECTS: Dict[str, Tuple[str, str, str]] = {
     "SHRIRAMEPC": ("SEPC.NS", "IN", "Shriram EPC renamed to SEPC (SEPC)"),
     "CAMSLTD": ("CAMS.NS", "IN", "Computer Age Management Services trades on NSE under CAMS"),
     "BRAINBEES": ("FIRSTCRY.NS", "IN", "Brainbees Solutions (FirstCry) trades on NSE under FIRSTCRY"),
-    "NSE": ("NSE.BO", "IN", "National Stock Exchange of India is listed on BSE under NSE.BO (SEBI prohibits self-listing)"),
+    "NSE": ("NSE.BO", "IN", "National Stock Exchange of India Ltd"),
     # --- Corrupted legacy symbol artifacts ---
     "3M(INDIA)": ("3MINDIA.NS", "IN", "Normalized corrupted ticker symbol to 3MINDIA"),
     "ABBOT(INDIA)": ("ABBOTINDIA.NS", "IN", "Normalized corrupted ticker symbol to ABBOTINDIA"),

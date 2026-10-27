@@ -1966,97 +1966,115 @@ export default function App() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 items-stretch">
                     {/* Step 1 */}
-                    <div className="space-y-3">
-                      <span className="font-mono text-xs font-bold text-[#e3b23c] uppercase tracking-wider block">
-                        STEP 01
-                      </span>
-                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
-                        Covariance Matrix (7 Drivers)
-                      </h4>
-                      <p className="text-base text-[#d1d7e0] leading-relaxed">
-                        Models empirical co-movements across revenue growth, operating margins, 10Y sovereign yields, company beta, equity risk premium, and corporate borrowing rates.
-                      </p>
-                      <div className="text-xs text-[#e3b23c] font-semibold pt-1">
-                        Preserves real-world relationships
+                    <div className="flex flex-col h-full justify-between space-y-4">
+                      <div className="space-y-2.5">
+                        <span className="font-mono text-xs font-bold text-[#e3b23c] uppercase tracking-wider block">
+                          STEP 01
+                        </span>
+                        <h4 className="font-display text-lg sm:text-xl font-bold text-[#f4eedf] leading-snug min-h-[3.25rem] sm:min-h-[3.5rem] flex flex-col justify-start">
+                          <span>Covariance Matrix</span>
+                          <span className="text-xs sm:text-sm font-normal text-[#94a3b8] font-mono mt-0.5">7 Macro Drivers</span>
+                        </h4>
+                        <p className="text-sm sm:text-base text-[#d1d7e0] leading-relaxed">
+                          Empirically models joint movements across revenue growth, operating margins, 10Y sovereign yields, company beta, equity risk premium, and corporate borrowing rates.
+                        </p>
+                      </div>
+                      <div className="mt-auto pt-4 border-t border-[#f4eedf]/10 space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-semibold text-[#e3b23c] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#e3b23c]"></span>
+                            Contagion Preserved
+                          </span>
+                          <span className="text-[#8b9bb4]">7 Drivers</span>
+                        </div>
+                        <div className="text-[11px] text-[#64748b] font-mono">
+                          Empirical cross-asset matrix
+                        </div>
                       </div>
                     </div>
 
                     {/* Step 2 */}
-                    <div className="space-y-3">
-                      <span className="font-mono text-xs font-bold text-[#5b8fd9] uppercase tracking-wider block">
-                        STEP 02
-                      </span>
-                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
-                        Cholesky Transformation
-                      </h4>
-                      <p className="text-base text-[#d1d7e0] leading-relaxed">
-                        Factorizes the covariance matrix into a lower-triangular matrix, transforming independent shocks into correlated economic environments with heavy-tailed downside risk.
-                      </p>
-                      <div className="text-xs text-[#8ab4f8] font-semibold pt-1">
-                        Captures multi-variable contagion
+                    <div className="flex flex-col h-full justify-between space-y-4">
+                      <div className="space-y-2.5">
+                        <span className="font-mono text-xs font-bold text-[#5b8fd9] uppercase tracking-wider block">
+                          STEP 02
+                        </span>
+                        <h4 className="font-display text-lg sm:text-xl font-bold text-[#f4eedf] leading-snug min-h-[3.25rem] sm:min-h-[3.5rem] flex flex-col justify-start">
+                          <span>Cholesky Factorization</span>
+                          <span className="text-xs sm:text-sm font-normal text-[#94a3b8] font-mono mt-0.5">Lower-Triangular L</span>
+                        </h4>
+                        <p className="text-sm sm:text-base text-[#d1d7e0] leading-relaxed">
+                          Decomposes the covariance matrix into a lower-triangular form, converting independent shocks into correlated economic regimes with heavy-tailed downside risk.
+                        </p>
+                      </div>
+                      <div className="mt-auto pt-4 border-t border-[#f4eedf]/10 space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-semibold text-[#5b8fd9] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#5b8fd9]"></span>
+                            L · Lᵀ Transformation
+                          </span>
+                          <span className="text-[#8b9bb4]">Heavy Tails</span>
+                        </div>
+                        <div className="text-[11px] text-[#64748b] font-mono">
+                          Multi-variable shock engine
+                        </div>
                       </div>
                     </div>
 
                     {/* Step 3 */}
-                    <div className="space-y-3">
-                      <span className="font-mono text-xs font-bold text-[#e07a5f] uppercase tracking-wider block">
-                        STEP 03
-                      </span>
-                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
-                        Economic Guardrails
-                      </h4>
-                      <p className="text-base text-[#d1d7e0] leading-relaxed">
-                        Discards absurd universes where discount rates fall below long-term GDP growth, hurdle rates are negative, or operating margins exceed realistic physical limits.
-                      </p>
-                      <div className="text-xs text-[#34b38a] font-semibold pt-1 flex items-center gap-1">
-                        <span>✓</span>
-                        <span>10,000 verified worlds retained</span>
+                    <div className="flex flex-col h-full justify-between space-y-4">
+                      <div className="space-y-2.5">
+                        <span className="font-mono text-xs font-bold text-[#e07a5f] uppercase tracking-wider block">
+                          STEP 03
+                        </span>
+                        <h4 className="font-display text-lg sm:text-xl font-bold text-[#f4eedf] leading-snug min-h-[3.25rem] sm:min-h-[3.5rem] flex flex-col justify-start">
+                          <span>Economic Guardrails</span>
+                          <span className="text-xs sm:text-sm font-normal text-[#94a3b8] font-mono mt-0.5">Sanity Stress Filter</span>
+                        </h4>
+                        <p className="text-sm sm:text-base text-[#d1d7e0] leading-relaxed">
+                          Filters 30,000 raw simulation paths to discard invalid states—such as hurdle rates dropping below long-term GDP growth or negative corporate borrowing spreads.
+                        </p>
+                      </div>
+                      <div className="mt-auto pt-4 border-t border-[#f4eedf]/10 space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-semibold text-[#e07a5f] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#e07a5f]"></span>
+                            Sanity Stress Filter
+                          </span>
+                          <span className="text-[#34b38a] font-bold">10K Valid</span>
+                        </div>
+                        <div className="text-[11px] text-[#64748b] font-mono">
+                          20,000 invalid paths pruned
+                        </div>
                       </div>
                     </div>
 
                     {/* Step 4 */}
-                    <div className="space-y-3">
-                      <span className="font-mono text-xs font-bold text-[#34b38a] uppercase tracking-wider block">
-                        STEP 04
-                      </span>
-                      <h4 className="font-display text-xl font-bold text-[#f4eedf]">
-                        Fair Value Spectrum
-                      </h4>
-                      <p className="text-base text-[#d1d7e0] leading-relaxed">
-                        Constructs a full 90% confidence distribution, mapping fair value from the 5th percentile bear case to the 95th percentile bull case.
-                      </p>
-                      {/* Mini histogram with subtle sleek glassmorphic tones */}
-                      <div className="pt-2">
-                        <svg viewBox="0 0 160 40" className="w-full h-10">
-                          {[
-                            { x: 10, h: 8, c: '#334155' },
-                            { x: 24, h: 16, c: '#475569' },
-                            { x: 38, h: 26, c: '#0284c7' },
-                            { x: 52, h: 34, c: '#0284c7' },
-                            { x: 66, h: 40, c: '#059669' },
-                            { x: 80, h: 36, c: '#059669' },
-                            { x: 94, h: 28, c: '#0284c7' },
-                            { x: 108, h: 18, c: '#0284c7' },
-                            { x: 122, h: 12, c: '#475569' },
-                            { x: 136, h: 6, c: '#334155' },
-                          ].map((bar, i) => (
-                            <rect
-                              key={i}
-                              x={bar.x}
-                              y={40 - bar.h}
-                              width="9"
-                              height={bar.h}
-                              rx="2.5"
-                              fill={bar.c}
-                            />
-                          ))}
-                        </svg>
-                        <div className="flex justify-between items-center text-[10.5px] font-mono text-[#cbd5e1] pt-1">
-                          <span className="text-[#94a3b8] font-semibold">P5 Bear</span>
-                          <span className="text-[#34d399] font-bold">P50 Median</span>
-                          <span className="text-[#94a3b8] font-semibold">P95 Bull</span>
+                    <div className="flex flex-col h-full justify-between space-y-4">
+                      <div className="space-y-2.5">
+                        <span className="font-mono text-xs font-bold text-[#34b38a] uppercase tracking-wider block">
+                          STEP 04
+                        </span>
+                        <h4 className="font-display text-lg sm:text-xl font-bold text-[#f4eedf] leading-snug min-h-[3.25rem] sm:min-h-[3.5rem] flex flex-col justify-start">
+                          <span>Fair Value Spectrum</span>
+                          <span className="text-xs sm:text-sm font-normal text-[#94a3b8] font-mono mt-0.5">90% Confidence Band</span>
+                        </h4>
+                        <p className="text-sm sm:text-base text-[#d1d7e0] leading-relaxed">
+                          Constructs a full 90% confidence distribution across 10,000 valid paths, mapping intrinsic equity value from the 5th percentile bear to 95th percentile bull case.
+                        </p>
+                      </div>
+                      <div className="mt-auto pt-4 border-t border-[#f4eedf]/10 space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-semibold text-[#34b38a] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a]"></span>
+                            P5 ➔ P50 ➔ P95
+                          </span>
+                          <span className="text-[#34b38a] font-bold">90% Range</span>
+                        </div>
+                        <div className="text-[11px] text-[#64748b] font-mono">
+                          Full probabilistic fair value
                         </div>
                       </div>
                     </div>
