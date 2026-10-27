@@ -88,18 +88,18 @@ The baseline historical parameters are calculated as weighted averages over the 
 1. **Historical Revenue Compound Annual Growth Rate ($CAGR_H$):**
    $$CAGR_H = \left(\frac{\text{Revenue}_0}{\text{Revenue}_{-k}}\right)^{\frac{1}{k}} - 1$$
 
-2. **Normalized Operating Margin ($\mu^*$):**
-   $$\mu^* = \frac{1}{k} \sum_{t=-k}^0 \left(\frac{\text{EBIT}_t}{\text{Revenue}_t}\right)$$
+2. **Normalized Operating Margin ($\mu_{\text{norm}}$):**
+   $$\mu_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{EBIT}_t}{\text{Revenue}_t}\right)$$
 
-3. **Depreciation and Amortization Intensity ($\delta^*$):**
-   $$\delta^* = \frac{1}{k} \sum_{t=-k}^0 \left(\frac{\text{DA}_t}{\text{Revenue}_t}\right)$$
+3. **Depreciation and Amortization Intensity ($\delta_{\text{norm}}$):**
+   $$\delta_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{DA}_t}{\text{Revenue}_t}\right)$$
 
-4. **Capital Expenditure Intensity ($\kappa^*$):**
-   $$\kappa^* = \frac{1}{k} \sum_{t=-k}^0 \left(\frac{\text{CapEx}_t}{\text{Revenue}_t}\right)$$
+4. **Capital Expenditure Intensity ($\kappa_{\text{norm}}$):**
+   $$\kappa_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{CapEx}_t}{\text{Revenue}_t}\right)$$
 
-5. **Net Working Capital Ratio ($\omega^*$):**
+5. **Net Working Capital Ratio ($\omega_{\text{norm}}$):**
    $$\text{NWC}_t = (\text{Current Assets}_t - \text{Cash}_t) - (\text{Current Liabilities}_t - \text{Short-Term Debt}_t)$$
-   $$\omega^* = \frac{1}{k} \sum_{t=-k}^0 \left(\frac{\text{NWC}_t}{\text{Revenue}_t}\right)$$
+   $$\omega_{\text{norm}} = \frac{1}{k} \sum_{t=-k}^{0} \left(\frac{\text{NWC}_t}{\text{Revenue}_t}\right)$$
 
 ---
 
@@ -133,7 +133,7 @@ $$K_e = R_f + \beta_L \times ERP$$
 Where $\beta_L$ is the levered equity beta estimated against the local market benchmark index (NIFTY 50 / S&P 500). If capital structure adjustments are applied, beta is unlevered and relevered via the Hamada equation:
 
 $$\beta_U = \frac{\beta_L}{1 + (1 - \tau) \frac{D}{E}}$$
-$$\beta_L^* = \beta_U \left[1 + (1 - \tau) \frac{D^*}{E^*}\right]$$
+$$\beta_{L,\text{target}} = \beta_U \left[1 + (1 - \tau) \frac{D_{\text{target}}}{E_{\text{target}}}\right]$$
 
 ### 4.2 Synthetic Debt Rating & Cost of Debt ($K_d$)
 For non-rated and mid-cap companies, book interest rates can be distorted by legacy debt or zero-interest promoter loans. ValuationLab computes a synthetic credit rating by evaluating the company's Interest Coverage Ratio ($ICR$):
@@ -183,14 +183,14 @@ $$\text{Revenue}_t = \text{Revenue}_{t-1} \times (1 + g_t)$$
 
 Operating EBIT margins linearly converge toward historical normalized efficiency:
 
-$$\mu_t = \mu_0 + \left(\frac{\mu^* - \mu_0}{5}\right) \times t$$
+$$\mu_t = \mu_0 + \left(\frac{\mu_{\text{norm}} - \mu_0}{5}\right) \times t$$
 $$\text{EBIT}_t = \text{Revenue}_t \times \mu_t$$
 
 ### 5.2 Distributable Cash Flow Formulation
 $$\text{NOPAT}_t = \text{EBIT}_t \times (1 - \tau)$$
-$$\text{DA}_t = \text{Revenue}_t \times \delta^*$$
-$$\text{CapEx}_t = \text{Revenue}_t \times \kappa^*$$
-$$\Delta\text{NWC}_t = \omega^* \times (\text{Revenue}_t - \text{Revenue}_{t-1})$$
+$$\text{DA}_t = \text{Revenue}_t \times \delta_{\text{norm}}$$
+$$\text{CapEx}_t = \text{Revenue}_t \times \kappa_{\text{norm}}$$
+$$\Delta\text{NWC}_t = \omega_{\text{norm}} \times (\text{Revenue}_t - \text{Revenue}_{t-1})$$
 
 $$\text{FCFF}_t = \text{NOPAT}_t + \text{DA}_t - \text{CapEx}_t - \Delta\text{NWC}_t$$
 
@@ -205,12 +205,12 @@ $$TV_5 = \frac{\text{FCFF}_5 \times (1 + g_{\infty})}{WACC - g_{\infty}}$$
 
 The terminal value is discounted to present value using the full 5-year factor:
 
-$$PV(TV_5) = \frac{TV_5}{(1 + WACC)^5}$$
+$$PV(TV_5) = \frac{TV_5}{(1 + WACC)^{5}}$$
 
 ### 5.4 Enterprise-to-Equity Bridge
 Operating Enterprise Value ($EV$) equals the sum of discounted explicit cash flows plus discounted terminal value:
 
-$$EV = \sum_{t=1}^5 \left(\text{FCFF}_t \times DF_t\right) + PV(TV_5)$$
+$$EV = \sum_{t=1}^{5} \left(\text{FCFF}_t \times DF_t\right) + PV(TV_5)$$
 
 To bridge Enterprise Value to Shareholder Equity Value ($P_0$):
 
@@ -266,7 +266,7 @@ Terminal equity value is anchored to the institution's sustainable Return on Equ
 $$\text{Justified } \frac{P}{B} = \frac{ROE - g_{\infty}}{K_e - g_{\infty}}$$
 $$TV_{\text{Equity}} = \text{Book Value}_5 \times \left(\frac{ROE - g_{\infty}}{K_e - g_{\infty}}\right)$$
 
-$$\text{Bank Equity Value} = \sum_{t=1}^5 \frac{\text{FCFE}_t}{(1 + K_e)^{t - 0.5}} + \frac{TV_{\text{Equity}}}{(1 + K_e)^5}$$
+$$\text{Bank Equity Value} = \sum_{t=1}^{5} \frac{\text{FCFE}_t}{(1 + K_e)^{t - 0.5}} + \frac{TV_{\text{Equity}}}{(1 + K_e)^{5}}$$
 
 ---
 
@@ -316,24 +316,24 @@ ValuationLab resolves this by deploying a **10,000-iteration correlated stochast
 
 ### 7.1 The 7-Variable Covariance Matrix ($\Sigma$)
 The engine models the joint distribution of seven economic variables:
-$$\mathbf{Y} = \begin{bmatrix} g_{\text{start}} & \mu_{\text{target}} & R_f & \beta & ERP & K_d & g_{\infty} \end{bmatrix}^T$$
+$$\mathbf{Y} = \begin{bmatrix} g_{\text{start}} & \mu_{\text{target}} & R_f & \beta & ERP & K_d & g_{\infty} \end{bmatrix}^{T}$$
 
 Historical variances and empirical correlations populate the symmetric positive semi-definite covariance matrix $\Sigma$:
 
 $$\Sigma = \begin{bmatrix}
-\sigma_1^2 & \rho_{1,2}\sigma_1\sigma_2 & \cdots & \rho_{1,7}\sigma_1\sigma_7 \\
-\rho_{2,1}\sigma_2\sigma_1 & \sigma_2^2 & \cdots & \rho_{2,7}\sigma_2\sigma_7 \\
+\sigma_1^{2} & \rho_{1,2}\sigma_1\sigma_2 & \cdots & \rho_{1,7}\sigma_1\sigma_7 \\
+\rho_{2,1}\sigma_2\sigma_1 & \sigma_2^{2} & \cdots & \rho_{2,7}\sigma_2\sigma_7 \\
 \vdots & \vdots & \ddots & \vdots \\
-\rho_{7,1}\sigma_7\sigma_1 & \rho_{7,2}\sigma_7\sigma_2 & \cdots & \sigma_7^2
+\rho_{7,1}\sigma_7\sigma_1 & \rho_{7,2}\sigma_7\sigma_2 & \cdots & \sigma_7^{2}
 \end{bmatrix}$$
 
-### 7.2 Cholesky Decomposition ($L L^T = \Sigma$)
+### 7.2 Cholesky Decomposition ($L L^{T} = \Sigma$)
 Because $\Sigma$ is symmetric and positive-definite, there exists a unique lower triangular matrix $\mathbf{L}$ such that:
 
-$$\Sigma = \mathbf{L} \mathbf{L}^T$$
+$$\Sigma = \mathbf{L} \mathbf{L}^{T}$$
 
 where:
-$$L_{j,j} = \sqrt{\Sigma_{j,j} - \sum_{k=1}^{j-1} L_{j,k}^2}$$
+$$L_{j,j} = \sqrt{\Sigma_{j,j} - \sum_{k=1}^{j-1} L_{j,k}^{2}}$$
 $$L_{i,j} = \frac{1}{L_{j,j}} \left(\Sigma_{i,j} - \sum_{k=1}^{j-1} L_{i,k} L_{j,k}\right) \quad \text{for } i > j$$
 
 ### 7.3 Heavy-Tailed Fat-Shock Generation (Student's $t$)
@@ -423,7 +423,7 @@ Every intrinsic DCF valuation is cross-referenced against current market trading
 | $DF_t$ | Mid-Year Fractional Cash Flow Discount Factor | Discount Factor ($0 < DF \le 1$) |
 | $TV_N$ | Gordon Growth Perpetual Terminal Value at Year $N$ | Currency ($\text{INR} / \text{USD}$) |
 | $\mathbf{\Sigma}$ | 7-Variable Stochastic Covariance Matrix | Covariance Matrix ($\mathbb{R}^{7 \times 7}$) |
-| $\mathbf{L}$ | Cholesky Lower Triangular Factorization Matrix | Lower Triangular Matrix ($\mathbf{L} \mathbf{L}^T = \mathbf{\Sigma}$) |
+| $\mathbf{L}$ | Cholesky Lower Triangular Factorization Matrix | Lower Triangular Matrix ($\mathbf{L} \mathbf{L}^{T} = \mathbf{\Sigma}$) |
 | $\mathbf{Z}$ | Heavy-Tailed Student's $t$ Random Vector | Random Vector ($\nu = 5$) |
 | $ICR$ | Operating Interest Coverage Ratio ($\text{EBIT} / \text{Interest Expense}$) | Coverage Multiple ($x\times$) |
 | $P_5, P_{95}$ | Empirical Monte Carlo 5th and 95th Percentile Valuations | Currency per Share ($\text{INR} / \text{USD}$) |
