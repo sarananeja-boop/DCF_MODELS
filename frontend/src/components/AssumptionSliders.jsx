@@ -201,23 +201,23 @@ export default function AssumptionSliders({
   }, [growth, margin, wacc, tgr, appliedGrowth, appliedMargin, appliedWacc, appliedTgr, data, currentPrice, isFinancial]);
 
   return (
-    <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-xl space-y-5">
+    <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-xl space-y-4 sm:space-y-5 overflow-hidden">
       {/* Header & Scenario Presets */}
-      <div className="flex items-center justify-between pb-3.5 border-b border-[#f4eedf]/10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#0d121a] border border-[#f4eedf]/12 flex items-center justify-center text-[#e3b23c]">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-[#f4eedf]/10">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-[#0d121a] border border-[#f4eedf]/12 flex items-center justify-center text-[#e3b23c] shrink-0">
             <FiSliders className="w-4 h-4" />
           </div>
-          <div>
-            <h3 className="font-display font-bold text-[#f4eedf] text-base tracking-tight">
+          <div className="min-w-0">
+            <h3 className="font-display font-bold text-[#f4eedf] text-base tracking-tight truncate">
               Model Assumptions
             </h3>
             {isFinancial ? (
-              <span className="text-[11px] font-semibold text-[#34b38a]">
+              <span className="text-[11px] font-semibold text-[#34b38a] block truncate">
                 Bank FCFE / ROE Mode
               </span>
             ) : (
-              <span className="text-[11px] text-[#a6b0c3]">
+              <span className="text-[11px] text-[#a6b0c3] block truncate">
                 5-Year DCF Inputs
               </span>
             )}
@@ -225,7 +225,7 @@ export default function AssumptionSliders({
         </div>
 
         {/* Scenario Pill Switcher */}
-        <div className="inline-flex items-center bg-[#0d121a] p-1 rounded-lg border border-[#f4eedf]/10 text-[11px] font-semibold">
+        <div className="inline-flex items-center bg-[#0d121a] p-1 rounded-lg border border-[#f4eedf]/10 text-[11px] font-semibold shrink-0">
           {[
             { id: 'bear', label: 'Bear' },
             { id: 'base', label: 'Base' },
@@ -249,16 +249,16 @@ export default function AssumptionSliders({
 
       {/* Live Preview Banner when Sliders are Adjusted */}
       {livePreview && (
-        <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-all ${
+        <div className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border transition-all ${
           livePreview.isDirty
             ? 'bg-[#141b26] border border-[#f4eedf]/20 shadow-sm'
             : 'bg-[#0d121a]/80 border-[#f4eedf]/10'
         }`}>
-          <span className="text-xs font-medium text-[#a6b0c3]">
+          <span className="text-xs font-medium text-[#a6b0c3] whitespace-nowrap">
             {livePreview.isDirty ? 'Live Simulated Value:' : 'Model Fair Value:'}
           </span>
-          <div className="flex items-center gap-2">
-            <span className="font-display font-bold text-base text-[#f4eedf] tabular-nums">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums">
               {symbol}{livePreview.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span className={`inline-flex items-center gap-0.5 text-xs font-bold tabular-nums ${
@@ -272,7 +272,7 @@ export default function AssumptionSliders({
       )}
 
       {/* Action Buttons: Re-run Analysis & Return to Default (Restore Defaults) */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => onApply && onApply({
@@ -283,41 +283,41 @@ export default function AssumptionSliders({
             projection_years: 5
           })}
           disabled={loading}
-          className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold transition cursor-pointer text-center leading-tight ${
             livePreview?.isDirty
               ? 'bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] shadow-lg shadow-[#e3b23c]/20'
               : 'bg-[#f4eedf] hover:bg-white text-[#0f141c]'
           }`}
         >
-          <FiRefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Re-run Analysis</span>
+          <FiRefreshCw className={`w-3.5 h-3.5 shrink-0 ${loading ? 'animate-spin' : ''}`} />
+          <span className="truncate">Re-run Analysis</span>
         </button>
 
         <button
           type="button"
           onClick={handleResetLocalAndServer}
           disabled={loading}
-          className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold border transition cursor-pointer text-center leading-tight ${
             isModifiedFromDefault
               ? 'bg-[#e07a5f]/15 hover:bg-[#e07a5f]/25 text-[#f4eedf] border-[#e07a5f]/40'
               : 'bg-[#0d121a] hover:bg-[#1c2534] text-[#a6b0c3] hover:text-[#f4eedf] border-[#f4eedf]/12'
           }`}
         >
-          <FiRotateCcw className="w-3.5 h-3.5" />
-          <span>Restore Defaults</span>
+          <FiRotateCcw className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Restore Defaults</span>
         </button>
       </div>
 
       {/* 4 Compact Sliders (Numbers-Forward, Zero Paragraph Clutter) */}
-      <div className="space-y-5 pt-1">
+      <div className="space-y-4 sm:space-y-5 pt-1">
         
         {/* 1. Revenue Growth */}
         <div>
-          <div className="flex justify-between items-center text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm">
+          <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
               {isFinancial ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
             </label>
-            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c]">
+            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
                 step="0.5"
@@ -337,7 +337,7 @@ export default function AssumptionSliders({
             onChange={(e) => handleGrowthChange(parseFloat(e.target.value))}
             className="w-full warm-slider cursor-pointer"
           />
-          <div className="flex justify-between text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
+          <div className="flex flex-wrap justify-between gap-1 text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
             <span>Hist CAGR: {(defaultGrowth * 100).toFixed(1)}%</span>
             <span>Default: {(defaultGrowth * 100).toFixed(1)}%</span>
           </div>
@@ -345,15 +345,15 @@ export default function AssumptionSliders({
 
         {/* 2. Operating EBIT Margin / ROE */}
         <div>
-          <div className="flex justify-between items-center text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm">
+          <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
               {isFinancial
                 ? 'Target ROE'
                 : isNegativeMargin
                 ? 'Target EBIT Margin (Yr 5)'
                 : 'EBIT Margin'}
             </label>
-            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c]">
+            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
                 step="0.5"
@@ -373,7 +373,7 @@ export default function AssumptionSliders({
             onChange={(e) => handleMarginChange(parseFloat(e.target.value))}
             className="w-full warm-slider cursor-pointer"
           />
-          <div className="flex justify-between text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
+          <div className="flex flex-wrap justify-between gap-1 text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
             <span>Current: {(currentMargin * 100).toFixed(1)}%</span>
             <span>Default: {(defaultMargin * 100).toFixed(1)}%</span>
           </div>
@@ -381,11 +381,11 @@ export default function AssumptionSliders({
 
         {/* 3. Discount Rate (WACC / Ke) */}
         <div>
-          <div className="flex justify-between items-center text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm">
+          <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
               {isFinancial ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
             </label>
-            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c]">
+            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
                 step="0.1"
@@ -406,7 +406,7 @@ export default function AssumptionSliders({
             className="w-full warm-slider cursor-pointer"
           />
           <div className="text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums flex flex-col gap-1">
-            <div className="flex justify-between">
+            <div className="flex flex-wrap justify-between gap-1">
               <span>Computed: {(defaultWacc * 100).toFixed(1)}%</span>
               {data.market_data?.beta && (
                 <span>Beta: {data.market_data.beta.toFixed(2)}</span>
@@ -427,11 +427,11 @@ export default function AssumptionSliders({
 
         {/* 4. Terminal Growth */}
         <div>
-          <div className="flex justify-between items-center text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm">
+          <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
               Terminal Growth (g)
             </label>
-            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c]">
+            <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
                 step="0.1"
@@ -451,7 +451,7 @@ export default function AssumptionSliders({
             onChange={(e) => handleTgrChange(parseFloat(e.target.value))}
             className="w-full warm-slider cursor-pointer"
           />
-          <div className="flex justify-between text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
+          <div className="flex flex-wrap justify-between gap-1 text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
             <span>Max Cap: {maxTgr.toFixed(1)}%</span>
             <span>Default: {defaultTgr.toFixed(1)}%</span>
           </div>

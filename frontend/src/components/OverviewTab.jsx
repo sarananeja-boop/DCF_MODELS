@@ -127,10 +127,19 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const exitImpliedPrice = validation?.exit_implied_price ?? diagnostics?.exit_implied_price;
 
   const scaleMax = Math.max(currentPrice, impliedPrice, p95, exitImpliedPrice || 0) * 1.16 || 100;
-  const pricePosPct = Math.min(95, Math.max(5, (currentPrice / scaleMax) * 100));
-  const fairPosPct = Math.min(95, Math.max(5, (impliedPrice / scaleMax) * 100));
+  const pricePosPct = Math.min(94, Math.max(6, (currentPrice / scaleMax) * 100));
+  const fairPosPct = Math.min(94, Math.max(6, (impliedPrice / scaleMax) * 100));
   const p5PosPct = Math.min(92, Math.max(2, (p5 / scaleMax) * 100));
   const p95PosPct = Math.min(98, Math.max(p5PosPct + 4, (p95 / scaleMax) * 100));
+
+  // Dynamic alignment helper to ensure callout badges never bleed off the card edges
+  const getCalloutAlign = (pct) => {
+    if (pct < 18) return { transform: 'translateX(0%)', align: 'items-start' };
+    if (pct > 82) return { transform: 'translateX(-100%)', align: 'items-end' };
+    return { transform: 'translateX(-50%)', align: 'items-center' };
+  };
+  const fairAlign = getCalloutAlign(fairPosPct);
+  const priceAlign = getCalloutAlign(pricePosPct);
 
   // PV of 5-yr vs Terminal Value composition
   const pv5Yr = dcf_result?.pv_ufcf || 0;
@@ -252,10 +261,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       {/* =================================================================== */}
       {/* ROW 1: SIMPLY WALL ST PRICE VS FAIR VALUE BAR + EQUITY VALUE BRIDGE */}
       {/* =================================================================== */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+      <div className="grid grid-cols-1 2xl:grid-cols-12 gap-4 items-stretch">
         
         {/* Left 7 Cols: Share Price vs Fair Value Visual Scale & Valuation Range Stats */}
-        <div className="xl:col-span-7 bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+        <div className="2xl:col-span-7 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between overflow-hidden">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2.5">
@@ -275,11 +284,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
 
             {/* Horizontal Bar Visualization (Simply Wall St style) */}
-            <div className="relative pt-9 pb-9 px-2 my-2">
+            <div className="relative pt-9 pb-9 px-3 sm:px-4 my-2">
               {/* Fair Value Marker (Top Callout) */}
               <div
-                className="absolute top-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300 z-20"
-                style={{ left: `${fairPosPct}%` }}
+                className={`absolute top-0 flex flex-col ${fairAlign.align} transition-all duration-300 z-20`}
+                style={{ left: `${fairPosPct}%`, transform: fairAlign.transform }}
               >
                 <div className="px-3 py-1 rounded-lg bg-[#e3b23c] text-[#0f141c] font-display text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
                   DCF Fair Value: {symbol}{formatNumber(impliedPrice)}
@@ -314,8 +323,8 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
 
               {/* Current Price Marker (Bottom Callout) */}
               <div
-                className="absolute bottom-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300 z-20"
-                style={{ left: `${pricePosPct}%` }}
+                className={`absolute bottom-0 flex flex-col ${priceAlign.align} transition-all duration-300 z-20`}
+                style={{ left: `${pricePosPct}%`, transform: priceAlign.transform }}
               >
                 <div className="w-0.5 h-3 bg-[#f4eedf]" />
                 <div className="px-3 py-1 rounded-lg bg-[#f4eedf] text-[#0f141c] font-display text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
@@ -371,40 +380,40 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           </div>
 
           {/* 6-Metric Valuation Range Strip (All Key Price Benchmarks On-Face, Clean & Uniform) */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#e3b23c] font-bold">DCF Value</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(impliedPrice)}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">Exit Mult.</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {exitImpliedPrice ? `${symbol}${formatNumber(exitImpliedPrice)}` : 'N/A'}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">MC P5 (Bear)</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#e07a5f] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#e07a5f] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(p5)}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">MC P25</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(p25)}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#8ab4f8] font-bold">MC Median</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(monte_carlo?.stats?.median)}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">MC P95 (Bull)</div>
-              <div className="font-display font-bold text-sm sm:text-base text-[#34b38a] tabular-nums mt-1">
+              <div className="font-display font-bold text-sm sm:text-base text-[#34b38a] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(p95)}
               </div>
             </div>
@@ -412,13 +421,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* Right 5 Cols: Enterprise-to-Equity Bridge & Horizon Split (With Arithmetic Operators & Bank Support) */}
-        <div className="xl:col-span-5 bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+        <div className="2xl:col-span-5 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between overflow-hidden">
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
                 {isFinancial ? 'Terminal Value & Bank Equity Bridge' : 'Enterprise-to-Equity Value Bridge'}
               </h3>
-              <span className="text-xs font-semibold text-[#a6b0c3] tabular-nums">
+              <span className="text-xs font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                 TV Share: <strong className="text-[#8ab4f8]">{pvTvShare.toFixed(1)}%</strong>
               </span>
             </div>
@@ -435,7 +444,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   style={{ width: `${pvTvShare}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] font-semibold mt-1.5 tabular-nums">
+              <div className="flex flex-wrap justify-between gap-1.5 text-[11px] font-semibold mt-1.5 tabular-nums">
                 <span className="text-[#34b38a]">
                   ● {isFinancial ? '5-Yr FCFE PV' : '5-Yr Cash Flows PV'}: {formatCurrency(pv5Yr, symbol, true)} ({pv5YrShare.toFixed(1)}%)
                 </span>
@@ -557,10 +566,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       </div>
 
       {/* =================================================================== */}
-      {/* ROW 2: 3-COLUMN FULL-WIDTH STATS GRID                               */}
+      {/* ROW 2: STATS GRID (RESPONSIVE 1/2/3 COLUMNS)                        */}
       {/* (1. Company & Financial Stats | 2. WACC Breakdown | 3. Multiples)   */}
       {/* =================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 items-stretch">
 
         {/* COLUMN 1: Company Details & Audited Baseline Stats */}
         <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">

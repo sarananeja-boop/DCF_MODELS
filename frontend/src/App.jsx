@@ -200,6 +200,16 @@ export default function App() {
   const [resetKey, setResetKey] = useState(0);
   const [showMethodology, setShowMethodology] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const tabBarRef = useRef(null);
+
+  useEffect(() => {
+    if (tabBarRef.current) {
+      const activeBtn = tabBarRef.current.querySelector('[data-active="true"]');
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+      }
+    }
+  }, [activeTab]);
 
   const [previewStock, setPreviewStock] = useState('CESC');
   const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.CESC;
@@ -959,7 +969,7 @@ export default function App() {
                   </div>
 
                   {/* Centered Navigation Links with Generous Spacing */}
-                  <div className="hidden sm:flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-[#c5cedd]">
+                  <div className="hidden lg:flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-[#c5cedd]">
                     <button
                       type="button"
                       onClick={() => scrollToSection('dcf-explainer')}
@@ -2478,44 +2488,44 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 
                 {/* Card 1: DCF Intrinsic Fair Value (Primary Highlight - Clean & Uniform Border) */}
-                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 relative">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c]">
+                <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 relative flex flex-col justify-between overflow-hidden">
+                  <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c] truncate">
                       DCF Intrinsic Fair Value
                     </span>
                     {analysisData.diagnostics?.tv_share_of_ev != null && (
-                      <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums">
+                      <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                         TV {(analysisData.diagnostics.tv_share_of_ev * 100).toFixed(0)}% of EV
                       </span>
                     )}
                   </div>
-                  <div className="font-display text-4xl sm:text-[42px] font-bold text-[#e3b23c] tabular-nums leading-tight my-1">
+                  <div className="font-display text-3xl sm:text-4xl xl:text-[40px] font-bold text-[#e3b23c] tabular-nums leading-tight my-1 truncate">
                     {wsSymbol}{wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className={`flex items-center text-xs font-bold tabular-nums ${
+                  <div className={`flex flex-wrap items-center text-xs font-bold tabular-nums gap-1 ${
                     wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
                   }`}>
-                    {wsIsUndervalued ? <FiTrendingUp className="mr-1.5 text-sm shrink-0" /> : <FiTrendingDown className="mr-1.5 text-sm shrink-0" />}
-                    <span>
+                    {wsIsUndervalued ? <FiTrendingUp className="text-sm shrink-0" /> : <FiTrendingDown className="text-sm shrink-0" />}
+                    <span className="truncate">
                       {wsIsUndervalued ? '▲' : '▼'} {Math.abs(wsUpsidePct).toFixed(1)}% {wsIsUndervalued ? 'Upside (Undervalued)' : 'Downside (Above DCF)'}
                     </span>
                   </div>
                 </div>
 
                 {/* Card 2: Current Market Price */}
-                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
+                  <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
                       Current Market Price
                     </span>
-                    <span className="text-[11px] font-semibold text-[#a6b0c3] bg-[#0d121a] px-2 py-0.5 rounded border border-[#f4eedf]/10">
+                    <span className="text-[11px] font-semibold text-[#a6b0c3] bg-[#0d121a] px-2 py-0.5 rounded border border-[#f4eedf]/10 shrink-0">
                       {analysisData.company?.currency || 'USD'}
                     </span>
                   </div>
-                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1">
+                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1 truncate">
                     {wsSymbol}{wsCurrentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] flex items-center gap-2 tabular-nums">
+                  <div className="text-xs text-[#a6b0c3] flex flex-wrap items-center gap-2 tabular-nums">
                     <span>Beta: <strong className="text-[#f4eedf]">{analysisData.market_data?.beta ? analysisData.market_data.beta.toFixed(2) : '1.00'}</strong></span>
                     <span>•</span>
                     <span>WACC: <strong className="text-[#e3b23c]">{((analysisData.wacc?.wacc || 0) * 100).toFixed(1)}%</strong></span>
@@ -2523,30 +2533,30 @@ export default function App() {
                 </div>
 
                 {/* Card 3: Monte Carlo Median */}
-                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
+                  <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
                       Monte Carlo Median
                     </span>
-                    <span className="text-[11px] font-semibold text-[#8ab4f8] bg-[#5b8fd9]/10 px-2 py-0.5 rounded border border-[#5b8fd9]/25">
+                    <span className="text-[11px] font-semibold text-[#8ab4f8] bg-[#5b8fd9]/10 px-2 py-0.5 rounded border border-[#5b8fd9]/25 shrink-0">
                       10,000 Runs
                     </span>
                   </div>
-                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1">
+                  <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1 truncate">
                     {wsSymbol}{wsMcMedian.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] tabular-nums">
+                  <div className="text-xs text-[#a6b0c3] tabular-nums truncate">
                     90% CI: <strong className="text-[#f4eedf]">{wsSymbol}{wsP5.toLocaleString('en-US', { maximumFractionDigits: 0 })} – {wsSymbol}{wsP95.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
                   </div>
                 </div>
 
                 {/* Card 4: Verdict & Multiple Signal */}
-                <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
+                  <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
                       Valuation Verdict
                     </span>
-                    <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums">
+                    <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                       {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : analysisData.company?.is_financial ? 'P/B' : 'EV/EBITDA'}:{' '}
                       <strong className="text-[#f4eedf]">
                         {analysisData.validation?.market_multiple ? `${analysisData.validation.market_multiple.toFixed(1)}x` : 'N/A'}
@@ -2555,7 +2565,7 @@ export default function App() {
                   </div>
                   <div className={`font-display ${
                     (analysisData.verdict?.verdict || '').length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
-                  } font-bold leading-tight my-1 tracking-tight ${
+                  } font-bold leading-tight my-1 tracking-tight truncate ${
                     analysisData.verdict?.verdict?.includes('BUY')
                       ? 'text-[#34b38a]'
                       : analysisData.verdict?.verdict?.includes('SELL')
@@ -2564,7 +2574,7 @@ export default function App() {
                   }`}>
                     {analysisData.verdict?.verdict || 'N/A'}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] leading-snug" title={analysisData.verdict?.description}>
+                  <div className="text-xs text-[#a6b0c3] leading-snug line-clamp-2" title={analysisData.verdict?.description}>
                     {analysisData.verdict?.description || 'Probability-weighted valuation signal'}
                   </div>
                 </div>
@@ -2575,8 +2585,8 @@ export default function App() {
             {/* 2. MAIN FULL-WIDTH 12-COLUMN GRID: LEFT CONTROLS + RIGHT ANALYSIS TABS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
               
-              {/* Left 3 Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
-              <div className="lg:col-span-3 space-y-4">
+              {/* Left Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
+              <div className="lg:col-span-5 xl:col-span-4 2xl:col-span-3 min-w-0 space-y-4">
                 <AssumptionSliders 
                   key={`sliders-${resetKey}-${analysisData.company?.ticker}`}
                   data={analysisData}
@@ -2599,28 +2609,35 @@ export default function App() {
                 <MacroDisplay data={analysisData} />
               </div>
 
-              {/* Right 9 Columns: Tab Navigation + Active Data View */}
-              <div className="lg:col-span-9 min-w-0 space-y-4">
-                {/* Tab Bar */}
-                <div className="bg-[#141b26] rounded-2xl p-1.5 border border-[#f4eedf]/10 flex space-x-1 overflow-x-auto shadow-lg">
-                  {tabs.map((tab) => {
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
-                          isActive
-                            ? 'bg-[#e3b23c] text-[#0f141c] shadow-sm'
-                            : 'text-[#a6b0c3] hover:text-[#f4eedf] hover:bg-[#0d121a]/60'
-                        }`}
-                      >
-                        <span>{tab.icon}</span>
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
+              {/* Right Columns: Tab Navigation + Active Data View */}
+              <div className="lg:col-span-7 xl:col-span-8 2xl:col-span-9 min-w-0 space-y-4">
+                {/* Tab Bar with Smooth Scrolling */}
+                <div className="bg-[#141b26] rounded-2xl p-1.5 border border-[#f4eedf]/10 shadow-lg relative overflow-hidden">
+                  <div 
+                    ref={tabBarRef}
+                    className="flex space-x-1 overflow-x-auto scrollbar-thin scrollbar-thumb-[#f4eedf]/15 hover:scrollbar-thumb-[#e3b23c]/40 scrollbar-track-transparent scroll-smooth py-0.5 px-0.5"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {tabs.map((tab) => {
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          data-active={isActive ? 'true' : 'false'}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`shrink-0 flex items-center gap-2 py-2 sm:py-2.5 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer select-none ${
+                            isActive
+                              ? 'bg-[#e3b23c] text-[#0f141c] shadow-sm'
+                              : 'text-[#a6b0c3] hover:text-[#f4eedf] hover:bg-[#0d121a]/60'
+                          }`}
+                        >
+                          <span className="shrink-0">{tab.icon}</span>
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Active Tab Content */}

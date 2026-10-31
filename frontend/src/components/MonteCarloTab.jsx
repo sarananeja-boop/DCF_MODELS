@@ -229,7 +229,7 @@ const MonteCarloTab = ({ data }) => {
 
       {/* Scatter Plots (Downsampled & Defer-Mounted for Instant Zero-Lag Tab Switching) */}
       {sampledScatter && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px]">
             {chartsReady ? (
               <Plot

@@ -26,7 +26,7 @@ export default function TrendsTab({ data }) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[#f4eedf]">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 text-[#f4eedf]">
       {/* Revenue History */}
       <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
         <div className="flex justify-between items-center mb-2">
