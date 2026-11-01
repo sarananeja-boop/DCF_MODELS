@@ -129,6 +129,10 @@ class AnalyzeRequest(BaseModel):
     market: str = Field(
         "auto", description="'US', 'IN', or 'auto' for auto-detection"
     )
+    valuation_method: str = Field(
+        "auto",
+        description="Valuation model selector for non-banking firms: 'auto' (default FCFF), 'fcff', or 'ddm'",
+    )
     overrides: Optional[Overrides] = None
     monte_carlo_iterations: int = Field(
         10000, ge=100, le=100000, description="Number of MC iterations"
@@ -265,9 +269,14 @@ def analyze(req: AnalyzeRequest):
         else:
             market = req.market.upper().strip()
 
+        requested_method = (req.valuation_method or "auto").strip().lower()
+        if requested_method not in ("auto", "fcff", "ddm"):
+            requested_method = "auto"
+
         cache_key = (
             ticker,
             req.market.strip().upper(),
+            requested_method,
             req.monte_carlo_iterations,
             overrides.revenue_growth,
             overrides.ebit_margin,
@@ -353,28 +362,41 @@ def analyze(req: AnalyzeRequest):
         unit_economics_convergence = False
         gaap_sbc_note: Optional[str] = None
 
+        current_price = float(stock_data.get("current_price", 0) or 0)
+        use_corporate_ddm = bool((not is_financial) and (requested_method == "ddm"))
+        active_model_type = (
+            "BANKING_DDM"
+            if is_financial
+            else ("CORPORATE_DDM" if use_corporate_ddm else "STANDARD_FCFF")
+        )
+
         if is_financial:
             logger.info("Routing %s to Financial Services (Bank/NBFC) Multi-Stage FCFE Model", ticker)
             # Cost of Equity (Ke via CAPM)
             wacc_data = compute_bank_cost_of_equity(stock_data, market_profile)
 
+            default_start_growth = float(metrics.get("avg_ni_growth", 0.10))
+            default_target_margin = float(metrics.get("avg_roe", 0.14))
+            default_discount_rate = float(wacc_data.get("cost_of_equity", 0.10))
+
             start_growth = (
                 overrides.revenue_growth
                 if overrides.revenue_growth is not None
-                else metrics.get("avg_ni_growth", 0.10)
+                else default_start_growth
             )
             target_margin = (
                 overrides.ebit_margin
                 if overrides.ebit_margin is not None
-                else metrics.get("avg_roe", 0.14)
+                else default_target_margin
             )
             current_margin = metrics.get("avg_roe", 0.14)
 
             discount_rate = (
                 overrides.wacc
                 if overrides.wacc is not None
-                else wacc_data.get("cost_of_equity", 0.10)
+                else default_discount_rate
             )
+            wacc_data["wacc"] = float(discount_rate)
 
             # Bank Multi-Stage FCFE / Regulatory Capital Model
             dcf_result = run_bank_valuation(
@@ -387,6 +409,7 @@ def analyze(req: AnalyzeRequest):
                 terminal_growth=terminal_growth,
                 projection_years=projection_years,
                 use_mid_year=True,
+                model_type="BANKING_DDM",
             )
 
             # Bank Monte Carlo
@@ -425,26 +448,36 @@ def analyze(req: AnalyzeRequest):
             )
 
             validation = validate_bank_valuation(dcf_result, stock_data, metrics)
+            method_comparison = {
+                "can_switch": False,
+                "active_method": "ddm",
+                "active_model_type": "BANKING_DDM",
+                "ddm_implied_price": float(dcf_result.get("implied_price", 0.0)),
+                "ddm_upside_pct": float(((dcf_result.get("implied_price", 0.0) / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
+                "ddm_discount_rate": float(discount_rate),
+                "lock_reason": (
+                    "Banking & NBFC institutions are valued exclusively via the DDM / FCFE model "
+                    "because customer deposits and wholesale borrowings are operational funding rather than capital structure debt."
+                ),
+            }
         else:
-            # Standard FCFF + WACC Pipeline for Non-Financials
-            wacc_data = compute_wacc(stock_data, metrics, market_profile)
+            # -----------------------------------------------------------------
+            # Non-Financial Corporations: Compute Baseline FCFF + Corporate DDM
+            # -----------------------------------------------------------------
+            corp_wacc_data = compute_wacc(stock_data, metrics, market_profile)
+            ke_data = compute_bank_cost_of_equity(stock_data, market_profile)
 
             avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
-            
-            # Default starting growth:
             hist_growth = metrics.get("avg_rev_growth", 0.10)
-            if overrides.revenue_growth is not None:
-                start_growth = overrides.revenue_growth
-            elif is_cyclical:
-                # For cyclical commodity companies, recent revenue contraction reflects commodity price cooling.
-                # Rather than forcing an artificial 5% growth floor, use a conservative normalized 2.0% - 3.5% growth.
-                start_growth = min(0.035, max(0.02, hist_growth)) if hist_growth > 0 else 0.025
-            elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
-                start_growth = terminal_growth
-            else:
-                start_growth = hist_growth
 
-            # Determine latest and historical margin trajectory
+            # 1. Baseline FCFF Growth & Margin Trajectory
+            if is_cyclical:
+                fcff_default_growth = min(0.035, max(0.02, hist_growth)) if hist_growth > 0 else 0.025
+            elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
+                fcff_default_growth = terminal_growth
+            else:
+                fcff_default_growth = hist_growth
+
             ebit_margins_hist = metrics.get("ebit_margins", [])
             latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
             avg_gross_margin = float(metrics.get("avg_gross_margin", 0.0) or 0.0)
@@ -452,129 +485,314 @@ def analyze(req: AnalyzeRequest):
             latest_fcf_margin = float(metrics.get("latest_fcf_margin", 0.0) or 0.0)
             best_fcf_margin = max(avg_fcf_margin, latest_fcf_margin)
             latest_sbc_pct = float(metrics.get("latest_sbc_pct", 0.0) or 0.0)
-            
-            if overrides.ebit_margin is not None:
-                target_margin = overrides.ebit_margin
-                current_margin = latest_margin if abs(latest_margin - target_margin) > 0.005 else None
-            elif is_cyclical:
-                # For cyclical / commodity businesses, margins must mean-revert to the multi-year cycle average
-                # Avoid locking peak-cycle margins from commodity price spikes into perpetuity
-                target_margin = avg_ebit_margin
-                current_margin = latest_margin if abs(latest_margin - target_margin) > 0.01 else None
+
+            if is_cyclical:
+                fcff_default_margin = avg_ebit_margin
+                fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.01 else None
             elif (
                 not is_extractive
                 and (avg_gross_margin >= 0.55 or best_fcf_margin >= 0.18)
                 and (best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.08)
             ):
-                # High-gross-margin / R&D & SBC expensing compounders (e.g., Zscaler, CrowdStrike, Palo Alto, ServiceNow, Snowflake)
-                # Under US GAAP / Ind AS, software/R&D firms expense 100% of customer acquisition (S&M), R&D, and Stock-Based
-                # Compensation (SBC) upfront on the income statement, depressing GAAP EBIT even when actual Free Cash Flow
-                # (CFO - CapEx) and Gross Margins are strongly positive.
-                # Anchor mature operating margin to unit economics (Gross Margin & FCF Margin) while deducting normalized mature SBC (~5%).
                 unit_target = max(0.38 * avg_gross_margin, best_fcf_margin)
-                target_margin = float(np.clip(unit_target, 0.20, 0.38))
+                fcff_default_margin = float(np.clip(unit_target, 0.20, 0.38))
                 econ_start = max(latest_margin, min(latest_fcf_margin, avg_fcf_margin) - 0.05)
-                current_margin = float(np.clip(econ_start, 0.05, target_margin))
+                fcff_default_current_margin = float(np.clip(econ_start, 0.05, fcff_default_margin))
                 unit_economics_convergence = True
             else:
                 if latest_margin > 0:
                     if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
-                        # Turnaround / rapid expansion (e.g. DASH, UBER)
-                        # Latest margin is positive and expanding: target mature margin is at least max(latest_margin * 1.5, 0.12)
-                        target_margin = max(latest_margin * 1.5, 0.12) if latest_margin < 0.12 else latest_margin
-                        current_margin = latest_margin
+                        fcff_default_margin = max(latest_margin * 1.5, 0.12) if latest_margin < 0.12 else latest_margin
+                        fcff_default_current_margin = latest_margin
                     else:
-                        # Steady mature profitable company
-                        target_margin = avg_ebit_margin
-                        current_margin = latest_margin if abs(latest_margin - target_margin) > 0.02 else None
+                        fcff_default_margin = avg_ebit_margin
+                        fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.02 else None
                 else:
-                    # Currently loss-making turnaround: scale target margin by gross margin structure (10% to 22%)
-                    current_margin = latest_margin
-                    target_margin = float(np.clip(0.30 * avg_gross_margin, 0.10, 0.22)) if avg_gross_margin > 0 else 0.10
+                    fcff_default_current_margin = latest_margin
+                    fcff_default_margin = float(np.clip(0.30 * avg_gross_margin, 0.10, 0.22)) if avg_gross_margin > 0 else 0.10
 
-            if unit_economics_convergence or latest_sbc_pct >= 0.05:
-                gaap_sbc_note = (
-                    f"GAAP vs. Non-GAAP & SBC Note: Trailing GAAP EBIT margin is {latest_margin*100:.1f}% "
-                    f"(after deducting {latest_sbc_pct*100:.1f}% of revenue in Stock-Based Compensation and upfront R&D/S&M), "
-                    f"whereas reported Cash FCF margin (CFO − CapEx) is {latest_fcf_margin*100:.1f}% on {avg_gross_margin*100:.1f}% Gross Margin. "
-                    f"Unlike retail/Street Non-GAAP DCFs that ignore SBC dilution, this model treats SBC as a real economic cost while "
-                    f"converging operating margins from { (current_margin if current_margin is not None else target_margin)*100:.1f}% "
-                    f"toward mature unit-economic steady state ({target_margin*100:.1f}%)."
+            fcff_default_wacc = float(corp_wacc_data.get("wacc", 0.10))
+
+            # 2. Baseline Corporate DDM / FCFE Growth & ROE Trajectory
+            ddm_default_roe = float(np.clip(metrics.get("avg_roe", 0.14) or 0.14, 0.05, 0.35))
+            raw_ni_g = float(metrics.get("avg_ni_growth", hist_growth) or hist_growth)
+            if is_cyclical:
+                ddm_default_growth = min(0.035, max(0.02, raw_ni_g)) if raw_ni_g > 0 else 0.025
+            elif abs(raw_ni_g - fcff_default_growth) > 0.10:
+                ddm_default_growth = 0.50 * fcff_default_growth + 0.50 * float(np.clip(raw_ni_g, -0.05, 0.25))
+            else:
+                ddm_default_growth = raw_ni_g
+            if ddm_default_roe > 0 and ddm_default_growth < terminal_growth:
+                ddm_default_growth = terminal_growth
+            ddm_default_growth = float(np.clip(ddm_default_growth, -0.05, 0.30))
+            ddm_default_ke = float(ke_data.get("cost_of_equity", 0.10))
+
+            # 3. Route active pipeline according to use_corporate_ddm
+            if use_corporate_ddm:
+                logger.info("Routing %s to Corporate DDM / FCFE Model (user-selected method='ddm')", ticker)
+                default_start_growth = ddm_default_growth
+                default_target_margin = ddm_default_roe
+                default_discount_rate = ddm_default_ke
+
+                start_growth = (
+                    overrides.revenue_growth
+                    if overrides.revenue_growth is not None
+                    else ddm_default_growth
+                )
+                target_margin = (
+                    overrides.ebit_margin
+                    if overrides.ebit_margin is not None
+                    else ddm_default_roe
+                )
+                current_margin = ddm_default_roe
+                discount_rate = (
+                    overrides.wacc
+                    if overrides.wacc is not None
+                    else ddm_default_ke
                 )
 
-            discount_rate = (
-                overrides.wacc
-                if overrides.wacc is not None
-                else wacc_data.get("wacc", 0.10)
-            )
+                # Merge CAPM Ke with corporate balance sheet metadata so UI & Excel have full context
+                wacc_data = {
+                    **corp_wacc_data,
+                    "cost_of_equity": float(ke_data.get("cost_of_equity", discount_rate)),
+                    "raw_cost_of_equity": float(ke_data.get("raw_cost_of_equity", discount_rate)),
+                    "ke_floored": bool(ke_data.get("ke_floored", False)),
+                    "ke_note": ke_data.get("ke_note"),
+                    "wacc": float(discount_rate),  # Active discount rate in DDM mode is Ke
+                    "corporate_wacc": float(corp_wacc_data.get("wacc", 0.10)),
+                    "corporate_weight_equity": float(corp_wacc_data.get("weight_equity", 1.0)),
+                    "corporate_weight_debt": float(corp_wacc_data.get("weight_debt", 0.0)),
+                    "weight_equity": 1.0,
+                    "weight_debt": 0.0,
+                    "is_financial": False,
+                    "is_equity_model": True,
+                    "note": ke_data.get("note"),
+                }
 
-            # Base-case DCF with Mid-Year Convention
-            dcf_result = run_dcf(
-                start_growth=start_growth,
-                ebit_margin=target_margin,
-                discount_rate=discount_rate,
-                metrics=metrics,
-                wacc_data=wacc_data,
-                stock_data=stock_data,
-                terminal_growth=terminal_growth,
-                projection_years=projection_years,
-                current_margin=current_margin,
-                tax_rate=tax_rate,
-                use_mid_year=True,
-            )
+                dcf_result = run_bank_valuation(
+                    start_growth=start_growth,
+                    target_roe=target_margin,
+                    cost_of_equity=discount_rate,
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    current_roe=ddm_default_roe,
+                    use_mid_year=True,
+                    model_type="CORPORATE_DDM",
+                )
 
-            # Monte Carlo
-            mc_result = run_monte_carlo(
-                metrics=metrics,
-                wacc_data=wacc_data,
-                stock_data=stock_data,
-                market_profile=market_profile,
-                terminal_growth=terminal_growth,
-                projection_years=projection_years,
-                iterations=req.monte_carlo_iterations,
-                base_growth=start_growth,
-                base_margin=target_margin,
-                base_wacc=discount_rate,
-                current_margin=current_margin,
-            )
+                mc_result = run_bank_monte_carlo(
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    iterations=req.monte_carlo_iterations,
+                    base_growth=start_growth,
+                    base_roe=target_margin,
+                    base_ke=discount_rate,
+                )
 
-            # Sensitivity grids
-            sens_growth_wacc = generate_sensitivity_grid(
-                metrics=metrics,
-                wacc_data=wacc_data,
-                stock_data=stock_data,
-                market_profile=market_profile,
-                terminal_growth=terminal_growth,
-                projection_years=projection_years,
-                target_margin=target_margin,
-                current_margin=current_margin,
-                tax_rate=tax_rate,
-                use_mid_year=True,
-            )
-            sens_margin_wacc = generate_margin_sensitivity_grid(
-                metrics=metrics,
-                wacc_data=wacc_data,
-                stock_data=stock_data,
-                market_profile=market_profile,
-                terminal_growth=terminal_growth,
-                projection_years=projection_years,
-                target_margin=target_margin,
-                current_margin=current_margin,
-                tax_rate=tax_rate,
-            )
+                sens_growth_wacc = generate_bank_sensitivity_grid(
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    base_growth=start_growth,
+                    base_roe=target_margin,
+                    base_ke=discount_rate,
+                )
+                sens_margin_wacc = generate_bank_roe_sensitivity_grid(
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    base_growth=start_growth,
+                    base_roe=target_margin,
+                    base_ke=discount_rate,
+                )
 
-            # Validation (EV/EBITDA cross-check)
-            validation = validate_valuation(dcf_result, stock_data, metrics, wacc_data)
+                validation = validate_bank_valuation(dcf_result, stock_data, metrics)
+
+                # Compute reference FCFF model for side-by-side comparison badge
+                fcff_ref_res = run_dcf(
+                    start_growth=fcff_default_growth,
+                    ebit_margin=fcff_default_margin,
+                    discount_rate=fcff_default_wacc,
+                    metrics=metrics,
+                    wacc_data=corp_wacc_data,
+                    stock_data=stock_data,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    current_margin=fcff_default_current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=True,
+                )
+                ddm_comp_res = dcf_result
+                fcff_comp_res = fcff_ref_res
+                fcff_comp_wacc = fcff_default_wacc
+                fcff_comp_g = fcff_default_growth
+                fcff_comp_m = fcff_default_margin
+                ddm_comp_ke = discount_rate
+                ddm_comp_g = start_growth
+                ddm_comp_roe = target_margin
+            else:
+                # Standard FCFF + WACC Pipeline for Non-Financials
+                wacc_data = corp_wacc_data
+                default_start_growth = fcff_default_growth
+                default_target_margin = fcff_default_margin
+                default_discount_rate = fcff_default_wacc
+
+                start_growth = (
+                    overrides.revenue_growth
+                    if overrides.revenue_growth is not None
+                    else fcff_default_growth
+                )
+                if overrides.ebit_margin is not None:
+                    target_margin = overrides.ebit_margin
+                    current_margin = latest_margin if abs(latest_margin - target_margin) > 0.005 else None
+                else:
+                    target_margin = fcff_default_margin
+                    current_margin = fcff_default_current_margin
+
+                if unit_economics_convergence or latest_sbc_pct >= 0.05:
+                    gaap_sbc_note = (
+                        f"GAAP vs. Non-GAAP & SBC Note: Trailing GAAP EBIT margin is {latest_margin*100:.1f}% "
+                        f"(after deducting {latest_sbc_pct*100:.1f}% of revenue in Stock-Based Compensation and upfront R&D/S&M), "
+                        f"whereas reported Cash FCF margin (CFO − CapEx) is {latest_fcf_margin*100:.1f}% on {avg_gross_margin*100:.1f}% Gross Margin. "
+                        f"Unlike retail/Street Non-GAAP DCFs that ignore SBC dilution, this model treats SBC as a real economic cost while "
+                        f"converging operating margins from { (current_margin if current_margin is not None else target_margin)*100:.1f}% "
+                        f"toward mature unit-economic steady state ({target_margin*100:.1f}%)."
+                    )
+
+                discount_rate = (
+                    overrides.wacc
+                    if overrides.wacc is not None
+                    else fcff_default_wacc
+                )
+
+                # Base-case DCF with Mid-Year Convention
+                dcf_result = run_dcf(
+                    start_growth=start_growth,
+                    ebit_margin=target_margin,
+                    discount_rate=discount_rate,
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=True,
+                )
+                dcf_result["model_type"] = "STANDARD_FCFF"
+                dcf_result["is_financial"] = False
+                dcf_result["is_equity_model"] = False
+
+                # Monte Carlo
+                mc_result = run_monte_carlo(
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    iterations=req.monte_carlo_iterations,
+                    base_growth=start_growth,
+                    base_margin=target_margin,
+                    base_wacc=discount_rate,
+                    current_margin=current_margin,
+                )
+
+                # Sensitivity grids
+                sens_growth_wacc = generate_sensitivity_grid(
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    target_margin=target_margin,
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=True,
+                )
+                sens_margin_wacc = generate_margin_sensitivity_grid(
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    target_margin=target_margin,
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                )
+
+                # Validation (EV/EBITDA cross-check)
+                validation = validate_valuation(dcf_result, stock_data, metrics, wacc_data)
+
+                # Compute reference Corporate DDM model for side-by-side comparison badge
+                ddm_ref_res = run_bank_valuation(
+                    start_growth=ddm_default_growth,
+                    target_roe=ddm_default_roe,
+                    cost_of_equity=ddm_default_ke,
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    current_roe=ddm_default_roe,
+                    use_mid_year=True,
+                    model_type="CORPORATE_DDM",
+                )
+                fcff_comp_res = dcf_result
+                ddm_comp_res = ddm_ref_res
+                fcff_comp_wacc = discount_rate
+                fcff_comp_g = start_growth
+                fcff_comp_m = target_margin
+                ddm_comp_ke = ddm_default_ke
+                ddm_comp_g = ddm_default_growth
+                ddm_comp_roe = ddm_default_roe
+
+            fcff_price = float(fcff_comp_res.get("implied_price", 0.0) or 0.0)
+            ddm_price = float(ddm_comp_res.get("implied_price", 0.0) or 0.0)
+            method_comparison = {
+                "can_switch": True,
+                "active_method": "ddm" if use_corporate_ddm else "fcff",
+                "active_model_type": active_model_type,
+                "fcff_implied_price": fcff_price,
+                "fcff_upside_pct": float(((fcff_price / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
+                "fcff_discount_rate": float(fcff_comp_wacc),
+                "fcff_growth_rate": float(fcff_comp_g),
+                "fcff_margin": float(fcff_comp_m),
+                "fcff_enterprise_value": float(fcff_comp_res.get("enterprise_value", 0.0) or 0.0),
+                "fcff_equity_value": float(fcff_comp_res.get("equity_value", 0.0) or 0.0),
+                "ddm_implied_price": ddm_price,
+                "ddm_upside_pct": float(((ddm_price / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
+                "ddm_discount_rate": float(ddm_comp_ke),
+                "ddm_growth_rate": float(ddm_comp_g),
+                "ddm_roe": float(ddm_comp_roe),
+                "ddm_justified_pb": float(ddm_comp_res.get("justified_pb", 0.0) or 0.0),
+                "ddm_justified_price": float(ddm_comp_res.get("justified_price", 0.0) or 0.0),
+                "ddm_equity_value": float(ddm_comp_res.get("equity_value", 0.0) or 0.0),
+                "diff_price": float(ddm_price - fcff_price),
+                "diff_pct": float(((ddm_price - fcff_price) / fcff_price) * 100.0) if fcff_price > 0 else 0.0,
+                "historical_payout_ratio": float(metrics.get("avg_payout", 0.0) or 0.0),
+                "avg_roe": float(metrics.get("avg_roe", 0.0) or 0.0),
+            }
 
         # 11. Verdict
-        current_price = stock_data.get("current_price", 0)
-        
         terminal_value_valid = dcf_result.get("terminal_value_valid", True)
         mc_valid = mc_result.get("actual_iterations", 0) > 0
         
         # Assess if company is in deep distress (ICR < 1.0 with high leverage, or zero equity value)
         icr = metrics.get("interest_coverage", 999.0)
-        wd = wacc_data.get("weight_debt", 0.0)
+        wd = wacc_data.get("corporate_weight_debt", wacc_data.get("weight_debt", 0.0)) or 0.0
         is_distressed_firm = bool((icr < 1.0 and wd > 0.60) or (dcf_result.get("equity_value", 1.0) <= 0))
 
         verdict = generate_verdict(
@@ -597,6 +815,8 @@ def analyze(req: AnalyzeRequest):
             "sim_wacc": _downsample(mc_result.get("sim_wacc", []), 2000),
         }
 
+        is_equity_model = bool(is_financial or use_corporate_ddm)
+
         response = {
             "company": {
                 "ticker": ticker,
@@ -607,10 +827,13 @@ def analyze(req: AnalyzeRequest):
                 "sector": stock_data.get("sector"),
                 "industry": stock_data.get("industry"),
                 "is_financial": is_financial,
+                "is_equity_model": is_equity_model,
                 "is_capital_light_financial": stock_data.get("is_capital_light_financial", False),
-                "model_type": "BANKING_DDM" if is_financial else "STANDARD_FCFF",
+                "model_type": active_model_type,
+                "valuation_method": "ddm" if is_equity_model else "fcff",
                 "redirect_note": stock_data.get("redirect_note"),
             },
+            "method_comparison": method_comparison,
             "market_data": {
                 "current_price": current_price,
                 "shares_outstanding": stock_data.get("shares_outstanding"),
@@ -669,6 +892,9 @@ def analyze(req: AnalyzeRequest):
                 "pretax_cost_of_debt": wacc_data.get("pretax_cost_of_debt"),
                 "weight_equity": wacc_data.get("weight_equity"),
                 "weight_debt": wacc_data.get("weight_debt"),
+                "corporate_wacc": wacc_data.get("corporate_wacc", wacc_data.get("wacc")),
+                "corporate_weight_equity": wacc_data.get("corporate_weight_equity", wacc_data.get("weight_equity")),
+                "corporate_weight_debt": wacc_data.get("corporate_weight_debt", wacc_data.get("weight_debt")),
                 "wacc": wacc_data.get("wacc"),
                 "raw_wacc": wacc_data.get("raw_wacc"),
                 "min_wacc": wacc_data.get("min_wacc"),
@@ -711,7 +937,11 @@ def analyze(req: AnalyzeRequest):
             "verdict": verdict,
             "diagnostics": {
                 "is_financial": is_financial,
-                "model_type": "BANKING_DDM" if is_financial else "STANDARD_FCFF",
+                "is_equity_model": is_equity_model,
+                "model_type": active_model_type,
+                "default_growth": float(default_start_growth),
+                "default_margin": float(default_target_margin),
+                "default_wacc": float(default_discount_rate),
                 "bvps": dcf_result.get("bvps"),
                 "justified_pb": dcf_result.get("justified_pb"),
                 "justified_price": dcf_result.get("justified_price"),
@@ -741,7 +971,7 @@ def analyze(req: AnalyzeRequest):
                 "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
                 "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
                 "historical_fcf_negative": bool(
-                    not is_financial and (
+                    not is_equity_model and (
                         metrics.get("avg_ebit_margin", 0.1) <= 0
                         or (metrics.get("ebit") and len(metrics.get("ebit")) > 0 and metrics["ebit"][-1] <= 0)
                     )
@@ -753,7 +983,7 @@ def analyze(req: AnalyzeRequest):
                 "metric_used": validation.get("metric_used", "none"),
                 "margin_normalization_used": current_margin is not None,
                 "unit_economics_convergence": unit_economics_convergence,
-                "current_ebit_margin": float(current_margin) if current_margin is not None else float(metrics.get("avg_roe" if is_financial else "avg_ebit_margin", 0.14)),
+                "current_ebit_margin": float(current_margin) if current_margin is not None else float(metrics.get("avg_roe" if is_equity_model else "avg_ebit_margin", 0.14)),
                 "target_ebit_margin": float(target_margin),
                 "normalized_nwc_to_revenue": float(metrics.get("normalized_nwc_to_revenue", 0.0)),
                 "avg_gross_margin": float(metrics.get("avg_gross_margin", 0.0) or 0.0),
@@ -827,10 +1057,12 @@ def export_excel(req: ExcelExportRequest):
         buffer: BytesIO = generate_excel_report(req.analysis_data)
         buffer.seek(0)
 
-        company_name = (
-            req.analysis_data.get("company", {}).get("ticker", "valuation")
-        )
-        filename = f"{company_name}_DCF_Report.xlsx"
+        company_info = req.analysis_data.get("company", {})
+        company_name = company_info.get("ticker", "valuation")
+        model_type = company_info.get("model_type") or req.analysis_data.get("diagnostics", {}).get("model_type")
+        is_eq = bool(company_info.get("is_financial") or company_info.get("is_equity_model") or model_type in ("BANKING_DDM", "CORPORATE_DDM"))
+        suffix = "DDM_FCFE_Report" if is_eq else "FCFF_DCF_Report"
+        filename = f"{company_name}_{suffix}.xlsx"
 
         return StreamingResponse(
             buffer,

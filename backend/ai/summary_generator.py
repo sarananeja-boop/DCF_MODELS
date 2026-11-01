@@ -175,6 +175,20 @@ Margin Trend: {trends.get('margin_trend', 'N/A')}
 CapEx Trend: {trends.get('capex_trend', 'N/A')}
 """
 
+    method_comp = data.get("method_comparison", {})
+    model_type = company.get("model_type", "STANDARD_FCFF")
+    context += f"\n=== VALUATION METHODOLOGY ({model_type}) ===\n"
+    context += f"Avg Return on Equity (ROE): {_fmt_pct(historicals.get('avg_roe'))}\n"
+    context += f"Avg Dividend Payout Ratio: {_fmt_pct(historicals.get('avg_payout'))}\n"
+    if dcf.get("justified_pb"):
+        context += f"Justified P/B Cross-Check: {_fmt_num(dcf.get('justified_pb'), decimals=2)}x (Justified Price: {_fmt_num(dcf.get('justified_price'), prefix=sym)})\n"
+    if method_comp and method_comp.get("can_switch"):
+        context += (
+            f"FCFF Implied Price: {_fmt_num(method_comp.get('fcff_implied_price'), prefix=sym)} "
+            f"| DDM/FCFE Implied Price: {_fmt_num(method_comp.get('ddm_implied_price'), prefix=sym)} "
+            f"({_fmt_num(method_comp.get('diff_pct'), decimals=1)}% method delta)\n"
+        )
+
     # Overrides
     active_overrides = {
         k: v for k, v in (overrides or {}).items() if v is not None

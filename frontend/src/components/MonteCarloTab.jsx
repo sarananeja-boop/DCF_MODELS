@@ -14,8 +14,16 @@ const downsample = (arr, maxPoints = 350) => {
 
 const MonteCarloTab = ({ data }) => {
   if (!data) return null;
-  const { monte_carlo, market_data, company } = data;
+  const { monte_carlo, market_data, company, diagnostics, dcf_result } = data;
   if (!monte_carlo) return null;
+
+  const isEquityModel = Boolean(
+    company?.is_financial ||
+    company?.is_equity_model ||
+    company?.model_type === 'CORPORATE_DDM' ||
+    diagnostics?.is_equity_model ||
+    dcf_result?.is_equity_model
+  );
 
   const [chartsReady, setChartsReady] = useState(false);
 
@@ -79,7 +87,7 @@ const MonteCarloTab = ({ data }) => {
   const histogramLayout = useMemo(() => ({
     ...warmLayout,
     title: {
-      text: `Implied Share Price Distribution (${iterations.toLocaleString()} Runs | Growth–Margin ρ = ${Number(histCorrGm).toFixed(2)})`,
+      text: `Implied Share Price Distribution (${iterations.toLocaleString()} Runs | ${isEquityModel ? 'Growth–ROE' : 'Growth–Margin'} ρ = ${Number(histCorrGm).toFixed(2)})`,
       font: { color: '#f4eedf', size: 13, family: 'Space Grotesk, sans-serif' }
     },
     xaxis: { ...warmLayout.xaxis, title: `Implied Share Price (${currency})` },
@@ -244,9 +252,9 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: `Growth vs Margin (ρ = ${Number(histCorrGm).toFixed(2)})`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
+                  title: { text: `Growth vs ${isEquityModel ? 'ROE' : 'Margin'} (ρ = ${Number(histCorrGm).toFixed(2)})`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
                   xaxis: { ...warmLayout.xaxis, title: 'Growth Rate', tickformat: '.1%' },
-                  yaxis: { ...warmLayout.yaxis, title: 'Operating Margin', tickformat: '.1%' },
+                  yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Target ROE' : 'Operating Margin', tickformat: '.1%' },
                   margin: { l: 50, r: 20, t: 40, b: 40 }
                 }}
                 config={plotConfig}
@@ -275,9 +283,9 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: 'Growth vs Discount Rate (WACC)', font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
+                  title: { text: `Growth vs ${isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
                   xaxis: { ...warmLayout.xaxis, title: 'Growth Rate', tickformat: '.1%' },
-                  yaxis: { ...warmLayout.yaxis, title: 'WACC', tickformat: '.1%' },
+                  yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Cost of Equity (Ke)' : 'WACC', tickformat: '.1%' },
                   margin: { l: 50, r: 20, t: 40, b: 40 }
                 }}
                 config={plotConfig}
@@ -306,9 +314,9 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: 'Margin vs Discount Rate (WACC)', font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
-                  xaxis: { ...warmLayout.xaxis, title: 'Operating Margin', tickformat: '.1%' },
-                  yaxis: { ...warmLayout.yaxis, title: 'WACC', tickformat: '.1%' },
+                  title: { text: `${isEquityModel ? 'ROE' : 'Margin'} vs ${isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
+                  xaxis: { ...warmLayout.xaxis, title: isEquityModel ? 'Target ROE' : 'Operating Margin', tickformat: '.1%' },
+                  yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Cost of Equity (Ke)' : 'WACC', tickformat: '.1%' },
                   margin: { l: 50, r: 20, t: 40, b: 40 }
                 }}
                 config={plotConfig}

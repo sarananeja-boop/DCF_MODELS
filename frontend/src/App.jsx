@@ -15,7 +15,11 @@ import {
   FiFileText,
   FiX,
   FiMail,
-  FiMessageSquare
+  FiMessageSquare,
+  FiCheck,
+  FiLayers,
+  FiShield,
+  FiInfo
 } from 'react-icons/fi';
 import { FaLinkedin } from 'react-icons/fa';
 
@@ -192,6 +196,7 @@ export default function App() {
   
   const [ticker, setTicker] = useState(() => sessionStorage.getItem('vl_ticker') || '');
   const [market, setMarket] = useState(() => sessionStorage.getItem('vl_market') || 'auto');
+  const [valuationMethod, setValuationMethod] = useState(() => sessionStorage.getItem('vl_valuationMethod') || 'fcff');
   const [overrides, setOverrides] = useState(() => {
     const saved = sessionStorage.getItem('vl_overrides');
     return saved ? JSON.parse(saved) : {};
@@ -231,6 +236,7 @@ export default function App() {
   }, [analysisData, loading]);
 
   useEffect(() => sessionStorage.setItem('vl_market', market), [market]);
+  useEffect(() => sessionStorage.setItem('vl_valuationMethod', valuationMethod), [valuationMethod]);
   useEffect(() => sessionStorage.setItem('vl_overrides', JSON.stringify(overrides)), [overrides]);
 
   useEffect(() => {
@@ -255,16 +261,20 @@ export default function App() {
     
     if (savedTicker) {
       const savedMarket = sessionStorage.getItem('vl_market') || 'auto';
+      const savedMethod = sessionStorage.getItem('vl_valuationMethod') || 'fcff';
       const savedOverrides = sessionStorage.getItem('vl_overrides') ? JSON.parse(sessionStorage.getItem('vl_overrides')) : {};
       
       setLoading(true);
       axios.post('/api/analyze', {
         ticker: savedTicker,
         market: savedMarket,
+        valuation_method: savedMethod,
         overrides: savedOverrides,
         monte_carlo_iterations: 10000
       }).then(response => {
         setAnalysisData(response.data);
+        const activeMethodFromResp = response.data?.method_comparison?.active_method || savedMethod;
+        setValuationMethod(activeMethodFromResp === 'ddm' ? 'ddm' : 'fcff');
       }).catch(err => {
         console.error("Auto-refresh failed:", err);
         sessionStorage.removeItem('vl_ticker');
@@ -303,7 +313,8 @@ export default function App() {
     isNewSearch = false, 
     explicitTicker = null, 
     explicitMarket = null,
-    isHistoryNav = false
+    isHistoryNav = false,
+    explicitMethod = null
   ) => {
     const targetTicker = (explicitTicker || ticker || '').trim().toUpperCase();
     const targetMarket = explicitMarket || market;
@@ -317,10 +328,16 @@ export default function App() {
         analysisData.company.ticker.toUpperCase() !== targetTicker ||
         analysisData.company.market !== targetMarket;
 
+    const targetMethod = explicitMethod || ((isDifferentCompany || isNewSearch) ? 'fcff' : valuationMethod);
+
     if (isDifferentCompany || isNewSearch) {
       setAiSummary('');
       setOverrides({});
       sessionStorage.removeItem('vl_overrides');
+      if (!explicitMethod) {
+        setValuationMethod('fcff');
+        sessionStorage.setItem('vl_valuationMethod', 'fcff');
+      }
     }
     
     let safeOverrides = {};
@@ -332,12 +349,14 @@ export default function App() {
       }
     }
 
-    const cacheKey = `${targetTicker}:${targetMarket}`;
+    const cacheKey = `${targetTicker}:${targetMarket}:${targetMethod}`;
     if (!isNewSearch && Object.keys(safeOverrides).length === 0 && valuationCacheRef.current.has(cacheKey)) {
       const cached = valuationCacheRef.current.get(cacheKey);
       setAnalysisData(cached);
       setTicker(cached.company.ticker);
       setMarket(cached.company.market || targetMarket);
+      const cachedActiveMethod = cached?.method_comparison?.active_method || targetMethod;
+      setValuationMethod(cachedActiveMethod === 'ddm' ? 'ddm' : 'fcff');
       setError(null);
       setLoading(false);
       sessionStorage.setItem('vl_ticker', cached.company.ticker);
@@ -359,6 +378,7 @@ export default function App() {
       const response = await axios.post('/api/analyze', {
         ticker: targetTicker,
         market: targetMarket,
+        valuation_method: targetMethod,
         overrides: safeOverrides,
         monte_carlo_iterations: monteCarloIterations
       }, { 
@@ -373,19 +393,27 @@ export default function App() {
       const resolvedTicker = response.data?.company?.ticker || targetTicker;
       const resolvedMarket = response.data?.company?.market || targetMarket;
       const redirectNote = response.data?.company?.redirect_note;
+      const activeMethodFromResp = response.data?.method_comparison?.active_method || targetMethod;
 
       if (Object.keys(safeOverrides).length === 0) {
+        valuationCacheRef.current.set(`${resolvedTicker}:${resolvedMarket}:${activeMethodFromResp}`, response.data);
         valuationCacheRef.current.set(cacheKey, response.data);
       }
       setServerAwake(true);
       setAnalysisData(response.data);
       setTicker(resolvedTicker);
       setMarket(resolvedMarket);
+      setValuationMethod(activeMethodFromResp === 'ddm' ? 'ddm' : 'fcff');
       sessionStorage.setItem('vl_ticker', resolvedTicker);
       if (redirectNote) {
         toast.success(redirectNote, { duration: 6000 });
       } else {
-        toast.success(`Valuation for ${resolvedTicker} ready`);
+        const methodBadge = response.data?.company?.model_type === 'CORPORATE_DDM'
+          ? ' (DDM / FCFE Model)'
+          : response.data?.company?.is_financial
+          ? ' (Bank DDM / FCFE)'
+          : ' (FCFF DCF Model)';
+        toast.success(`Valuation for ${resolvedTicker}${methodBadge} ready`);
       }
       
       if (!isHistoryNav) {
@@ -458,18 +486,34 @@ export default function App() {
     setAnalysisData(null);
     setError(null);
     setTicker('');
+    setValuationMethod('fcff');
     setOverrides({});
     setAiSummary('');
     setActiveTab('overview');
     sessionStorage.removeItem('vl_analysisData');
     sessionStorage.removeItem('vl_analysisData_v2');
     sessionStorage.removeItem('vl_ticker');
+    sessionStorage.removeItem('vl_valuationMethod');
     sessionStorage.removeItem('vl_overrides');
     if (updateHistory === true) {
       try {
         window.history.pushState({ view: 'home', ticker: '', market: 'auto' }, '', window.location.pathname);
       } catch (_) {}
     }
+  };
+
+  const handleSwitchValuationMethod = (newMethod) => {
+    if (!analysisData?.company?.ticker || loading) return;
+    if (analysisData?.company?.is_financial) return;
+    const normalized = newMethod === 'ddm' ? 'ddm' : 'fcff';
+    const currentActive = analysisData?.method_comparison?.active_method || (analysisData?.company?.model_type === 'CORPORATE_DDM' ? 'ddm' : 'fcff');
+    if (normalized === currentActive && Object.keys(overrides).length === 0) return;
+    setValuationMethod(normalized);
+    setOverrides({});
+    sessionStorage.removeItem('vl_overrides');
+    setAiSummary('');
+    setResetKey(k => k + 1);
+    handleAnalyze({}, false, analysisData.company.ticker, analysisData.company.market || market, false, normalized);
   };
 
   const handleFetchAISummary = async () => {
@@ -493,9 +537,17 @@ export default function App() {
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const wsIsFinancial = Boolean(analysisData?.company?.is_financial);
+  const wsIsEquityModel = Boolean(
+    wsIsFinancial ||
+    analysisData?.company?.is_equity_model ||
+    analysisData?.company?.model_type === 'CORPORATE_DDM' ||
+    analysisData?.dcf_result?.is_equity_model
+  );
+
   const tabs = [
     { id: 'overview', label: 'Valuation Overview', icon: <FiActivity className="w-4 h-4" /> },
-    { id: 'dcf', label: 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
+    { id: 'dcf', label: wsIsEquityModel ? 'DDM & FCFE Schedule' : 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
     { id: 'monte_carlo', label: 'Monte Carlo (10k Runs)', icon: <FiCpu className="w-4 h-4" /> },
     { id: 'sensitivity', label: 'Sensitivity Matrix', icon: <FiGrid className="w-4 h-4" /> },
     { id: 'trends', label: 'Historical Trends', icon: <FiBarChart2 className="w-4 h-4" /> }
@@ -2476,13 +2528,138 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="text-xs text-[#a6b0c3] font-normal shrink-0">
-                  Model Framework:{' '}
-                  <strong className="text-[#f4eedf]">
-                    {analysisData.company?.is_financial ? 'Tier-1 Regulatory Capital FCFE' : '5-Year Unlevered FCFF + Cholesky Monte Carlo'}
-                  </strong>
+                <div className="flex items-center gap-2 text-xs text-[#a6b0c3] font-normal shrink-0">
+                  <span className="px-3 py-1 rounded-lg bg-[#141b26] border border-white/[0.08] text-[11px] font-medium text-[#f4eedf]">
+                    Framework: <strong className="text-[#e3b23c]">{wsIsFinancial ? 'Tier-1 Banking DDM/FCFE' : wsIsEquityModel ? 'Corporate DDM / FCFE' : 'Enterprise DCF (FCFF)'}</strong>
+                  </span>
                 </div>
               </div>
+
+              {/* VALUATION METHOD SWITCHER & COMPARATIVE STATS BAR */}
+              {analysisData.method_comparison && (
+                <div className="bg-[#121824] rounded-xl px-3.5 py-2.5 border border-white/[0.08] flex flex-wrap items-center justify-between gap-3 shadow-md">
+                  {analysisData.method_comparison.can_switch ? (
+                    <>
+                      {/* Left: Simple, Tactile Segmented Switch */}
+                      <div className="inline-flex items-center p-1 rounded-xl bg-[#090d14] border border-white/[0.08] gap-1 shrink-0">
+                        {/* Button 1: FCFF Model */}
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleSwitchValuationMethod('fcff')}
+                          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none ${
+                            !wsIsEquityModel
+                              ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
+                              : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
+                          }`}
+                        >
+                          <span>Enterprise DCF (FCFF)</span>
+                          {analysisData.method_comparison.fcff_implied_price != null && (
+                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                              !wsIsEquityModel
+                                ? 'bg-[#0a0e17]/20 text-[#0a0e17]'
+                                : 'bg-[#141c2a] text-[#e3b23c] border border-white/[0.08]'
+                            }`}>
+                              {wsSymbol}{Number(analysisData.method_comparison.fcff_implied_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Button 2: DDM Model */}
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleSwitchValuationMethod('ddm')}
+                          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none ${
+                            wsIsEquityModel
+                              ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
+                              : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
+                          }`}
+                        >
+                          <span>DDM / FCFE Model</span>
+                          {analysisData.method_comparison.ddm_implied_price != null && (
+                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                              wsIsEquityModel
+                                ? 'bg-[#0a0e17]/20 text-[#0a0e17]'
+                                : 'bg-[#141c2a] text-[#8ab4f8] border border-white/[0.08]'
+                            }`}>
+                              {wsSymbol}{Number(analysisData.method_comparison.ddm_implied_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Right: Comparative Analysis / Stats */}
+                      <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs">
+                        {/* Stat 1: Spread */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-[#818ea4]">Spread (DDM vs FCFF):</span>
+                          <span className={`font-display font-bold tabular-nums text-xs sm:text-sm ${
+                            (analysisData.method_comparison.diff_price || 0) >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                          }`}>
+                            {(analysisData.method_comparison.diff_price || 0) >= 0 ? '+' : '−'}
+                            {wsSymbol}{Math.abs(analysisData.method_comparison.diff_price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {' '}<span className="text-[11px] opacity-80 font-normal">({(analysisData.method_comparison.diff_pct || 0) >= 0 ? '+' : ''}{Number(analysisData.method_comparison.diff_pct || 0).toFixed(1)}%)</span>
+                          </span>
+                        </div>
+
+                        <div className="h-4 w-px bg-white/[0.08] hidden sm:block" />
+
+                        {/* Stat 2: Hurdle Rates */}
+                        <div className="flex items-center gap-2 tabular-nums">
+                          <span className="text-[11px] font-semibold text-[#818ea4]">Hurdle Rates:</span>
+                          <span className="font-display font-medium text-xs text-[#f4eedf]">
+                            WACC <strong className="text-[#f4eedf]">{((analysisData.method_comparison.fcff_discount_rate || 0) * 100).toFixed(1)}%</strong>
+                          </span>
+                          <span className="text-white/20">|</span>
+                          <span className="font-display font-medium text-xs text-[#8ab4f8]">
+                            Ke <strong className="text-[#8ab4f8]">{((analysisData.method_comparison.ddm_discount_rate || 0) * 100).toFixed(1)}%</strong>
+                          </span>
+                        </div>
+
+                        {analysisData.method_comparison.ddm_justified_pb != null && (
+                          <>
+                            <div className="h-4 w-px bg-white/[0.08] hidden sm:block" />
+                            {/* Stat 3: Justified P/B */}
+                            <div className="flex items-center gap-1.5 tabular-nums">
+                              <span className="text-[11px] font-semibold text-[#818ea4]">Justified P/B:</span>
+                              <span className="font-display font-bold text-xs sm:text-sm text-[#e3b23c]">
+                                {Number(analysisData.method_comparison.ddm_justified_pb).toFixed(2)}x
+                              </span>
+                              {analysisData.method_comparison.avg_roe != null && (
+                                <span className="text-[10px] text-[#818ea4]">
+                                  (ROE {((analysisData.method_comparison.avg_roe || 0) * 100).toFixed(0)}%)
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* Banking Institution Single Mode */
+                    <div className="flex flex-wrap items-center justify-between gap-3 w-full text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="px-2.5 py-1 rounded-lg bg-[#e3b23c]/15 border border-[#e3b23c]/35 text-[#e3b23c] font-display font-bold uppercase tracking-wider text-[11px]">
+                          Banking DDM / FCFE Locked
+                        </span>
+                        <span className="text-[#a6b0c3]">
+                          {analysisData.method_comparison.lock_reason || 'Banks are valued exclusively via Tier-1 Capital DDM/FCFE.'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 tabular-nums">
+                        <span className="text-[#818ea4]">
+                          Ke: <strong className="text-[#8ab4f8] font-display">{((analysisData.wacc?.wacc || 0.12) * 100).toFixed(1)}%</strong>
+                        </span>
+                        <span className="h-3.5 w-px bg-white/[0.08]" />
+                        <span className="text-[#818ea4]">
+                          Justified P/B: <strong className="text-[#e3b23c] font-display">{Number(analysisData.dcf_result?.justified_pb || 0).toFixed(2)}x</strong>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 4 Straightforward On-Face Headline Metric Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -2491,11 +2668,15 @@ export default function App() {
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 relative flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c] truncate">
-                      DCF Intrinsic Fair Value
+                      {wsIsFinancial
+                        ? 'Bank DDM / FCFE Fair Value'
+                        : wsIsEquityModel
+                        ? 'DDM / FCFE Intrinsic Value'
+                        : 'DCF Intrinsic Fair Value'}
                     </span>
                     {analysisData.diagnostics?.tv_share_of_ev != null && (
                       <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
-                        TV {(analysisData.diagnostics.tv_share_of_ev * 100).toFixed(0)}% of EV
+                        TV {(analysisData.diagnostics.tv_share_of_ev * 100).toFixed(0)}% of {wsIsEquityModel ? 'EqV' : 'EV'}
                       </span>
                     )}
                   </div>
@@ -2507,7 +2688,7 @@ export default function App() {
                   }`}>
                     {wsIsUndervalued ? <FiTrendingUp className="text-sm shrink-0" /> : <FiTrendingDown className="text-sm shrink-0" />}
                     <span className="truncate">
-                      {wsIsUndervalued ? '▲' : '▼'} {Math.abs(wsUpsidePct).toFixed(1)}% {wsIsUndervalued ? 'Upside (Undervalued)' : 'Downside (Above DCF)'}
+                      {wsIsUndervalued ? '▲' : '▼'} {Math.abs(wsUpsidePct).toFixed(1)}% {wsIsUndervalued ? 'Upside (Undervalued)' : `Downside (Above ${wsIsEquityModel ? 'DDM' : 'DCF'})`}
                     </span>
                   </div>
                 </div>
@@ -2528,7 +2709,7 @@ export default function App() {
                   <div className="text-xs text-[#a6b0c3] flex flex-wrap items-center gap-2 tabular-nums">
                     <span>Beta: <strong className="text-[#f4eedf]">{analysisData.market_data?.beta ? analysisData.market_data.beta.toFixed(2) : '1.00'}</strong></span>
                     <span>•</span>
-                    <span>WACC: <strong className="text-[#e3b23c]">{((analysisData.wacc?.wacc || 0) * 100).toFixed(1)}%</strong></span>
+                    <span>{wsIsEquityModel ? 'Ke (CAPM):' : 'WACC:'} <strong className="text-[#e3b23c]">{((analysisData.wacc?.wacc || 0) * 100).toFixed(1)}%</strong></span>
                   </div>
                 </div>
 
@@ -2557,7 +2738,7 @@ export default function App() {
                       Valuation Verdict
                     </span>
                     <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
-                      {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : analysisData.company?.is_financial ? 'P/B' : 'EV/EBITDA'}:{' '}
+                      {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : wsIsEquityModel ? 'P/B' : 'EV/EBITDA'}:{' '}
                       <strong className="text-[#f4eedf]">
                         {analysisData.validation?.market_multiple ? `${analysisData.validation.market_multiple.toFixed(1)}x` : 'N/A'}
                       </strong>
@@ -2588,20 +2769,20 @@ export default function App() {
               {/* Left Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
               <div className="lg:col-span-5 xl:col-span-4 2xl:col-span-3 min-w-0 space-y-4">
                 <AssumptionSliders 
-                  key={`sliders-${resetKey}-${analysisData.company?.ticker}`}
+                  key={`sliders-${resetKey}-${analysisData.company?.ticker}-${analysisData.company?.model_type || 'FCFF'}`}
                   data={analysisData}
                   onOverride={(newOverrides) => {
                     setOverrides(newOverrides);
                   }}
                   onApply={(appliedOverrides) => {
                     setOverrides(appliedOverrides);
-                    handleAnalyze(appliedOverrides, false);
+                    handleAnalyze(appliedOverrides, false, null, null, false, valuationMethod);
                   }}
                   onReset={() => {
                     setOverrides({});
                     sessionStorage.removeItem('vl_overrides');
                     setResetKey(k => k + 1);
-                    handleAnalyze({}, true);
+                    handleAnalyze({}, true, null, null, false, valuationMethod);
                   }}
                   loading={loading}
                 />

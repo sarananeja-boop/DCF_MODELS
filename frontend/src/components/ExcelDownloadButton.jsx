@@ -6,11 +6,22 @@ import toast from 'react-hot-toast';
 export default function ExcelDownloadButton({ data, compact = false }) {
   const [loading, setLoading] = useState(false);
 
+  const isEquityModel = Boolean(
+    data?.company?.is_financial ||
+    data?.company?.is_equity_model ||
+    data?.company?.model_type === 'CORPORATE_DDM' ||
+    data?.dcf_result?.is_equity_model
+  );
+
   const handleDownload = async () => {
     if (!data) return;
     
     setLoading(true);
-    const toastId = toast.loading('Generating institutional Excel workbook...');
+    const toastId = toast.loading(
+      isEquityModel
+        ? 'Generating institutional DDM / FCFE Excel workbook...'
+        : 'Generating institutional FCFF DCF Excel workbook...'
+    );
     
     try {
       const response = await axios.post('/api/export/excel', { analysis_data: data }, {
@@ -18,7 +29,8 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       });
       
       const dateStr = new Date().toISOString().split('T')[0];
-      const filename = `${data.company.ticker}_Valuation_Model_${dateStr}.xlsx`;
+      const methodTag = isEquityModel ? 'DDM_FCFE' : 'FCFF_DCF';
+      const filename = `${data.company.ticker}_${methodTag}_Valuation_Model_${dateStr}.xlsx`;
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -28,7 +40,7 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       link.click();
       
       link.parentNode.removeChild(link);
-      toast.success('Excel workbook downloaded', { id: toastId });
+      toast.success(`${isEquityModel ? 'DDM / FCFE' : 'FCFF DCF'} Excel workbook downloaded`, { id: toastId });
     } catch (error) {
       console.error("Excel download failed", error);
       toast.error('Failed to generate Excel file.', { id: toastId });
@@ -51,7 +63,7 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       }`}
     >
       <FiDownload className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#e3b23c] shrink-0" />
-      <span>{loading ? 'Exporting...' : 'Export Excel (.xlsx)'}</span>
+      <span>{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
     </button>
   );
 }

@@ -59,6 +59,13 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
         if not np.isnan(val):
             op_debt = float(val)
 
+    is_fin = bool(stock_data.get("is_financial", True))
+    note_str = (
+        "For banking and financial firms, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly."
+        if is_fin
+        else "In DDM / FCFE Equity Valuation mode, cash flows to equity holders are discounted directly at the CAPM Cost of Equity (Ke)."
+    )
+
     return {
         "cost_of_equity": float(ke),
         "raw_cost_of_equity": float(raw_ke),
@@ -77,8 +84,9 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
         "raw_beta": stock_data.get("raw_beta", beta),
         "beta_clamped": stock_data.get("beta_clamped", False),
         "beta_note": stock_data.get("beta_note", ""),
-        "is_financial": True,
-        "note": "For banking and financial firms, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly.",
+        "is_financial": is_fin,
+        "is_equity_model": True,
+        "note": note_str,
     }
 
 
@@ -93,6 +101,7 @@ def run_bank_valuation(
     projection_years: int = 5,
     current_roe: Optional[float] = None,
     use_mid_year: bool = True,
+    model_type: Optional[str] = None,
 ) -> dict:
     """Execute Damodaran's Multi-Stage Regulatory Capital FCFE / DDM model.
 
@@ -245,6 +254,17 @@ def run_bank_valuation(
     equity_value = pv_fcfe + pv_terminal_value
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
+    is_fin = bool(stock_data.get("is_financial", True))
+    resolved_model_type = model_type or ("BANKING_DDM" if is_fin else "CORPORATE_DDM")
+
+    tv_share_of_ev = float(pv_terminal_value / equity_value) if equity_value > 0 else 0.0
+    tv_share_flag = bool(tv_share_of_ev > 0.78)
+    tv_share_note = (
+        f"Terminal Equity Value accounts for {tv_share_of_ev*100:.1f}% of Total Implied Equity Value."
+        if tv_share_flag
+        else None
+    )
+
     # Valuation Cross-Check: Justified Price-to-Book (P/B) Model
     # Justified P/B = (ROE - g) / (Ke - g)
     if cost_of_equity > effective_terminal_growth:
@@ -256,12 +276,12 @@ def run_bank_valuation(
     # Return structure 100% compatible with standard DCF keys so frontend renders seamlessly
     return {
         "implied_price": float(implied_price),
-        "enterprise_value": float(equity_value),  # For banks, Equity Value is the valued operational entity
+        "enterprise_value": float(equity_value),  # For equity models, Equity Value is the valued operational entity
         "equity_value": float(equity_value),
-        "projected_revenue": [float(n) for n in proj_net_income],  # Displayed as Net Income in banking mode
-        "projected_ufcf": [float(f) for f in proj_fcfe],          # FCFE
+        "projected_revenue": [float(n) for n in proj_net_income],  # Displayed as Net Income in DDM/FCFE mode
+        "projected_ufcf": [float(f) for f in proj_fcfe],          # FCFE / Dividends
         "projected_nopat": [float(n) for n in proj_net_income],
-        "projected_dna": [float(r) for r in proj_reinvestment_equity],  # Regulatory Capital Retained
+        "projected_dna": [float(r) for r in proj_reinvestment_equity],  # Equity Retained
         "projected_capex": [float(r) for r in proj_reinvestment_equity],
         "projected_dnwc": [0.0] * projection_years,
         "growth_schedule": growth_schedule.tolist(),
@@ -276,12 +296,16 @@ def run_bank_valuation(
         "terminal_value_note": terminal_value_note,
         "terminal_growth_capped": terminal_growth_capped,
         "effective_terminal_growth": float(effective_terminal_growth),
+        "tv_share_of_ev": tv_share_of_ev,
+        "tv_share_flag": tv_share_flag,
+        "tv_share_note": tv_share_note,
         "tax_rate": float(tax_rate),
         "terminal_growth": float(terminal_growth),
         "use_mid_year": use_mid_year,
-        # Dedicated Bank-Specific Fields
-        "is_financial": True,
-        "model_type": "BANKING_DDM",
+        # Dedicated Equity / DDM Model Fields
+        "is_financial": is_fin,
+        "is_equity_model": True,
+        "model_type": resolved_model_type,
         "base_net_income": float(base_net_income),
         "base_bve": float(base_bve),
         "bvps": float(bvps),

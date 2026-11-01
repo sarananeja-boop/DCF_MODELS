@@ -16,6 +16,13 @@ export default function SensitivityTab({ data }) {
 
   const { growth_wacc, margin_wacc } = data.sensitivity;
   const isFinancial = Boolean(data.company?.is_financial || data.diagnostics?.is_financial || data.dcf_result?.is_financial);
+  const isEquityModel = Boolean(
+    isFinancial ||
+    data.company?.is_equity_model ||
+    data.company?.model_type === 'CORPORATE_DDM' ||
+    data.diagnostics?.is_equity_model ||
+    data.dcf_result?.is_equity_model
+  );
   const sym = data.company?.symbol || (data.company?.currency === 'INR' ? '₹' : '$');
   const currentPrice = data.market_data?.current_price || 1;
   const baseFairValue = data.dcf_result?.implied_price || 0;
@@ -52,7 +59,7 @@ export default function SensitivityTab({ data }) {
     if (!g1_x.length) return -1;
     let closest = 0;
     let minDiff = Infinity;
-    const targetG = data.overrides?.growth_rate_y1 ?? (data.historicals?.revenue_cagr_4y || 0.05);
+    const targetG = data.overrides_applied?.revenue_growth ?? data.diagnostics?.default_growth ?? (data.historicals?.revenue_cagr || 0.08);
     g1_x.forEach((x, i) => {
       const diff = Math.abs(x - targetG);
       if (diff < minDiff) { minDiff = diff; closest = i; }
@@ -76,13 +83,13 @@ export default function SensitivityTab({ data }) {
     if (!g2_x.length) return -1;
     let closest = 0;
     let minDiff = Infinity;
-    const targetM = data.overrides?.operating_margin ?? (data.historicals?.operating_margin_avg || 0.20);
+    const targetM = data.overrides_applied?.ebit_margin ?? data.diagnostics?.default_margin ?? (isEquityModel ? (data.historicals?.avg_roe || 0.15) : (data.historicals?.avg_ebit_margin || 0.20));
     g2_x.forEach((x, i) => {
       const diff = Math.abs(x - targetM);
       if (diff < minDiff) { minDiff = diff; closest = i; }
     });
     return closest;
-  }, [g2_x, data]);
+  }, [g2_x, data, isEquityModel]);
 
   // Cell coloring helper: smooth institutional shading
   const getCellBg = (val) => {
@@ -120,14 +127,14 @@ export default function SensitivityTab({ data }) {
         const tvNominal = (ufcf5 * (1 + g)) / (w - g);
         const pvTv = tvNominal / Math.pow(1 + w, 5);
         const ev = pv5 + pvTv;
-        const eq = isFinancial ? (pv5 + pvTv) : (ev - debt + cash);
+        const eq = isEquityModel ? (pv5 + pvTv) : (ev - debt + cash);
         const p = eq / shares;
         return p > 0 ? p : null;
       });
     });
 
     return { gRange, wRange, grid };
-  }, [data, baseGrowth, baseWacc, isFinancial]);
+  }, [data, baseGrowth, baseWacc, isEquityModel]);
 
   // Additional Chart: Sensitivity Tornado (±100 bps Shock Impact)
   const tornadoData = useMemo(() => {
@@ -149,7 +156,7 @@ export default function SensitivityTab({ data }) {
 
     return [
       {
-        factor: isFinancial ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)',
+        factor: isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)',
         shift: '±1.0%',
         low: waccDeltaUp,
         high: waccDeltaDown,
@@ -157,7 +164,7 @@ export default function SensitivityTab({ data }) {
         highPct: ((waccDeltaDown / baseFairValue) - 1) * 100,
       },
       {
-        factor: isFinancial ? 'Target Return on Equity (ROE)' : 'Operating EBIT Margin',
+        factor: isEquityModel ? 'Target Return on Equity (ROE)' : 'Operating EBIT Margin',
         shift: '±1.0%',
         low: marginDeltaDown,
         high: marginDeltaUp,
@@ -173,7 +180,7 @@ export default function SensitivityTab({ data }) {
         highPct: ((tgDeltaUp / baseFairValue) - 1) * 100,
       },
       {
-        factor: isFinancial ? 'Net Income Growth' : 'Revenue Growth (Yr 1)',
+        factor: isEquityModel ? 'Net Income Growth' : 'Revenue Growth (Yr 1)',
         shift: '±1.0%',
         low: growthDeltaDown,
         high: growthDeltaUp,
@@ -181,7 +188,7 @@ export default function SensitivityTab({ data }) {
         highPct: ((growthDeltaUp / baseFairValue) - 1) * 100,
       },
     ];
-  }, [baseFairValue, isFinancial]);
+  }, [baseFairValue, isEquityModel]);
 
   return (
     <div className="space-y-5 text-[#f4eedf]">
@@ -198,11 +205,11 @@ export default function SensitivityTab({ data }) {
                   <FiSliders className="w-3.5 h-3.5" />
                 </div>
                 <h3 className="font-display font-bold text-base text-[#f4eedf] tracking-tight">
-                  {isFinancial ? 'Net Income Growth vs. Cost of Equity (Ke)' : 'Revenue Growth vs. Discount Rate (WACC)'}
+                  {isEquityModel ? 'Net Income Growth vs. Cost of Equity (Ke)' : 'Revenue Growth vs. Discount Rate (WACC)'}
                 </h3>
               </div>
               <span className="text-[11px] font-semibold text-[#a6b0c3]">
-                Columns: Growth &nbsp;|&nbsp; Rows: WACC
+                Columns: Growth &nbsp;|&nbsp; Rows: {isEquityModel ? 'Ke' : 'WACC'}
               </span>
             </div>
 
@@ -212,7 +219,7 @@ export default function SensitivityTab({ data }) {
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
-                      WACC \ Growth
+                      {isEquityModel ? 'Ke \\ Growth' : 'WACC \\ Growth'}
                     </th>
                     {g1_x.map((gx, ci) => (
                       <th key={ci} className={`p-2 font-display font-semibold tabular-nums ${ci === baseColIdx1 ? 'text-[#e3b23c] font-bold bg-[#e3b23c]/10' : ''}`}>
@@ -291,11 +298,11 @@ export default function SensitivityTab({ data }) {
                   <FiActivity className="w-3.5 h-3.5" />
                 </div>
                 <h3 className="font-display font-bold text-base text-[#f4eedf] tracking-tight">
-                  {isFinancial ? 'Target ROE vs. Cost of Equity (Ke)' : 'Operating EBIT Margin vs. Discount Rate (WACC)'}
+                  {isEquityModel ? 'Target ROE vs. Cost of Equity (Ke)' : 'Operating EBIT Margin vs. Discount Rate (WACC)'}
                 </h3>
               </div>
               <span className="text-[11px] font-semibold text-[#a6b0c3]">
-                Columns: Margin &nbsp;|&nbsp; Rows: WACC
+                Columns: {isEquityModel ? 'ROE' : 'Margin'} &nbsp;|&nbsp; Rows: {isEquityModel ? 'Ke' : 'WACC'}
               </span>
             </div>
 
@@ -305,7 +312,7 @@ export default function SensitivityTab({ data }) {
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
-                      WACC \ Margin
+                      {isEquityModel ? 'Ke \\ ROE' : 'WACC \\ Margin'}
                     </th>
                     {g2_x.map((mx, ci) => (
                       <th key={ci} className={`p-2 font-display font-semibold tabular-nums ${ci === baseColIdx2 ? 'text-[#8ab4f8] font-bold bg-[#5b8fd9]/10' : ''}`}>
@@ -389,11 +396,11 @@ export default function SensitivityTab({ data }) {
                   <FiLayers className="w-3.5 h-3.5" />
                 </div>
                 <h3 className="font-display font-bold text-base text-[#f4eedf] tracking-tight">
-                  Terminal Growth Rate (g) vs. WACC Sensitivity Matrix
+                  Terminal Growth Rate (g) vs. {isEquityModel ? 'Cost of Equity (Ke)' : 'WACC'} Sensitivity Matrix
                 </h3>
               </div>
               <span className="text-[11px] font-semibold text-[#a6b0c3]">
-                Terminal Value Sensitivity (60–80% of EV)
+                Terminal Value Sensitivity (60–80% of {isEquityModel ? 'EqV' : 'EV'})
               </span>
             </div>
 
@@ -402,7 +409,7 @@ export default function SensitivityTab({ data }) {
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
-                      WACC \ Term g
+                      {isEquityModel ? 'Ke \\ Term g' : 'WACC \\ Term g'}
                     </th>
                     {tvMatrix.gRange.map((g, ci) => (
                       <th key={ci} className={`p-2 font-display font-semibold tabular-nums ${ci === 2 ? 'text-[#34b38a] font-bold bg-[#34b38a]/10' : ''}`}>

@@ -138,7 +138,8 @@ def validate_bank_valuation(
         "bvps": bvps,
         "gap": float(gap),
         "trailing_ebitda": 1.0,
-        "is_financial": True,
+        "is_financial": bool(stock_data.get("is_financial", True)),
+        "is_equity_model": True,
     }
 
 

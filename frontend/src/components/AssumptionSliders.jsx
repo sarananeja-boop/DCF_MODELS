@@ -11,25 +11,38 @@ export default function AssumptionSliders({
   if (!data) return null;
 
   const isFinancial = Boolean(data.company?.is_financial || data.diagnostics?.is_financial);
+  const isEquityModel = Boolean(
+    isFinancial ||
+    data.company?.is_equity_model ||
+    data.company?.model_type === 'CORPORATE_DDM' ||
+    data.diagnostics?.is_equity_model ||
+    data.dcf_result?.is_equity_model
+  );
   const symbol = data.company?.symbol || (data.company?.currency === 'INR' ? '₹' : '$');
   const currentPrice = data.market_data?.current_price || 1;
 
-  const defaultGrowth = isFinancial
-    ? (data.historicals?.avg_ni_growth || data.historicals?.avg_rev_growth || 0.10)
-    : (data.historicals?.revenue_cagr || data.historicals?.avg_rev_growth || 0.10);
+  const defaultGrowth = data.diagnostics?.default_growth ?? (
+    isEquityModel
+      ? (data.historicals?.avg_ni_growth || data.historicals?.avg_rev_growth || 0.10)
+      : (data.historicals?.revenue_cagr || data.historicals?.avg_rev_growth || 0.10)
+  );
   
-  const currentMargin = isFinancial
+  const currentMargin = isEquityModel
     ? (data.diagnostics?.current_ebit_margin ?? data.historicals?.avg_roe ?? 0.14)
     : (data.diagnostics?.current_ebit_margin ?? data.historicals?.avg_ebit_margin ?? 0.18);
-  const isNegativeMargin = !isFinancial && currentMargin < 0;
+  const isNegativeMargin = !isEquityModel && currentMargin < 0;
   
-  const defaultMargin = isFinancial
-    ? (data.historicals?.avg_roe ?? 0.14)
-    : (data.diagnostics?.target_ebit_margin ?? data.historicals?.avg_ebit_margin ?? 0.20);
+  const defaultMargin = data.diagnostics?.default_margin ?? (
+    isEquityModel
+      ? (data.historicals?.avg_roe ?? 0.14)
+      : (data.diagnostics?.target_ebit_margin ?? data.historicals?.avg_ebit_margin ?? 0.20)
+  );
   
-  const defaultWacc = isFinancial
-    ? (data.wacc?.cost_of_equity || data.wacc?.wacc || 0.10)
-    : (data.wacc?.wacc || 0.10);
+  const defaultWacc = data.diagnostics?.default_wacc ?? (
+    isEquityModel
+      ? (data.wacc?.cost_of_equity || data.wacc?.wacc || 0.10)
+      : (data.wacc?.wacc || 0.10)
+  );
 
   const defaultTgr = (data.macro?.terminal_growth ?? (data.company?.market === 'IN' ? 0.055 : 0.025)) * 100;
   const isIndia = data.company?.market === 'IN';
@@ -53,7 +66,7 @@ export default function AssumptionSliders({
     setTgr(appliedTgr);
     const hasCustom = data.overrides_applied && Object.keys(data.overrides_applied).length > 0;
     setActivePreset(hasCustom ? 'custom' : 'base');
-  }, [data.company?.ticker, appliedGrowth, appliedMargin, appliedWacc, appliedTgr]);
+  }, [data.company?.ticker, data.company?.model_type, appliedGrowth, appliedMargin, appliedWacc, appliedTgr]);
 
   const notifyParent = (g, m, w, t, preset = 'custom') => {
     setActivePreset(preset);
@@ -75,7 +88,7 @@ export default function AssumptionSliders({
   };
 
   const handleMarginChange = (val) => {
-    const clamped = Math.max(isFinancial ? 2 : -60, Math.min(isFinancial ? 40 : 65, val));
+    const clamped = Math.max(isEquityModel ? 2 : -60, Math.min(isFinancial ? 40 : isEquityModel ? 60 : 65, val));
     setMargin(clamped);
     notifyParent(growth, clamped, wacc, tgr);
   };
@@ -113,12 +126,12 @@ export default function AssumptionSliders({
 
     if (preset === 'bear') {
       g = Math.max(-10, g - 3.5);
-      m = Math.max(isFinancial ? 6 : 5, m - 2.5);
+      m = Math.max(isEquityModel ? 6 : 5, m - 2.5);
       w = Math.min(22, w + 1.0);
       t = Math.max(1.5, t - 0.5);
     } else if (preset === 'bull') {
       g = Math.min(40, g + 4.0);
-      m = Math.min(isFinancial ? 32 : 55, m + 2.5);
+      m = Math.min(isFinancial ? 32 : isEquityModel ? 50 : 55, m + 2.5);
       w = Math.max(5.5, w - 0.6);
       t = Math.min(maxTgr - 0.3, t + 0.4);
     }
@@ -190,7 +203,7 @@ export default function AssumptionSliders({
     const totalCash = data.wacc?.total_cash ?? data.company?.total_cash ?? 0;
     const shares = data.market_data?.shares_outstanding || 1;
 
-    const simEq = isFinancial ? simEv : Math.max(0, simEv - totalDebt + totalCash);
+    const simEq = isEquityModel ? simEv : Math.max(0, simEv - totalDebt + totalCash);
     const simPrice = Math.max(0, simEq / shares);
 
     return {
@@ -198,7 +211,7 @@ export default function AssumptionSliders({
       price: simPrice,
       upside: (simPrice / currentPrice) - 1,
     };
-  }, [growth, margin, wacc, tgr, appliedGrowth, appliedMargin, appliedWacc, appliedTgr, data, currentPrice, isFinancial]);
+  }, [growth, margin, wacc, tgr, appliedGrowth, appliedMargin, appliedWacc, appliedTgr, data, currentPrice, isEquityModel]);
 
   return (
     <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-xl space-y-4 sm:space-y-5 overflow-hidden">
@@ -216,9 +229,13 @@ export default function AssumptionSliders({
               <span className="text-[11px] font-semibold text-[#34b38a] block truncate">
                 Bank FCFE / ROE Mode
               </span>
+            ) : isEquityModel ? (
+              <span className="text-[11px] font-semibold text-[#8ab4f8] block truncate">
+                Corporate DDM / FCFE Mode
+              </span>
             ) : (
               <span className="text-[11px] text-[#a6b0c3] block truncate">
-                5-Year DCF Inputs
+                5-Year FCFF DCF Inputs
               </span>
             )}
           </div>
@@ -315,7 +332,7 @@ export default function AssumptionSliders({
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
             <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isFinancial ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
+              {isEquityModel ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -338,7 +355,7 @@ export default function AssumptionSliders({
             className="w-full warm-slider cursor-pointer"
           />
           <div className="flex flex-wrap justify-between gap-1 text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
-            <span>Hist CAGR: {(defaultGrowth * 100).toFixed(1)}%</span>
+            <span>Hist Avg: {(defaultGrowth * 100).toFixed(1)}%</span>
             <span>Default: {(defaultGrowth * 100).toFixed(1)}%</span>
           </div>
         </div>
@@ -347,7 +364,7 @@ export default function AssumptionSliders({
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
             <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isFinancial
+              {isEquityModel
                 ? 'Target ROE'
                 : isNegativeMargin
                 ? 'Target EBIT Margin (Yr 5)'
@@ -366,8 +383,8 @@ export default function AssumptionSliders({
           </div>
           <input
             type="range"
-            min={isFinancial ? '5' : '-30'}
-            max={isFinancial ? '35' : '60'}
+            min={isEquityModel ? '5' : '-30'}
+            max={isFinancial ? '35' : isEquityModel ? '50' : '60'}
             step="0.5"
             value={margin}
             onChange={(e) => handleMarginChange(parseFloat(e.target.value))}
@@ -383,7 +400,7 @@ export default function AssumptionSliders({
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
             <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isFinancial ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
+              {isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -457,15 +474,22 @@ export default function AssumptionSliders({
           </div>
         </div>
 
-        {/* Normalized NWC / Revenue */}
-        {data.diagnostics?.normalized_nwc_to_revenue !== undefined && (
+        {/* Normalized NWC / Revenue or Retention Rate */}
+        {isEquityModel && data.dcf_result?.reinvestment_rate !== undefined ? (
+          <div className="flex justify-between items-center text-xs pt-3.5 border-t border-[#f4eedf]/10">
+            <span className="text-[#a6b0c3] font-medium">Equity Retention Rate (b = g / ROE)</span>
+            <span className="text-[#f4eedf] font-display font-bold tabular-nums">
+              {(data.dcf_result.reinvestment_rate * 100).toFixed(1)}%
+            </span>
+          </div>
+        ) : data.diagnostics?.normalized_nwc_to_revenue !== undefined ? (
           <div className="flex justify-between items-center text-xs pt-3.5 border-t border-[#f4eedf]/10">
             <span className="text-[#a6b0c3] font-medium">Normalized NWC / Revenue</span>
             <span className="text-[#f4eedf] font-display font-bold tabular-nums">
               {(data.diagnostics.normalized_nwc_to_revenue * 100).toFixed(1)}%
             </span>
           </div>
-        )}
+        ) : null}
 
       </div>
     </div>

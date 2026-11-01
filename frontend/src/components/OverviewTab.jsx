@@ -48,6 +48,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
 
   const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, diagnostics, historicals } = data;
   const isFinancial = Boolean(company?.is_financial || diagnostics?.is_financial || dcf_result?.is_financial);
+  const isEquityModel = Boolean(
+    isFinancial ||
+    company?.is_equity_model ||
+    company?.model_type === 'CORPORATE_DDM' ||
+    diagnostics?.is_equity_model ||
+    dcf_result?.is_equity_model
+  );
   const symbol = company?.currency === 'INR' ? '₹' : '$';
   const market = company?.market || 'US';
 
@@ -125,6 +132,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
   const p75 = monte_carlo?.stats?.p75 || impliedPrice * 1.18;
   const p95 = monte_carlo?.stats?.p95 || impliedPrice * 1.45;
   const exitImpliedPrice = validation?.exit_implied_price ?? diagnostics?.exit_implied_price;
+  const justifiedPrice = dcf_result?.justified_price ?? validation?.justified_price;
 
   const scaleMax = Math.max(currentPrice, impliedPrice, p95, exitImpliedPrice || 0) * 1.16 || 100;
   const pricePosPct = Math.min(94, Math.max(6, (currentPrice / scaleMax) * 100));
@@ -213,7 +221,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   </>
                 ) : null}
                 {verdict?.description && <span>{verdict.description} </span>}
-                {!exitImpliedPrice && !isFinancial && (
+                {!exitImpliedPrice && !isEquityModel && (
                   <span>
                     Similarly, the <strong className="text-[#f4eedf]">Exit-Multiple Share Price is N/A</strong> because Year-5 projected EBITDA at the {benchMult}x peer multiple remains below net debt obligations.
                   </span>
@@ -269,7 +277,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2.5">
                 <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
-                  Share Price vs. DCF Fair Value &amp; Probability Band
+                  Share Price vs. {isEquityModel ? 'DDM / FCFE' : 'DCF'} Fair Value &amp; Probability Band
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -291,7 +299,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 style={{ left: `${fairPosPct}%`, transform: fairAlign.transform }}
               >
                 <div className="px-3 py-1 rounded-lg bg-[#e3b23c] text-[#0f141c] font-display text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
-                  DCF Fair Value: {symbol}{formatNumber(impliedPrice)}
+                  {isEquityModel ? 'DDM Fair Value' : 'DCF Fair Value'}: {symbol}{formatNumber(impliedPrice)}
                 </div>
                 <div className="w-0.5 h-3 bg-[#e3b23c]" />
               </div>
@@ -382,15 +390,19 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           {/* 6-Metric Valuation Range Strip (All Key Price Benchmarks On-Face, Clean & Uniform) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
-              <div className="text-[10px] uppercase tracking-wider text-[#e3b23c] font-bold">DCF Value</div>
+              <div className="text-[10px] uppercase tracking-wider text-[#e3b23c] font-bold">{isEquityModel ? 'DDM Value' : 'DCF Value'}</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {symbol}{formatNumber(impliedPrice)}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
-              <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">Exit Mult.</div>
+              <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">
+                {isEquityModel ? 'Justified P/B' : 'Exit Mult.'}
+              </div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
-                {exitImpliedPrice ? `${symbol}${formatNumber(exitImpliedPrice)}` : 'N/A'}
+                {isEquityModel
+                  ? (justifiedPrice ? `${symbol}${formatNumber(justifiedPrice)}` : 'N/A')
+                  : (exitImpliedPrice ? `${symbol}${formatNumber(exitImpliedPrice)}` : 'N/A')}
               </div>
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
@@ -420,12 +432,16 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           </div>
         </div>
 
-        {/* Right 5 Cols: Enterprise-to-Equity Bridge & Horizon Split (With Arithmetic Operators & Bank Support) */}
+        {/* Right 5 Cols: Enterprise-to-Equity Bridge & Horizon Split (With Arithmetic Operators & Bank / Corporate DDM Support) */}
         <div className="2xl:col-span-5 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between overflow-hidden">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
-                {isFinancial ? 'Terminal Value & Bank Equity Bridge' : 'Enterprise-to-Equity Value Bridge'}
+                {isFinancial
+                  ? 'Terminal Value & Bank Equity Bridge'
+                  : isEquityModel
+                  ? 'Terminal Value & DDM / FCFE Equity Bridge'
+                  : 'Enterprise-to-Equity Value Bridge'}
               </h3>
               <span className="text-xs font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                 TV Share: <strong className="text-[#8ab4f8]">{pvTvShare.toFixed(1)}%</strong>
@@ -446,7 +462,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
               <div className="flex flex-wrap justify-between gap-1.5 text-[11px] font-semibold mt-1.5 tabular-nums">
                 <span className="text-[#34b38a]">
-                  ● {isFinancial ? '5-Yr FCFE PV' : '5-Yr Cash Flows PV'}: {formatCurrency(pv5Yr, symbol, true)} ({pv5YrShare.toFixed(1)}%)
+                  ● {isEquityModel ? '5-Yr FCFE PV' : '5-Yr Cash Flows PV'}: {formatCurrency(pv5Yr, symbol, true)} ({pv5YrShare.toFixed(1)}%)
                 </span>
                 <span className="text-[#8ab4f8]">
                   ● Terminal Value PV: {formatCurrency(pvTv, symbol, true)} ({pvTvShare.toFixed(1)}%)
@@ -456,20 +472,20 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
 
             {/* Bridge Numbers Table with Arithmetic Signs */}
             <div className="space-y-2 text-xs border-t border-[#f4eedf]/10 pt-3">
-              {isFinancial ? (
-                /* Bank Equity Bridge */
+              {isEquityModel ? (
+                /* Bank or Corporate DDM / FCFE Equity Bridge */
                 <>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#34b38a]">(+)</span>
-                      <span>PV of 5-Year Regulatory Capital FCFE</span>
+                      <span>{isFinancial ? 'PV of 5-Year Regulatory Capital FCFE' : 'PV of 5-Year Dividends / FCFE'}</span>
                     </span>
                     <span className="font-display font-bold tabular-nums text-[#34b38a]">+{formatCurrency(pv5Yr, symbol, true)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#8ab4f8]">(+)</span>
-                      <span>PV of Terminal Equity Value (Justified P/B)</span>
+                      <span>PV of Terminal Equity Value (Gordon Growth)</span>
                     </span>
                     <span className="font-display font-bold tabular-nums text-[#8ab4f8]">+{formatCurrency(pvTv, symbol, true)}</span>
                   </div>
@@ -490,12 +506,20 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-[#f4eedf] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#e3b23c]">(=)</span>
-                      <span className="font-bold">DCF Intrinsic Fair Value per Share</span>
+                      <span className="font-bold">DDM / FCFE Fair Value per Share</span>
                     </span>
                     <span className="font-display font-bold text-lg tabular-nums text-[#e3b23c]">{symbol}{formatNumber(impliedPrice)}</span>
                   </div>
                   <div className="mt-2 text-[10px] text-[#a6b0c3] bg-[#0d121a] p-2 rounded-lg border border-[#f4eedf]/8">
-                    🏦 <strong className="text-[#f4eedf]">Bank Framework:</strong> Customer deposits &amp; borrowings are operational funding rather than capital structure debt. Valued directly to Equity via Regulatory Capital FCFE.
+                    {isFinancial ? (
+                      <>
+                        🏦 <strong className="text-[#f4eedf]">Bank Framework:</strong> Customer deposits &amp; borrowings are operational funding rather than capital structure debt. Valued directly to Equity via Regulatory Capital FCFE.
+                      </>
+                    ) : (
+                      <>
+                        💎 <strong className="text-[#f4eedf]">Corporate DDM / FCFE Framework:</strong> Net income after ROE-implied equity reinvestment (<span className="font-mono">b = g / ROE</span>) is discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) to Equity Value.
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
@@ -640,10 +664,14 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           <div>
             <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-[#f4eedf]/10">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
-                {isFinancial ? 'Cost of Capital (FIG Model)' : 'WACC & Capital Structure'}
+                {isFinancial
+                  ? 'Cost of Capital (FIG Model)'
+                  : isEquityModel
+                  ? 'Cost of Equity (CAPM Hurdle Rate)'
+                  : 'WACC & Capital Structure'}
               </h3>
               <span className="text-xs font-display font-bold text-[#e3b23c] tabular-nums">
-                WACC: {formatPercent(wacc_details?.wacc)}
+                {isEquityModel ? 'Ke' : 'WACC'}: {formatPercent(wacc_details?.wacc)}
               </span>
             </div>
 
@@ -661,10 +689,14 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
               <div className="flex justify-between text-[11px] font-semibold mt-1.5 text-[#a6b0c3] tabular-nums">
                 <span className="text-[#8ab4f8]">
-                  {isFinancial ? 'Equity Weight: 100%' : `Equity Weight: ${formatPercent(wacc_details?.weight_equity)}`}
+                  {isEquityModel ? 'Equity Weight: 100%' : `Equity Weight: ${formatPercent(wacc_details?.weight_equity)}`}
                 </span>
                 <span className="text-[#e3b23c]">
-                  {isFinancial ? 'Deposits: Operational' : `Debt Weight: ${formatPercent(wacc_details?.weight_debt)}`}
+                  {isFinancial
+                    ? 'Deposits: Operational'
+                    : isEquityModel
+                    ? `Corp WACC: ${formatPercent(wacc_details?.corporate_wacc || wacc_details?.wacc)}`
+                    : `Debt Weight: ${formatPercent(wacc_details?.weight_debt)}`}
                 </span>
               </div>
             </div>
@@ -678,18 +710,20 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 </div>
               </div>
               <div className="bg-[#0d121a] p-2.5 rounded-xl border border-[#f4eedf]/6">
-                <div className="text-[11px] text-[#a6b0c3]">After-Tax Debt (Kd)</div>
+                <div className="text-[11px] text-[#a6b0c3]">{isEquityModel ? 'Discount Model' : 'After-Tax Debt (Kd)'}</div>
                 <div className="font-display font-bold text-base text-[#f4eedf] tabular-nums mt-0.5">
-                  {isFinancial ? 'Direct FCFE' : formatPercent(wacc_details?.cost_of_debt)}
+                  {isEquityModel ? 'Direct FCFE' : formatPercent(wacc_details?.cost_of_debt)}
                 </div>
               </div>
             </div>
 
             <div className="space-y-2 text-xs">
               <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
-                <span className="text-[#a6b0c3]">Pre-Tax Cost of Debt</span>
+                <span className="text-[#a6b0c3]">{isEquityModel ? 'Hist Payout / Retention (b)' : 'Pre-Tax Cost of Debt'}</span>
                 <span className="font-display font-bold tabular-nums text-[#f4eedf]">
-                  {isFinancial ? 'N/A' : formatPercent(wacc_details?.pretax_cost_of_debt)}
+                  {isEquityModel
+                    ? `${formatPercent(dcf_result?.historical_payout_ratio ?? historicals?.avg_payout)} / ${formatPercent(dcf_result?.reinvestment_rate)}`
+                    : formatPercent(wacc_details?.pretax_cost_of_debt)}
                 </span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
@@ -712,7 +746,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 </span>
               </div>
               <div className="flex justify-between items-center pt-1">
-                <span className="text-[#a6b0c3]">Minimum WACC Floor</span>
+                <span className="text-[#a6b0c3]">{isEquityModel ? 'Minimum Ke Floor' : 'Minimum WACC Floor'}</span>
                 <span className="font-display font-bold tabular-nums text-[#a6b0c3]">
                   {formatPercent(wacc_details?.min_wacc)}
                 </span>
@@ -726,13 +760,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           <div>
             <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-[#f4eedf]/10">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
-                {isFinancial ? 'P/B Multiple Cross-Check' : 'Valuation Multiples & Ratios'}
+                {isEquityModel ? 'P/B Multiple Cross-Check' : 'Valuation Multiples & Ratios'}
               </h3>
               {renderValidationBadge()}
             </div>
 
             {/* Visual Multiple Comparison Bars */}
-            {!isFinancial && (
+            {!isEquityModel && (
               <div className="space-y-2.5 mb-4 bg-[#0d121a] p-3 rounded-xl border border-[#f4eedf]/6">
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
@@ -756,7 +790,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             )}
 
             <div className="space-y-2 text-xs">
-              {isFinancial ? (
+              {isEquityModel ? (
                 <>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3]">Current Market P/B</span>
@@ -768,11 +802,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3]">Justified P/B (Gordon ROE)</span>
-                    <span className="font-display font-bold tabular-nums text-[#e3b23c]">{formatNumber(validation?.justified_pb)}x</span>
+                    <span className="font-display font-bold tabular-nums text-[#e3b23c]">{formatNumber(validation?.justified_pb ?? dcf_result?.justified_pb)}x</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3]">Book Value / Share (BVPS)</span>
-                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{symbol}{formatNumber(validation?.bvps)}</span>
+                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{symbol}{formatNumber(validation?.bvps ?? dcf_result?.bvps)}</span>
                   </div>
                 </>
               ) : (
@@ -825,27 +859,27 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
             ) : validation?.status === 'PASS' ? (
               <div className="border-l-2 border-[#34b38a] pl-2.5">
-                <strong className="text-[#34b38a]">Verified ({isFinancial ? '≤35% P/B Gap' : '<50% Multiple Gap'}): </strong>
-                DCF implied {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(modMult)}x) is within{' '}
+                <strong className="text-[#34b38a]">Verified ({isEquityModel ? '≤35% P/B Gap' : '<50% Multiple Gap'}): </strong>
+                {isEquityModel ? 'DDM / FCFE' : 'DCF'} implied {isEquityModel ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(modMult)}x) is within{' '}
                 {validation?.multiple_gap_pct != null ? formatPercent(validation.multiple_gap_pct) : 'the normal range'} of the current market multiple ({formatNumber(mktMult)}x), confirming cash-flow projections align with peer market pricing.
               </div>
             ) : validation?.status === 'WARNING' ? (
               <div className="border-l-2 border-[#e3b23c] pl-2.5">
-                <strong className="text-[#e3b23c]">How to Interpret WARNING ({isFinancial ? '35%–65% P/B Gap' : '50%–80% Multiple Gap'}): </strong>
-                Market {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
-                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from DCF implied ({formatNumber(modMult)}x).{' '}
+                <strong className="text-[#e3b23c]">How to Interpret WARNING ({isEquityModel ? '35%–65% P/B Gap' : '50%–80% Multiple Gap'}): </strong>
+                Market {isEquityModel ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
+                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from {isEquityModel ? 'DDM / FCFE' : 'DCF'} implied ({formatNumber(modMult)}x).{' '}
                 {modMult < mktMult
                   ? 'The market is pricing in higher revenue/earnings growth or ROE/margin expansion than historical averages.'
-                  : 'Baseline DCF projects stronger cash-flow expansion than currently priced by the market.'}
+                  : 'Baseline projections indicate stronger cash-flow expansion than currently priced by the market.'}
               </div>
             ) : (validation?.status === 'FAIL' || validation?.status === 'FLAG') ? (
               <div className="border-l-2 border-[#e07a5f] pl-2.5">
-                <strong className="text-[#e07a5f]">How to Interpret FLAGGED ({isFinancial ? '>65% P/B Gap' : '>80% Multiple Gap'}): </strong>
-                Market {isFinancial ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
-                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from DCF implied ({formatNumber(modMult)}x).{' '}
+                <strong className="text-[#e07a5f]">How to Interpret FLAGGED ({isEquityModel ? '>65% P/B Gap' : '>80% Multiple Gap'}): </strong>
+                Market {isEquityModel ? 'P/B' : validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : 'EV/EBITDA'} ({formatNumber(mktMult)}x) diverges by{' '}
+                <strong className="text-[#f4eedf]">{formatPercent(validation?.multiple_gap_pct)}</strong> from {isEquityModel ? 'DDM / FCFE' : 'DCF'} implied ({formatNumber(modMult)}x).{' '}
                 {modMult < mktMult
                   ? 'Stock trades at a steep growth/scarcity premium over historical cash flows; use Model Assumptions sliders to test market-implied growth.'
-                  : 'Significant disconnect between baseline operating cash flows and market valuation.'}
+                  : 'Significant disconnect between baseline cash flows and market valuation.'}
               </div>
             ) : null}
 
