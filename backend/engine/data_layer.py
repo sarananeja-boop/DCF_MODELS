@@ -129,6 +129,66 @@ _YF_SESSION = None
 _YF_SESSION_LOCK = __import__("threading").Lock()
 _FX_CACHE: Dict[str, tuple] = {}
 
+_FALLBACK_FX_RATES: Dict[str, float] = {
+    "USDDKK": 6.70, "DKKUSD": 1.0 / 6.70,
+    "EURUSD": 1.08, "USDEUR": 1.0 / 1.08,
+    "GBPUSD": 1.28, "USDGBP": 1.0 / 1.28,
+    "USDJPY": 155.0, "JPYUSD": 1.0 / 155.0,
+    "USDINR": 86.5, "INRUSD": 1.0 / 86.5,
+    "USDCNY": 7.25, "CNYUSD": 1.0 / 7.25,
+    "USDTWD": 32.5, "TWDUSD": 1.0 / 32.5,
+    "USDCHF": 0.88, "CHFUSD": 1.0 / 0.88,
+    "AUDUSD": 0.65, "USDAUD": 1.0 / 0.65,
+    "USDCAD": 1.38, "CADUSD": 1.0 / 1.38,
+    "USDSEK": 10.5, "SEKUSD": 1.0 / 10.5,
+    "USDNOK": 10.8, "NOKUSD": 1.0 / 10.8,
+    "USDHKD": 7.80, "HKDUSD": 1.0 / 7.80,
+    "USDKRW": 1380.0, "KRWUSD": 1.0 / 1380.0,
+}
+
+
+def get_cross_fx_rate(from_curr: str, to_curr: str) -> float:
+    """Fetch live FX conversion rate so that 1 from_curr * fx_rate = to_curr."""
+    from_curr = str(from_curr or "").strip().upper()
+    to_curr = str(to_curr or "").strip().upper()
+    if not from_curr or not to_curr or from_curr == to_curr:
+        return 1.0
+
+    cache_key = f"{from_curr}_{to_curr}"
+    now = time.time()
+    if cache_key in _FX_CACHE:
+        val, ts = _FX_CACHE[cache_key]
+        if now - ts < _BENCHMARK_CACHE_TTL_SECONDS:
+            return val
+
+    pair = f"{from_curr}{to_curr}"
+    rev_pair = f"{to_curr}{from_curr}"
+
+    for p, invert in [(pair, False), (rev_pair, True)]:
+        try:
+            t = yf.Ticker(f"{p}=X", session=get_yf_session())
+            h = t.history(period="5d")
+            if h is not None and not h.empty and "Close" in h:
+                series = h["Close"].dropna()
+                if len(series) > 0 and float(series.iloc[-1]) > 0:
+                    rate = float(series.iloc[-1])
+                    fx = (1.0 / rate) if invert else rate
+                    _FX_CACHE[cache_key] = (fx, now)
+                    return fx
+        except Exception:
+            pass
+
+    if pair in _FALLBACK_FX_RATES:
+        fx = _FALLBACK_FX_RATES[pair]
+        _FX_CACHE[cache_key] = (fx, now)
+        return fx
+    if rev_pair in _FALLBACK_FX_RATES:
+        fx = 1.0 / _FALLBACK_FX_RATES[rev_pair]
+        _FX_CACHE[cache_key] = (fx, now)
+        return fx
+
+    return 1.0
+
 
 def get_yf_session():
     """Return a shared, thread-safe curl_cffi session so Yahoo cookies/crumbs persist across requests."""
@@ -633,33 +693,27 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     except Exception as e:
         logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
 
-    # Cross-Currency Reconciler (e.g. ADR-linked Indian firms like INFY where statements are in USD while trading in INR)
+    # Cross-Currency Reconciler:
+    # Converts foreign statement reporting currency to trading currency (e.g. NVO reporting in DKK while trading in USD,
+    # or ADR-linked Indian firms like INFY reporting in USD while trading in INR)
     try:
         fin_currency = str(info.get("financialCurrency") or "").upper()
         trade_currency = str(info.get("currency") or "").upper()
-        if fin_currency == "USD" and trade_currency == "INR":
-            cached_fx = _FX_CACHE.get("USDINR")
-            if cached_fx and (time.time() - cached_fx[1] < _BENCHMARK_CACHE_TTL_SECONDS):
-                fx_rate = cached_fx[0]
-            else:
-                try:
-                    usdinr_ticker = yf.Ticker("USDINR=X", session=get_yf_session())
-                    fx_rate = float(usdinr_ticker.fast_info.get("last_price") or 86.5)
-                    _FX_CACHE["USDINR"] = (fx_rate, time.time())
-                except Exception:
-                    fx_rate = 86.5
-
-            logger.info(
-                "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
-                "Converting financial statements to %s using FX rate %.2f",
-                yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
-            )
-            if not income_stmt.empty:
-                income_stmt = income_stmt * fx_rate
-            if not balance_sheet.empty:
-                balance_sheet = balance_sheet * fx_rate
-            if not cash_flow.empty:
-                cash_flow = cash_flow * fx_rate
+        if fin_currency and trade_currency and fin_currency != trade_currency:
+            fx_rate = get_cross_fx_rate(fin_currency, trade_currency)
+            if fx_rate and abs(fx_rate - 1.0) > 0.001:
+                logger.info(
+                    "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
+                    "Converting financial statements to %s using FX rate %.4f",
+                    yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
+                )
+                if not income_stmt.empty:
+                    income_stmt = income_stmt * fx_rate
+                if not balance_sheet.empty:
+                    balance_sheet = balance_sheet * fx_rate
+                if not cash_flow.empty:
+                    cash_flow = cash_flow * fx_rate
+                info["financialCurrency"] = trade_currency
     except Exception as e:
         logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
 
@@ -980,6 +1034,27 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         cce = float(safe_get(balance_sheet, "Cash And Cash Equivalents")[0])
         sti = float(safe_get(balance_sheet, "Other Short Term Investments")[0])
         cash_and_equivalents = cce + sti
+
+    # Captive financing receivables (e.g. HPE Financial Services, Caterpillar Financial, John Deere Credit)
+    # For non-banking firms with captive financing operations, long-term customer IT/equipment lease receivables
+    # are non-operating financial assets funded by captive debt. Netting captive financing receivables against
+    # total debt prevents captive debt from unfairly wiping out operating equity value.
+    if not is_financial:
+        captive_rec = 0.0
+        for col_name in ["Non Current Accounts Receivable", "Non Current Note Receivables", "Long Term Receivables"]:
+            if col_name in balance_sheet.columns:
+                val = float(safe_get(balance_sheet, col_name, default=0.0)[0])
+                if val > 0:
+                    captive_rec += val
+                    break
+        if captive_rec > 0 and total_debt > captive_rec:
+            sym = stock_data.get("ticker", "")
+            logger.info(
+                "Detected captive financing receivables of %.2f. "
+                "Netting against total debt (%.2f -> %.2f) to isolate operating debt for %s.",
+                captive_rec, total_debt, total_debt - captive_rec, sym
+            )
+            total_debt = max(0.0, total_debt - captive_rec)
 
 
     # Interest expense (for cost-of-debt calculation)

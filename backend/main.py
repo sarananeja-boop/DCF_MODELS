@@ -470,13 +470,26 @@ def analyze(req: AnalyzeRequest):
             avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
             hist_growth = metrics.get("avg_rev_growth", 0.10)
 
+            # Law of Large Numbers scale-tiered growth ceiling:
+            # Prevents astronomical extrapolations on massive revenue bases ($100B+ like NVDA)
+            # while fully accommodating high-growth hardware supercycles like Blackwell (45%).
+            last_rev = float(metrics.get("last_revenue", 0.0) or 0.0)
+            if last_rev >= 100e9:
+                max_growth_ceiling = 0.45
+            elif last_rev >= 50e9:
+                max_growth_ceiling = 0.50
+            elif last_rev >= 10e9:
+                max_growth_ceiling = 0.60
+            else:
+                max_growth_ceiling = 0.85
+
             # 1. Baseline FCFF Growth & Margin Trajectory
             if is_cyclical:
                 fcff_default_growth = min(0.035, max(0.02, hist_growth)) if hist_growth > 0 else 0.025
             elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
                 fcff_default_growth = terminal_growth
             else:
-                fcff_default_growth = hist_growth
+                fcff_default_growth = min(max_growth_ceiling, hist_growth)
 
             ebit_margins_hist = metrics.get("ebit_margins", [])
             latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
