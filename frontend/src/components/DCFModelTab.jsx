@@ -298,7 +298,7 @@ const DCFModelTab = ({ data }) => {
               {isFinancial ? (
                 <span>🏦 <strong className="text-[#f4eedf]">Bank Tier-1 Model:</strong> Customer deposits &amp; borrowings are operational funding rather than debt. Valuation flows directly to Equity via FCFE.</span>
               ) : (
-                <span>💎 <strong className="text-[#f4eedf]">Corporate DDM / FCFE Model:</strong> Cash flows after ROE-implied equity reinvestment (<span className="font-mono">b = g / ROE</span>) are discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) to Equity Value. Justified P/B: <strong className="text-[#e3b23c]">{dcf.justified_pb ? `${dcf.justified_pb.toFixed(2)}x` : 'N/A'}</strong>.</span>
+                <span><strong className="text-[#f4eedf]">Corporate DDM / FCFE Model:</strong> Cash flows after ROE-implied equity reinvestment (<span className="font-mono">b = g / ROE</span>) are discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) to Equity Value. Justified P/B: <strong className="text-[#e3b23c]">{dcf.justified_pb ? `${dcf.justified_pb.toFixed(2)}x` : 'N/A'}</strong>.</span>
               )}
               <span className="font-display font-bold text-[#f4eedf] tabular-nums shrink-0">Diluted Shares: {shares ? (shares > 1e7 ? `${(shares/1e7).toFixed(2)} Cr` : shares.toLocaleString()) : 'N/A'}</span>
             </div>

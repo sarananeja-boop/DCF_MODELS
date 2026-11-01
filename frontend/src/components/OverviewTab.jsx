@@ -517,7 +517,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                       </>
                     ) : (
                       <>
-                        💎 <strong className="text-[#f4eedf]">Corporate DDM / FCFE Framework:</strong> Net income after ROE-implied equity reinvestment (<span className="font-mono">b = g / ROE</span>) is discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) to Equity Value.
+                        <strong className="text-[#f4eedf]">Corporate DDM / FCFE Framework:</strong> Net income after ROE-implied equity reinvestment (<span className="font-mono">b = g / ROE</span>) is discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) to Equity Value.
                       </>
                     )}
                   </div>

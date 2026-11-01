@@ -74,13 +74,28 @@ export default function TickerInput({
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const dropdownRef = useRef(null);
   const timeoutRef = useRef(null);
   const searchCache = useRef(new Map());
+  const itemRefs = useRef([]);
 
   useEffect(() => {
     setQuery(ticker);
   }, [ticker]);
+
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [suggestions]);
+
+  useEffect(() => {
+    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
+      itemRefs.current[selectedIndex].scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [selectedIndex]);
 
   // Auto-sync live ticker universe from backend (/api/universe)
   useEffect(() => {
@@ -286,8 +301,35 @@ export default function TickerInput({
     setQuery(cleanSym);
     setTicker(cleanSym);
     setShowDropdown(false);
+    setSelectedIndex(-1);
 
     onAnalyze({}, true, cleanSym, resolvedMarket);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      if (!showDropdown || suggestions.length === 0) {
+        if (query.trim().length >= 1) {
+          setShowDropdown(true);
+        }
+        return;
+      }
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      if (!showDropdown || suggestions.length === 0) return;
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+    } else if (e.key === 'Enter') {
+      if (showDropdown && selectedIndex >= 0 && selectedIndex < suggestions.length) {
+        e.preventDefault();
+        const item = suggestions[selectedIndex];
+        handleSelectSuggestion(item.symbol, item.name, item.market);
+      }
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false);
+      setSelectedIndex(-1);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -295,6 +337,7 @@ export default function TickerInput({
     const cleanQuery = query.trim().toUpperCase();
     if (cleanQuery) {
       setShowDropdown(false);
+      setSelectedIndex(-1);
       
       const localMatches = filterLocal(cleanQuery);
       const topMatch = suggestions.find(s => 
@@ -324,26 +367,41 @@ export default function TickerInput({
               const isBSE = item.symbol.endsWith('.BO');
               const isIN = item.market === 'IN' || item.symbol.endsWith('.NS') || isBSE;
               const cleanSymbol = item.symbol.replace('.NS', '').replace('.BO', '');
+              const isSelected = idx === selectedIndex;
               return (
                 <div 
                   key={idx}
+                  ref={(el) => (itemRefs.current[idx] = el)}
                   onClick={() => handleSelectSuggestion(item.symbol, item.name, item.market)}
-                  className="px-4 py-3 bg-[#121824] hover:bg-[#1c2436] cursor-pointer flex items-center justify-between gap-3 transition-colors group"
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  className={`px-4 py-3 cursor-pointer flex items-center justify-between gap-3 transition-colors group ${
+                    isSelected ? 'bg-[#1e283d] ring-1 ring-[#e3b23c]/50' : 'bg-[#121824] hover:bg-[#1c2436]'
+                  }`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded border border-[#f4eedf]/10 bg-[#161d2a] text-[#a6b0c3] shrink-0">
+                    <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded border shrink-0 ${
+                      isSelected
+                        ? 'border-[#e3b23c]/40 bg-[#253248] text-[#e3b23c]'
+                        : 'border-[#f4eedf]/10 bg-[#161d2a] text-[#a6b0c3]'
+                    }`}>
                       {isIN ? (isBSE ? 'BSE' : 'NSE') : 'US'}
                     </span>
                     <div className="flex flex-col min-w-0 overflow-hidden">
-                      <span className="font-display font-bold text-sm text-[#f4eedf] group-hover:text-[#e3b23c] transition-colors truncate">
+                      <span className={`font-display font-bold text-sm transition-colors truncate ${
+                        isSelected ? 'text-[#e3b23c]' : 'text-[#f4eedf] group-hover:text-[#e3b23c]'
+                      }`}>
                         {cleanSymbol}
                       </span>
-                      <span className="text-xs text-[#a6b0c3] truncate max-w-[320px] sm:max-w-lg font-normal">
+                      <span className={`text-xs truncate max-w-[320px] sm:max-w-lg font-normal ${
+                        isSelected ? 'text-[#e2e8f0]' : 'text-[#a6b0c3]'
+                      }`}>
                         {item.name}
                       </span>
                     </div>
                   </div>
-                  <span className="text-[11px] text-[#a6b0c3] font-display shrink-0 hidden sm:inline-block">
+                  <span className={`text-[11px] font-display shrink-0 hidden sm:inline-block ${
+                    isSelected ? 'text-[#e3b23c]' : 'text-[#a6b0c3]'
+                  }`}>
                     {isIN ? '₹ INR' : '$ USD'}
                   </span>
                 </div>
@@ -384,6 +442,7 @@ export default function TickerInput({
             type="text"
             value={query}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
             className="w-full bg-transparent text-sm text-[#f4eedf] placeholder-[#a6b0c3]/70 focus:outline-none font-sans font-medium tracking-wide"
             placeholder="Search any Indian or US company (e.g. RELIANCE, HUL, HDFCBANK, AAPL)..."
@@ -424,6 +483,7 @@ export default function TickerInput({
           type="text"
           value={query}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
           className="w-full bg-transparent text-sm sm:text-base text-[#f4eedf] placeholder-[#a6b0c3]/60 focus:outline-none font-sans font-medium tracking-wide"
           placeholder="Search any Indian or US company (e.g. Reliance, HUL, HDFCBANK, Apple)..."
