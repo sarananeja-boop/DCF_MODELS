@@ -566,8 +566,9 @@ def analyze(req: AnalyzeRequest):
                         fcff_default_margin = latest_margin
                         fcff_default_current_margin = latest_margin
                     else:
-                        fcff_default_margin = avg_ebit_margin
-                        fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.02 else None
+                        median_ebit_m = float(np.median(ebit_margins_hist)) if ebit_margins_hist else avg_ebit_margin
+                        fcff_default_margin = 0.60 * latest_margin + 0.40 * min(avg_ebit_margin, median_ebit_m)
+                        fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.015 else None
                     # For heavy greenfield infrastructure builders (CapEx > 2.2x D&A and expanding EBITDA),
                     # converge depressed target EBIT margin (<25%) toward mature infrastructure EBITDA margin net of steady-state D&A
                     if (

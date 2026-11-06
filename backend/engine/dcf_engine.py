@@ -468,15 +468,21 @@ def run_dcf(
     last_ebit = hist_ebit[-1] if hist_ebit else (last_rev * ebit_margin)
     hist_nopat = last_ebit * (1 - tax_rate)
     hist_roic = (hist_nopat / tangible_ic) if (tangible_ic > 0 and hist_nopat > 0) else 0.0
+    yr5_tangible_ic = tangible_ic * max(1.0, (proj_rev[-1] / last_revenue) if last_revenue > 0 and len(proj_rev) > 0 else 1.0)
     proj_roic = (
-        (proj_nopat[-1] / tangible_ic)
-        if (tangible_ic > 0 and len(proj_nopat) > 0 and proj_nopat[-1] > 0)
+        (proj_nopat[-1] / yr5_tangible_ic)
+        if (yr5_tangible_ic > 0 and len(proj_nopat) > 0 and proj_nopat[-1] > 0)
         else discount_rate
     )
-    effective_roic = max(hist_roic, proj_roic) if (current_margin is not None or hist_roic <= 0) else hist_roic
+    effective_roic = max(hist_roic, proj_roic) if hist_roic <= 0.02 else (0.50 * hist_roic + 0.50 * proj_roic if current_margin is not None else hist_roic)
 
     # Economic competition bounds sustainable long-term ROIC (accommodating capital-light compounders)
-    is_high_roic = (not is_extractive and not is_cyclical and (float(metrics.get("avg_gross_margin", 0.0)) >= 0.50 or effective_roic >= 0.28))
+    is_high_roic = (
+        not is_extractive
+        and not is_cyclical
+        and effective_roic >= 0.22
+        and (float(metrics.get("avg_gross_margin", 0.0)) >= 0.45 or effective_roic >= 0.28)
+    )
     max_roic_cap = 0.45 if is_high_roic else 0.30
     min_reinv_floor = 0.06 if is_high_roic else 0.10
     min_roic_floor = (discount_rate + 0.045) if (not is_extractive and not is_cyclical and avg_capex_pct > effective_dna_pct * 2.20) else discount_rate
@@ -502,7 +508,7 @@ def run_dcf(
         effective_terminal_growth = clamped_terminal_growth
 
     roic_reinv = effective_terminal_growth / sustainable_roic
-    if not is_extractive and not is_cyclical and margin_schedule[-1] > 0:
+    if is_high_roic and margin_schedule[-1] > 0:
         yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
         model_yr5_reinv = max(
             0.0,
@@ -512,7 +518,7 @@ def run_dcf(
             )
             / yr5_nopat_margin,
         )
-        blended_reinv = min(roic_reinv, 0.35 * roic_reinv + 0.65 * model_yr5_reinv)
+        blended_reinv = min(roic_reinv, 0.45 * roic_reinv + 0.55 * model_yr5_reinv)
         terminal_reinv_rate = min(0.80, max(min_reinv_floor, blended_reinv))
     else:
         terminal_reinv_rate = min(0.80, max(min_reinv_floor, roic_reinv))
@@ -540,6 +546,8 @@ def run_dcf(
         benchmark_exit_mult = 4.5 if is_india else 8.0
     elif is_cyclical:
         benchmark_exit_mult = 5.5 if is_india else 7.5
+    elif str(stock_data.get("sector") or "").lower() == "utilities":
+        benchmark_exit_mult = 7.5
     elif stock_data.get("is_financial", False):
         benchmark_exit_mult = 8.0
     elif avg_gm_val >= 0.55 and start_growth >= 0.15:
@@ -777,18 +785,19 @@ def run_dcf_batch(
         hist_nopat / tangible_ic,
         0.0,
     )
+    yr5_tangible_ic_arr = tangible_ic * np.maximum(1.0, last_rev / max(1.0, last_revenue))
     proj_roic = np.where(
-        (tangible_ic > 0) & (last_nopat > 0),
-        last_nopat / tangible_ic,
+        (yr5_tangible_ic_arr > 0) & (last_nopat > 0),
+        last_nopat / yr5_tangible_ic_arr,
         sim_wacc,
     )
     if current_margin is not None:
-        effective_roic = np.maximum(hist_roic, proj_roic)
+        effective_roic = np.where(hist_roic <= 0.02, np.maximum(hist_roic, proj_roic), 0.50 * hist_roic + 0.50 * proj_roic)
     else:
         effective_roic = np.where(hist_roic > 0, hist_roic, proj_roic)
 
-    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.50)
-    is_high_roic_arr = (not is_extractive and not is_cyclical) & (is_high_gm | (effective_roic >= 0.28))
+    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.45)
+    is_high_roic_arr = (not is_extractive and not is_cyclical) & (effective_roic >= 0.22) & (is_high_gm | (effective_roic >= 0.28))
     max_roic_cap = np.where(is_high_roic_arr, 0.45, 0.30)
     min_reinv_floor = np.where(is_high_roic_arr, 0.06, 0.10)
     min_roic_floor_arr = (sim_wacc + 0.045) if (not is_extractive and not is_cyclical and avg_capex_pct > effective_dna_pct * 2.20) else sim_wacc
@@ -819,8 +828,9 @@ def run_dcf_batch(
             )
             / yr5_nopat_m,
         )
-        blended_reinv = np.minimum(roic_reinv, 0.35 * roic_reinv + 0.65 * model_yr5_reinv)
-        terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, blended_reinv))
+        blended_reinv = np.minimum(roic_reinv, 0.45 * roic_reinv + 0.55 * model_yr5_reinv)
+        reinv_candidate = np.where(is_high_roic_arr, blended_reinv, roic_reinv)
+        terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, reinv_candidate))
     else:
         terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, roic_reinv))
 

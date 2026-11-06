@@ -48,18 +48,18 @@ const PREVIEW_DATA = {
     name: 'CESC Limited',
     tabLabel: '🇮🇳 CESC (NSE)',
     currency: '₹',
-    fairValue: '₹223.42',
-    fairValueNum: 223.42,
-    currentPrice: '₹143.47',
-    currentPriceNum: 143.47,
-    upsidePct: 55.7,
+    fairValue: '₹98.02',
+    fairValueNum: 98.02,
+    currentPrice: '₹126.25',
+    currentPriceNum: 126.25,
+    upsidePct: -22.4,
     upsideBadge: 'Regulated Utility Model',
     upsideNote: 'Regulated utility cash flows analyzed via cost-plus rate base model',
-    wacc: '9.1%',
-    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.85',
-    mcRange: '₹128 – ₹471',
-    p5Num: 128,
-    p95Num: 471,
+    wacc: '9.8%',
+    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 1.01',
+    mcRange: '₹62 – ₹168',
+    p5Num: 62,
+    p95Num: 168,
   },
   HINDUNILVR: {
     ticker: 'HINDUNILVR.NS',
@@ -169,17 +169,22 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
     sessionStorage.removeItem('vl_analysisData'); // Clear stale legacy cache
-    if (sessionStorage.getItem('vl_analysisData_v2') || sessionStorage.getItem('vl_analysisData_v3')) {
+    if (
+      sessionStorage.getItem('vl_analysisData_v2') ||
+      sessionStorage.getItem('vl_analysisData_v3') ||
+      sessionStorage.getItem('vl_analysisData_v4')
+    ) {
       sessionStorage.removeItem('vl_analysisData_v2');
       sessionStorage.removeItem('vl_analysisData_v3');
+      sessionStorage.removeItem('vl_analysisData_v4');
       sessionStorage.removeItem('vl_overrides');
     }
-    const saved = sessionStorage.getItem('vl_analysisData_v4');
+    const saved = sessionStorage.getItem('vl_analysisData_v5');
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
-        sessionStorage.removeItem('vl_analysisData_v4');
+        sessionStorage.removeItem('vl_analysisData_v5');
         return null;
       }
       return parsed;
@@ -236,8 +241,8 @@ export default function App() {
   const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData_v4', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData_v4');
+    if (analysisData) sessionStorage.setItem('vl_analysisData_v5', JSON.stringify(analysisData));
+    else sessionStorage.removeItem('vl_analysisData_v5');
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
