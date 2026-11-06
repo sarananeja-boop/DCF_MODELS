@@ -153,7 +153,7 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
   const lines = displayedText.split('\n');
 
   return (
-    <h1 className="font-heromono text-3xl sm:text-5xl md:text-[54px] font-medium tracking-tight text-[#f4eedf] leading-[1.15] drop-shadow-[0_4px_24px_rgba(6,15,32,0.65)] min-h-[72px] sm:min-h-[115px] md:min-h-[125px]">
+    <h1 className="font-heromono text-[22px] sm:text-5xl md:text-[54px] font-medium tracking-tight text-[#f4eedf] leading-[1.18] sm:leading-[1.15] drop-shadow-[0_4px_24px_rgba(6,15,32,0.65)] min-h-[56px] sm:min-h-[115px] md:min-h-[125px] break-words">
       {lines[0]}
       {lines.length > 1 && (
         <>
@@ -161,7 +161,7 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
           {lines[1]}
         </>
       )}
-      <span className={`inline-block w-2 sm:w-2.5 h-6 sm:h-10 md:h-11 ml-1.5 align-middle bg-[#e3b23c] ${isDone ? 'animate-pulse opacity-50' : 'animate-pulse'}`} />
+      <span className={`inline-block w-2 sm:w-2.5 h-5 sm:h-10 md:h-11 ml-1.5 align-middle bg-[#e3b23c] ${isDone ? 'animate-pulse opacity-50' : 'animate-pulse'}`} />
     </h1>
   );
 };
@@ -579,33 +579,33 @@ export default function App() {
   const wsIsUndervalued = wsUpsidePct >= 0;
 
   return (
-    <div className="min-h-screen bg-[#0c1017] text-[#f4eedf] font-sans flex flex-col selection:bg-[#e3b23c] selection:text-[#0f141c]">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#0c1017] text-[#f4eedf] font-sans flex flex-col selection:bg-[#e3b23c] selection:text-[#0f141c]">
       <Toaster position="top-right" toastOptions={{ className: 'bg-[#141b26] text-[#f4eedf] border border-[#f4eedf]/15 font-sans text-xs font-semibold' }} />
       
       {/* Workspace Sticky Header (Shown ONLY when inside Valuation Workspace) */}
       {analysisData && (
         <header className="sticky top-0 z-50 w-full border-b border-[#f4eedf]/10 bg-[#0c1017]/95 backdrop-blur-md">
-          <div className="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 py-3">
+          <div className="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 px-3.5 sm:px-6 py-2.5 sm:py-3">
             {/* Brand Logo */}
             <div 
-              className="flex items-center gap-3 cursor-pointer group select-none shrink-0"
+              className="order-1 flex items-center gap-2.5 sm:gap-3 cursor-pointer group select-none shrink-0"
               onClick={() => handleGoHome(true)}
             >
-              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 group-hover:border-[#e3b23c]/50 transition-all">
+              <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#141b26] border border-[#f4eedf]/12 group-hover:border-[#e3b23c]/50 transition-all">
                 <svg className="w-4 h-4 text-[#e3b23c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 3v18h18" />
                   <path d="m19 9-5 5-4-4-3 3" />
                 </svg>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-display text-lg font-bold tracking-tight text-[#f4eedf]">
+                <span className="font-display text-base sm:text-lg font-bold tracking-tight text-[#f4eedf]">
                   Valuation<span className="text-[#e3b23c]">Labs</span>
                 </span>
               </div>
             </div>
 
-            {/* Center: Wide Search Bar */}
-            <div className="flex-1 flex justify-center min-w-[280px] max-w-2xl mx-auto">
+            {/* Center: Wide Search Bar (Row 2 on mobile, Center on desktop) */}
+            <div className="order-3 md:order-2 w-full md:w-auto md:flex-1 flex justify-center md:min-w-[280px] max-w-2xl mx-auto">
               <TickerInput
                 compact={true}
                 ticker={ticker}
@@ -618,29 +618,31 @@ export default function App() {
             </div>
 
             {/* Right Actions */}
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="order-2 md:order-3 flex items-center gap-1.5 sm:gap-2.5 shrink-0">
               <ExcelDownloadButton data={analysisData} compact={true} />
               <button
                 type="button"
                 onClick={() => setShowMethodology(true)}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
+                title="Methodology"
               >
                 <FiFileText className="w-3.5 h-3.5 text-[#e3b23c]" />
-                <span>Methodology</span>
+                <span className="hidden sm:inline">Methodology</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowFeedbackModal(true)}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs font-bold text-[#a6b0c3] hover:text-[#f4eedf] bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/12 rounded-xl transition-colors cursor-pointer"
                 title="Leave feedback or report an error"
               >
                 <FiMessageSquare className="w-3.5 h-3.5 text-[#e3b23c]" />
-                <span>Feedback</span>
+                <span className="hidden sm:inline">Feedback</span>
               </button>
               <button 
                 type="button"
                 onClick={() => handleGoHome(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#f4eedf] hover:text-[#e3b23c] px-3.5 py-2 rounded-xl bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/15 transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#f4eedf] hover:text-[#e3b23c] px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-[#141b26] hover:bg-[#1f2937] border border-[#f4eedf]/15 transition cursor-pointer"
+                title="Home"
               >
                 <FiRotateCcw className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Home</span>
@@ -1367,7 +1369,8 @@ export default function App() {
                     </span>
                   </div>
 
-                  <svg viewBox="0 0 960 335" className="w-full h-auto select-none">
+                  <div className="overflow-x-auto -mx-2 px-2 pb-1">
+                    <svg viewBox="0 0 960 335" className="w-full min-w-[640px] sm:min-w-0 h-auto select-none">
                     <defs>
                       <linearGradient id="decayAreaGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.16" />
@@ -1626,7 +1629,8 @@ export default function App() {
                       <text x="899" y="268" textAnchor="middle" fill="#34d399" fontSize="12" fontWeight="700" fontFamily="Space Grotesk, sans-serif">FCFF Cash</text>
                       <text x="899" y="284" textAnchor="middle" fill="#34d399" fontSize="10" fontWeight="800" fontFamily="monospace">Distributable</text>
                     </g>
-                  </svg>
+                    </svg>
+                  </div>
                 </div>
               </section>
 
@@ -1685,7 +1689,8 @@ export default function App() {
                     </span>
                   </div>
 
-                  <svg viewBox="0 0 960 370" className="w-full h-auto select-none">
+                  <div className="overflow-x-auto -mx-2 px-2 pb-1">
+                    <svg viewBox="0 0 960 370" className="w-full min-w-[640px] sm:min-w-0 h-auto select-none">
                     <defs>
                       {/* Frosted Glass Backplates */}
                       <linearGradient id="panelGlassGrad" x1="0" y1="0" x2="1" y2="1">
@@ -2050,7 +2055,8 @@ export default function App() {
                         />
                       </circle>
                     </g>
-                  </svg>
+                    </svg>
+                  </div>
                 </div>
               </section>
 
@@ -2411,10 +2417,10 @@ export default function App() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pb-6 border-b border-[#f4eedf]/10">
-                    <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-6 border-b border-[#f4eedf]/10">
+                    <div className="min-w-0">
                       <span className="text-xs text-[#a6b0c3] block mb-1">DCF Intrinsic Fair Value</span>
-                      <span className={`font-display text-3xl sm:text-4xl font-bold tabular-nums ${
+                      <span className={`font-display text-2xl sm:text-4xl font-bold tabular-nums break-words ${
                         currentPreview.upsidePct >= 0 ? 'text-[#34b38a]' : 'text-[#e3b23c]'
                       }`}>
                         {currentPreview.fairValue}
@@ -2426,19 +2432,19 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs text-[#a6b0c3] block mb-1">Current Market Price</span>
-                      <span className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums">
+                      <span className="font-display text-2xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums break-words">
                         {currentPreview.currentPrice}
                       </span>
-                      <span className="text-xs text-[#a6b0c3] block mt-1">
+                      <span className="text-xs text-[#a6b0c3] block mt-1 truncate">
                         {currentPreview.name}
                       </span>
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs text-[#a6b0c3] block mb-1">Blended WACC</span>
-                      <span className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums">
+                      <span className="font-display text-2xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums">
                         {currentPreview.wacc}
                       </span>
                       <span className="text-xs text-[#a6b0c3] block mt-1">
@@ -2446,9 +2452,9 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs text-[#a6b0c3] block mb-1">Monte Carlo (P5 – P95)</span>
-                      <span className="font-display text-2xl sm:text-3xl font-bold text-[#8ab4f8] tabular-nums">
+                      <span className="font-display text-lg sm:text-3xl font-bold text-[#8ab4f8] tabular-nums break-words">
                         {currentPreview.mcRange}
                       </span>
                       <span className="text-xs text-[#a6b0c3] block mt-1">
@@ -2458,7 +2464,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex justify-between text-xs font-semibold text-[#a6b0c3]">
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 text-xs font-semibold text-[#a6b0c3]">
                       <span>Share Price vs. DCF Fair Value Scale</span>
                       <span className="text-[#f4eedf]">{currentPreview.upsideNote}</span>
                     </div>
@@ -2481,14 +2487,14 @@ export default function App() {
                       />
                     </div>
                     <div className="flex flex-wrap justify-between items-center gap-4 pt-2">
-                      <div className="flex gap-6 text-xs font-bold">
+                      <div className="flex flex-wrap gap-3 sm:gap-6 text-xs font-bold">
                         <span className="text-[#e3b23c]">● DCF Fair Value: {currentPreview.fairValue}</span>
                         <span className="text-[#f4eedf]">● Market Price: {currentPreview.currentPrice}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => handleQuickLaunch(currentPreview.ticker, currentPreview.market)}
-                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] font-bold text-xs shadow-md transition cursor-pointer"
+                        className="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#e3b23c] hover:bg-[#ecc052] text-[#0f141c] font-bold text-xs shadow-md transition cursor-pointer"
                       >
                         <span>Analyze {currentPreview.name} Live</span>
                         <FiArrowRight />
@@ -2595,21 +2601,21 @@ export default function App() {
                   {analysisData.method_comparison.can_switch ? (
                     <>
                       {/* Left: Simple, Tactile Segmented Switch */}
-                      <div className="inline-flex items-center p-1 rounded-xl bg-[#090d14] border border-white/[0.08] gap-1 shrink-0">
+                      <div className="grid grid-cols-1 sm:inline-flex items-center p-1 rounded-xl bg-[#090d14] border border-white/[0.08] gap-1 w-full sm:w-auto sm:shrink-0">
                         {/* Button 1: FCFF Model */}
                         <button
                           type="button"
                           disabled={loading}
                           onClick={() => handleSwitchValuationMethod('fcff')}
-                          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none ${
+                          className={`flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none w-full sm:w-auto ${
                             !wsIsEquityModel
                               ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
                               : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
                           }`}
                         >
-                          <span>Enterprise DCF (FCFF)</span>
+                          <span className="truncate">Enterprise DCF (FCFF)</span>
                           {analysisData.method_comparison.fcff_implied_price != null && (
-                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded shrink-0 ${
                               !wsIsEquityModel
                                 ? 'bg-[#0a0e17]/20 text-[#0a0e17]'
                                 : 'bg-[#141c2a] text-[#e3b23c] border border-white/[0.08]'
@@ -2624,15 +2630,15 @@ export default function App() {
                           type="button"
                           disabled={loading}
                           onClick={() => handleSwitchValuationMethod('ddm')}
-                          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none ${
+                          className={`flex items-center justify-between sm:justify-start gap-2 px-3 sm:px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none w-full sm:w-auto ${
                             wsIsEquityModel
                               ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
                               : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
                           }`}
                         >
-                          <span>DDM / FCFE Model</span>
+                          <span className="truncate">DDM / FCFE Model</span>
                           {analysisData.method_comparison.ddm_implied_price != null && (
-                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                            <span className={`text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded shrink-0 ${
                               wsIsEquityModel
                                 ? 'bg-[#0a0e17]/20 text-[#0a0e17]'
                                 : 'bg-[#141c2a] text-[#8ab4f8] border border-white/[0.08]'
@@ -2712,7 +2718,7 @@ export default function App() {
                           </div>
 
                           <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
+                            <table className="w-full min-w-[520px] text-left text-xs border-collapse">
                               <thead>
                                 <tr className="border-b border-white/[0.08] text-[#818ea4]">
                                   <th className="py-2 pr-4 font-semibold">Valuation Dimension</th>
@@ -2879,7 +2885,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
               
               {/* Left Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
-              <div className="lg:col-span-5 xl:col-span-4 2xl:col-span-3 min-w-0 space-y-4">
+              <div className="order-2 lg:order-1 lg:col-span-5 xl:col-span-4 2xl:col-span-3 min-w-0 space-y-4">
                 <AssumptionSliders 
                   key={`sliders-${resetKey}-${analysisData.company?.ticker}-${analysisData.company?.model_type || 'FCFF'}`}
                   data={analysisData}
@@ -2903,7 +2909,7 @@ export default function App() {
               </div>
 
               {/* Right Columns: Tab Navigation + Active Data View */}
-              <div className="lg:col-span-7 xl:col-span-8 2xl:col-span-9 min-w-0 space-y-4">
+              <div className="order-1 lg:order-2 lg:col-span-7 xl:col-span-8 2xl:col-span-9 min-w-0 space-y-4">
                 {/* Tab Bar with Smooth Scrolling */}
                 <div className="bg-[#141b26] rounded-2xl p-1.5 border border-[#f4eedf]/10 shadow-lg relative overflow-hidden">
                   <div 

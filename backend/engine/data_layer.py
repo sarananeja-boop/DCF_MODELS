@@ -32,8 +32,9 @@ def safe_get(df: pd.DataFrame, column: str, default: float = 0) -> np.ndarray:
     """Extract a column from a DataFrame, returning a default-filled array if missing.
 
     This mirrors the ``safe_get`` helper in notebook Step 3C.  It also tries
-    common alternate column names used by Indian stocks so that the same
-    pipeline works for both US and Indian equities.
+    common alternate column names used by Indian stocks and global filers, combining
+    available candidate columns row-wise so partial NaNs in a primary column
+    gracefully fall back to populated alternate columns.
 
     Args:
         df:       The pandas DataFrame (e.g. income statement).
@@ -43,24 +44,44 @@ def safe_get(df: pd.DataFrame, column: str, default: float = 0) -> np.ndarray:
     Returns:
         A numpy array of length ``len(df)``.
     """
-    # Alternate name map – Indian stocks and financial companies sometimes use different labels
+    if df is None or df.empty:
+        return np.array([], dtype=float)
+
+    # Alternate name map – Indian stocks, resource companies, and financial companies sometimes use different labels
     _alternates: Dict[str, List[str]] = {
         "Total Revenue": ["Revenue", "Total Revenue From Operations", "Operating Revenue"],
-        "Current Debt": ["Current Borrowings", "Short Term Debt"],
-        "Net Income": ["Net Income Common Stockholders", "Net Income Continuous Operations", "Net Income Including Noncontrolling Interests", "Normalized Income"],
+        "EBIT": ["Operating Income", "Total Operating Income As Reported", "Operating Profit"],
+        "Operating Income": ["Total Operating Income As Reported", "EBIT"],
+        "Depreciation And Amortization": [
+            "Depreciation Amortization Depletion",
+            "Depreciation",
+            "Reconciled Depreciation",
+            "Depreciation And Amortization In Income Statement",
+        ],
+        "Capital Expenditure": [
+            "Purchase Of PPE",
+            "Net PPE Purchase And Sale",
+            "Capital Expenditure Reported",
+        ],
+        "Current Debt": ["Current Borrowings", "Short Term Debt", "Current Debt And Capital Lease Obligation"],
+        "Net Income": [
+            "Net Income Common Stockholders",
+            "Net Income Continuous Operations",
+            "Net Income Including Noncontrolling Interests",
+            "Normalized Income",
+        ],
         "Stockholders Equity": ["Common Stock Equity", "Total Equity Gross Minority Interest", "Tangible Book Value"],
         "Net Interest Income": ["Operating Revenue", "Total Revenue"],
         "Pretax Income": ["Income Before Tax", "Earnings Before Taxes"],
         "Cash Dividends Paid": ["Common Stock Dividend Paid", "Payment Of Dividends"],
     }
 
-    if column in df.columns:
-        return df[column].fillna(default).values
-
-    # Try alternates
-    for alt in _alternates.get(column, []):
-        if alt in df.columns:
-            return df[alt].fillna(default).values
+    candidates = [column] + _alternates.get(column, [])
+    present_cols = [c for c in candidates if c in df.columns]
+    if present_cols:
+        sub = df[present_cols].apply(pd.to_numeric, errors="coerce")
+        combined = sub.bfill(axis=1).iloc[:, 0]
+        return combined.fillna(default).values.astype(float)
 
     return np.full(len(df), default, dtype=float)
 
@@ -401,31 +422,44 @@ def _copy_stock_data(d: dict) -> dict:
         cp["cash_flow"] = cp["cash_flow"].copy()
     return cp
 
-def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[str] = None) -> Tuple[bool, bool]:
+def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[str] = None, symbol: Optional[str] = None) -> Tuple[bool, bool]:
     """
     Classifies company into (is_extractive, is_cyclical).
     - is_extractive: Oil & Gas exploration/drilling/upstream/integrated, Thermal Coal, Mining & Minerals.
       Assets suffer from physical depletion; CapEx is required just to sustain reserves and
       perpetual volume growth cannot exceed physical/transition constraints.
-    - is_cyclical: Extractive PLUS Basic Materials (Steel, Aluminum, Metals, Chemicals, Refining).
+    - is_cyclical: Extractive PLUS Basic Materials (Steel, Aluminum, Metals, Commodity Chemicals, Refining).
       Earnings fluctuate with global commodity pricing; margins must mean-revert to multi-year cycle averages.
     """
     sec = sector or ""
     ind = industry or ""
+    sym_clean = (symbol or "").replace(".NS", "").replace(".BO", "").strip().upper()
     text = (sec + " " + ind).lower()
-    
+
+    # Diversified conglomerates (e.g. Reliance Industries: Telecom + Retail + O2C) and
+    # branded specialty chemical / consumer adhesive / paint compounders are not commodity mines.
+    if sym_clean in {"RELIANCE", "PIDILITIND", "ASIANPAINT", "BERGEPAINT", "SHW", "LIN", "ECL", "APD"}:
+        return False, False
+    if "specialty chemicals" in text:
+        return False, False
+
     extractive_keywords = [
-        "oil & gas", "oil and gas", "thermal coal", "coal", "integrated oil", "drilling",
-        "exploration & production", "upstream", "crude", "petroleum", "mining"
+        "oil & gas e&p", "oil & gas exploration", "oil & gas drilling", "oil & gas integrated",
+        "thermal coal", "coal", "integrated oil", "drilling",
+        "exploration & production", "upstream", "crude", "mining", "gold", "silver", "copper",
+        "other industrial metals & mining", "other precious metals & mining", "coking coal"
     ]
     is_extractive = any(k in text for k in extractive_keywords)
-    
+    if not is_extractive and ("oil & gas" in text or "petroleum" in text) and "refining & marketing" not in text and "equipment" not in text and "midstream" not in text:
+        is_extractive = True
+
     cyclical_keywords = extractive_keywords + [
-        "basic materials", "steel", "aluminum", "aluminium", "metals", "chemicals", 
-        "commodity chemicals", "iron", "fertilizer", "refining", "paper & forest"
+        "steel", "aluminum", "aluminium", "metals", "commodity chemicals",
+        "agricultural inputs", "iron", "fertilizer", "refining", "paper & forest", "lumber",
+        "building materials", "cement"
     ]
-    is_cyclical = any(k in text for k in cyclical_keywords)
-    
+    is_cyclical = is_extractive or any(k in text for k in cyclical_keywords)
+
     return is_extractive, is_cyclical
 
 
@@ -607,7 +641,126 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
 
     market_cap = float(current_price) * float(shares_out)
 
-    # Estimate debt and D/E ratio for bottom-up beta relevering
+    # -----------------------------------------------------------------------
+    # 1. Cross-Currency Reconciler (runs BEFORE Unit Scale Reconciler & Beta D/E)
+    # Converts foreign statement reporting currency to trading currency (e.g. NVO reporting in DKK while trading in USD,
+    # TSM reporting in TWD while trading in USD, or ADR-linked Indian firms reporting in USD while trading in INR).
+    # Includes a sanity guard against Yahoo Finance metadata bugs (e.g. HCLTECH.NS where info['financialCurrency']
+    # claims 'USD' even though the financial statement DataFrames are already reported in INR).
+    # -----------------------------------------------------------------------
+    was_cross_currency = False
+    try:
+        fin_currency = str(info.get("financialCurrency") or "").upper()
+        trade_currency = str(info.get("currency") or "").upper()
+        if fin_currency and trade_currency and fin_currency != trade_currency:
+            fx_rate = get_cross_fx_rate(fin_currency, trade_currency)
+            if fx_rate and abs(fx_rate - 1.0) > 0.001:
+                # Sanity check: verify that statement revenue isn't ALREADY in trade_currency
+                raw_stmt_rev = None
+                if not income_stmt.empty:
+                    for col in ["Total Revenue", "Operating Revenue", "Revenue"]:
+                        if col in income_stmt.columns:
+                            v = income_stmt[col].dropna()
+                            if not v.empty and float(v.iloc[0]) > 0:
+                                raw_stmt_rev = float(v.iloc[0])
+                                break
+                already_in_trade_curr = False
+                if raw_stmt_rev and market_cap > 0 and fx_rate > 10.0:
+                    # E.g. HCLTECH.NS: fin_currency='USD', trade_currency='INR', fx_rate ~ 86-94.
+                    # If raw_stmt_rev is ALREADY ~0.15x - 5.0x of INR market_cap, multiplying by 90x would make
+                    # revenue 15x - 450x of market_cap!
+                    raw_rev_to_mcap = raw_stmt_rev / market_cap
+                    fx_rev_to_mcap = (raw_stmt_rev * fx_rate) / market_cap
+                    if 0.08 <= raw_rev_to_mcap <= 8.0 and fx_rev_to_mcap > 12.0:
+                        already_in_trade_curr = True
+                        logger.info(
+                            "Skipping FX conversion for %s: financialCurrency='%s' vs currency='%s', "
+                            "but statement revenue (%.2f) is already in %s scale relative to Market Cap (%.2f).",
+                            yf_ticker, fin_currency, trade_currency, raw_stmt_rev, trade_currency, market_cap,
+                        )
+                        info["financialCurrency"] = trade_currency
+
+                if not already_in_trade_curr:
+                    was_cross_currency = True
+                    logger.info(
+                        "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
+                        "Converting financial statements to %s using FX rate %.4f",
+                        yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
+                    )
+                    if not income_stmt.empty:
+                        income_stmt = income_stmt * fx_rate
+                    if not balance_sheet.empty:
+                        balance_sheet = balance_sheet * fx_rate
+                    if not cash_flow.empty:
+                        cash_flow = cash_flow * fx_rate
+                    info["financialCurrency"] = trade_currency
+    except Exception as e:
+        logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
+
+    # -----------------------------------------------------------------------
+    # 2. Automated Statement Unit Scale Reconciliation
+    # Fixes scraping discrepancies where Yahoo Finance reports statements in units
+    # that differ by 10x, 100x, or 1000x from per-share metrics (e.g. INDOMIM).
+    # Skipped for cross-currency ADRs (e.g. TSM, NVO) where ADR-to-ordinary share ratios
+    # (5:1 or 10:1) or local-currency revenuePerShare would cause false 0.1x scaling.
+    # -----------------------------------------------------------------------
+    scale_multiplier = 1.0
+    if not was_cross_currency:
+        try:
+            rev_per_share = info.get("revenuePerShare")
+            bs_bv_per_share = info.get("bookValue")
+
+            fin_rev = None
+            if not income_stmt.empty:
+                for col in ["Total Revenue", "Operating Revenue"]:
+                    if col in income_stmt.columns:
+                        val = income_stmt[col].dropna()
+                        if not val.empty and float(val.iloc[0]) > 0:
+                            fin_rev = float(val.iloc[0])
+                            break
+
+            fin_equity = None
+            if not balance_sheet.empty:
+                for col in ["Stockholders Equity", "Total Stockholders' Equity", "Common Stock Equity"]:
+                    if col in balance_sheet.columns:
+                        val = balance_sheet[col].dropna()
+                        if not val.empty and float(val.iloc[0]) > 0:
+                            fin_equity = float(val.iloc[0])
+                            break
+
+            ratios = []
+            if rev_per_share and shares_out and fin_rev and fin_rev > 0:
+                implied_rev = float(rev_per_share) * float(shares_out)
+                ratios.append(implied_rev / fin_rev)
+
+            if bs_bv_per_share and shares_out and fin_equity and fin_equity > 0:
+                implied_eq = float(bs_bv_per_share) * float(shares_out)
+                ratios.append(implied_eq / fin_equity)
+
+            if ratios:
+                avg_ratio = float(np.median(ratios))
+                if 7.0 <= avg_ratio <= 14.0:
+                    scale_multiplier = 10.0
+                elif 70.0 <= avg_ratio <= 140.0:
+                    scale_multiplier = 100.0
+                elif 700.0 <= avg_ratio <= 1400.0:
+                    scale_multiplier = 1000.0
+                elif 0.07 <= avg_ratio <= 0.14:
+                    scale_multiplier = 0.1
+
+                if scale_multiplier != 1.0:
+                    logger.warning(
+                        "Detected %sx unit scale mismatch for %s (implied vs statement ratio: %.2f). "
+                        "Auto-reconciling financial statements by %sx.",
+                        scale_multiplier, yf_ticker, avg_ratio, scale_multiplier
+                    )
+                    income_stmt = income_stmt * scale_multiplier
+                    balance_sheet = balance_sheet * scale_multiplier
+                    cash_flow = cash_flow * scale_multiplier
+        except Exception as e:
+            logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
+
+    # Estimate debt and D/E ratio for bottom-up beta relevering (after FX & unit-scale reconciliation)
     approx_debt = 0.0
     if not balance_sheet.empty:
         for debt_col in ["Total Debt", "Long Term Debt And Capital Lease Obligation", "Long Term Debt"]:
@@ -616,6 +769,10 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
                 if len(d_vals) > 0 and float(d_vals.iloc[0]) > 0:
                     approx_debt = float(d_vals.iloc[0])
                     break
+        if "Capital Lease Obligations" in balance_sheet.columns and approx_debt > 0:
+            cl_vals = balance_sheet["Capital Lease Obligations"].dropna()
+            if len(cl_vals) > 0 and 0 < float(cl_vals.iloc[0]) < approx_debt:
+                approx_debt -= float(cl_vals.iloc[0])
     de_ratio = (approx_debt / market_cap) if market_cap > 0 else 0.0
 
     beta_info = compute_clean_beta(
@@ -631,91 +788,6 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         hist_1y=hist_1y,
         hist_2y=hist_2y,
     )
-
-    # -----------------------------------------------------------------------
-    # Automated Statement Unit Scale Reconciliation
-    # Fixes international scraping discrepancies where Yahoo Finance reports
-    # statements in units that differ by 10x, 100x, or 1000x from the per-share metrics.
-    # E.g. Indian filings in Crores scraped as Tens of Millions or Lakhs (e.g. INDOMIM).
-    # -----------------------------------------------------------------------
-    scale_multiplier = 1.0
-    try:
-        rev_per_share = info.get("revenuePerShare")
-        bs_bv_per_share = info.get("bookValue")
-        
-        fin_rev = None
-        if not income_stmt.empty:
-            for col in ["Total Revenue", "Operating Revenue"]:
-                if col in income_stmt.columns:
-                    val = income_stmt[col].dropna()
-                    if not val.empty and float(val.iloc[0]) > 0:
-                        fin_rev = float(val.iloc[0])
-                        break
-        
-        fin_equity = None
-        if not balance_sheet.empty:
-            for col in ["Stockholders Equity", "Total Stockholders' Equity", "Common Stock Equity"]:
-                if col in balance_sheet.columns:
-                    val = balance_sheet[col].dropna()
-                    if not val.empty and float(val.iloc[0]) > 0:
-                        fin_equity = float(val.iloc[0])
-                        break
-
-        ratios = []
-        if rev_per_share and shares_out and fin_rev and fin_rev > 0:
-            implied_rev = float(rev_per_share) * float(shares_out)
-            ratios.append(implied_rev / fin_rev)
-            
-        if bs_bv_per_share and shares_out and fin_equity and fin_equity > 0:
-            implied_eq = float(bs_bv_per_share) * float(shares_out)
-            ratios.append(implied_eq / fin_equity)
-
-        if ratios:
-            avg_ratio = float(np.median(ratios))
-            if 7.0 <= avg_ratio <= 14.0:
-                scale_multiplier = 10.0
-            elif 70.0 <= avg_ratio <= 140.0:
-                scale_multiplier = 100.0
-            elif 700.0 <= avg_ratio <= 1400.0:
-                scale_multiplier = 1000.0
-            elif 0.07 <= avg_ratio <= 0.14:
-                scale_multiplier = 0.1
-
-            if scale_multiplier != 1.0:
-                logger.warning(
-                    "Detected %sx unit scale mismatch for %s (implied vs statement ratio: %.2f). "
-                    "Auto-reconciling financial statements by %sx.",
-                    scale_multiplier, yf_ticker, avg_ratio, scale_multiplier
-                )
-                income_stmt = income_stmt * scale_multiplier
-                balance_sheet = balance_sheet * scale_multiplier
-                cash_flow = cash_flow * scale_multiplier
-    except Exception as e:
-        logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
-
-    # Cross-Currency Reconciler:
-    # Converts foreign statement reporting currency to trading currency (e.g. NVO reporting in DKK while trading in USD,
-    # or ADR-linked Indian firms like INFY reporting in USD while trading in INR)
-    try:
-        fin_currency = str(info.get("financialCurrency") or "").upper()
-        trade_currency = str(info.get("currency") or "").upper()
-        if fin_currency and trade_currency and fin_currency != trade_currency:
-            fx_rate = get_cross_fx_rate(fin_currency, trade_currency)
-            if fx_rate and abs(fx_rate - 1.0) > 0.001:
-                logger.info(
-                    "Detected cross-currency mismatch for %s (financialCurrency=%s vs trading currency=%s). "
-                    "Converting financial statements to %s using FX rate %.4f",
-                    yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
-                )
-                if not income_stmt.empty:
-                    income_stmt = income_stmt * fx_rate
-                if not balance_sheet.empty:
-                    balance_sheet = balance_sheet * fx_rate
-                if not cash_flow.empty:
-                    cash_flow = cash_flow * fx_rate
-                info["financialCurrency"] = trade_currency
-    except Exception as e:
-        logger.warning("Cross-currency reconciliation skipped for %s: %s", yf_ticker, e)
 
     from engine.ticker_universe import clean_company_name, lookup_company_name
     long_name = info.get("longName")
@@ -774,14 +846,15 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         "finvest", "leasing", "fincorp", "fino"
     ]) or any(kw in clean_sym.lower() for kw in ["financ", "bank", "hsgfin", "fincorp", "finvest"]):
         is_financial = True
-    # 4. Financial Statement Structural Signals (handles empty info metadata from Yahoo Finance)
-    elif "Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns:
+    # 4. Financial Statement Structural Signals (ONLY when sector/industry metadata is missing from Yahoo Finance)
+    elif not sector and not industry and ("Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns):
         has_ebit = "EBIT" in income_stmt.columns or "Operating Income" in income_stmt.columns
+        nii_vals = safe_get(income_stmt, "Net Interest Income", 0) if "Net Interest Income" in income_stmt.columns else np.zeros(1)
         debt_vals = safe_get(balance_sheet, "Total Debt", 0)
         rev_vals = safe_get(income_stmt, "Total Revenue", 0)
-        if not has_ebit:
+        if not has_ebit and len(nii_vals) > 0 and nii_vals[0] > 0:
             is_financial = True
-        elif len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0:
+        elif len(debt_vals) > 0 and len(rev_vals) > 0 and rev_vals[-1] > 0 and len(nii_vals) > 0 and nii_vals[0] > 0:
             if debt_vals[-1] / rev_vals[-1] > 1.5:
                 is_financial = True
 
@@ -790,7 +863,7 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     if is_financial and not industry:
         industry = "Financial Services & Lending"
 
-    is_extractive, is_cyclical = classify_sector_dynamics(sector, industry)
+    is_extractive, is_cyclical = classify_sector_dynamics(sector, industry, yf_ticker)
 
     result = {
         "ticker": yf_ticker,
@@ -873,6 +946,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         if col not in income_stmt.columns:
             _alt_map = {
                 "Total Revenue": ["Revenue", "Total Revenue From Operations", "Operating Revenue"],
+                "EBIT": ["Operating Income", "Total Operating Income As Reported", "Operating Profit"],
             }
             for alt in _alt_map.get(col, []):
                 if alt in income_stmt.columns:
@@ -880,7 +954,13 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                     break
 
         if resolved_col in income_stmt.columns:
-            valid = income_stmt[resolved_col].notna() & (income_stmt[resolved_col] != 0)
+            if col == "EBIT" and "Operating Income" in income_stmt.columns:
+                valid = (
+                    (income_stmt[resolved_col].notna() & (income_stmt[resolved_col] != 0))
+                    | (income_stmt["Operating Income"].notna() & (income_stmt["Operating Income"] != 0))
+                )
+            else:
+                valid = income_stmt[resolved_col].notna() & (income_stmt[resolved_col] != 0)
             income_stmt = income_stmt[valid]
             cash_flow = cash_flow.loc[cash_flow.index.intersection(income_stmt.index)]
             balance_sheet = balance_sheet.loc[balance_sheet.index.intersection(income_stmt.index)]
@@ -895,15 +975,85 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # 3C/3D – Extract historical financials (chronological oldest→newest)
     # ------------------------------------------------------------------
     revenue = safe_get(income_stmt, "Total Revenue")[::-1].copy()
+
+    raw_capex = safe_get(cash_flow, "Capital Expenditure", default=0)[::-1]
+    capex = np.where(raw_capex < 0, -raw_capex, raw_capex)  # explicit positive
+
+    raw_dna = safe_get(cash_flow, "Depreciation And Amortization")[::-1]
+    dna = np.where(raw_dna < 0, -raw_dna, raw_dna)  # explicit positive
+    if not np.any(dna):
+        # Fallback to income statement Reconciled Depreciation (e.g. XOM, FCX)
+        inc_dna = safe_get(income_stmt, "Depreciation And Amortization", default=0)[::-1]
+        dna = np.where(inc_dna < 0, -inc_dna, inc_dna)
+
+    cfo_arr = safe_get(cash_flow, "Operating Cash Flow", default=0)[::-1]
+
     ebit = safe_get(income_stmt, "EBIT")[::-1].copy()
-    if "Operating Income" in income_stmt.columns and not is_financial:
-        op_inc = safe_get(income_stmt, "Operating Income")[::-1]
-        # Guard against one-time non-operating accounting gains (e.g. debt write-offs in EBIT)
-        # where reported EBIT exceeds 85% of revenue while Operating Income is normal/negative.
+    if not is_financial:
+        # In Yahoo Finance, 'EBIT' is Pretax Income + Interest Expense, which includes one-off
+        # non-operating items, goodwill/asset impairments, restructuring, and divestiture gains/losses
+        # (e.g. DNUT -$447.5M goodwill impairment, JACK -$236M impairment, SBUX -$892M restructuring,
+        # CVS -$5.24B special charges, or >85% spin-off gains).
+        # 'Operating Income' (Gross Profit - Operating Expense) is recurring GAAP Operating Profit.
+        if "Operating Income" in income_stmt.columns:
+            op_inc = safe_get(income_stmt, "Operating Income")[::-1]
+            for idx in range(len(ebit)):
+                if op_inc[idx] != 0:
+                    ebit[idx] = op_inc[idx]
+                elif revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85:
+                    ebit[idx] = op_inc[idx]
+
+        # Extract Normalized EBITDA (or recurring Operating Income + D&A)
+        norm_ebitda = (
+            safe_get(income_stmt, "Normalized EBITDA", default=0)[::-1]
+            if "Normalized EBITDA" in income_stmt.columns
+            else np.zeros_like(ebit)
+        )
+        raw_ebitda = (
+            safe_get(income_stmt, "EBITDA", default=0)[::-1]
+            if "EBITDA" in income_stmt.columns
+            else np.zeros_like(ebit)
+        )
+        ebitda_arr = np.maximum(ebit + dna, np.maximum(norm_ebitda, raw_ebitda))
+
+        # Check for LBO / acquisition intangible amortization & one-off special charges distorting GAAP EBIT
+        # when Normalized EBITDA and Operating Cash Flow are consistently positive (e.g. DNUT)
+        gw_intang_arr = (
+            safe_get(balance_sheet, "Goodwill And Other Intangible Assets", default=0)[::-1]
+            if "Goodwill And Other Intangible Assets" in balance_sheet.columns
+            else safe_get(balance_sheet, "Goodwill", default=0)[::-1]
+        )
+        tot_assets_arr = safe_get(balance_sheet, "Total Assets", default=0)[::-1]
+
         for idx in range(len(ebit)):
-            if revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85 and (op_inc[idx] / revenue[idx]) <= 0.85:
-                ebit[idx] = op_inc[idx]
-    
+            rev_i = revenue[idx]
+            if rev_i <= 0:
+                continue
+            ebitda_i = ebitda_arr[idx]
+            # 1) If Operating Income itself included one-off special charges (making ebit + dna < 75% of Normalized EBITDA)
+            if norm_ebitda[idx] > 0 and (ebit[idx] + dna[idx]) < 0.75 * norm_ebitda[idx]:
+                ebit[idx] = norm_ebitda[idx] - dna[idx]
+
+            # 2) If heavy non-cash acquisition intangible amortization or store-closure D&A (dna > 6.5% of rev
+            #    or Goodwill+Intangibles > 30% of assets) pushes GAAP EBIT <= 2.5% of revenue despite healthy
+            #    positive Normalized EBITDA (>= 5.5% of revenue) and positive Operating Cash Flow:
+            gw_ratio = (gw_intang_arr[idx] / tot_assets_arr[idx]) if tot_assets_arr[idx] > 0 else 0.0
+            if (
+                ebitda_i >= 0.055 * rev_i
+                and cfo_arr[idx] > 0
+                and ebit[idx] < 0.025 * rev_i
+                and (dna[idx] > 0.065 * rev_i or gw_ratio > 0.30 or dna[idx] > capex[idx] * 1.10)
+            ):
+                econ_dna_i = min(dna[idx], rev_i * 0.042)
+                ebit[idx] = max(ebit[idx], ebitda_i - econ_dna_i)
+                dna[idx] = econ_dna_i
+                # Align historical expansion/restructuring CapEx with maintenance D&A when adjusting for
+                # non-cash intangible amortization / store restructuring so CapEx - D&A is not double-penalized
+                if capex[idx] > econ_dna_i * 1.05:
+                    capex[idx] = econ_dna_i * 1.02
+    else:
+        ebitda_arr = ebit + dna
+
     # Banking & Financial Services specific metrics
     net_income = safe_get(income_stmt, "Net Income")[::-1]
     net_interest_income = safe_get(income_stmt, "Net Interest Income")[::-1]
@@ -911,12 +1061,6 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     book_value = safe_get(balance_sheet, "Stockholders Equity")[::-1]
     raw_divs = safe_get(cash_flow, "Cash Dividends Paid", default=0)[::-1]
     dividends_paid = np.where(raw_divs < 0, -raw_divs, raw_divs)
-    
-    raw_capex = safe_get(cash_flow, "Capital Expenditure", default=0)[::-1]
-    capex = np.where(raw_capex < 0, -raw_capex, raw_capex)  # explicit positive
-    
-    raw_dna = safe_get(cash_flow, "Depreciation And Amortization")[::-1]
-    dna = np.where(raw_dna < 0, -raw_dna, raw_dna)  # explicit positive
 
     # ------------------------------------------------------------------
     # 3E – Net Working Capital (Non-Cash Working Capital)
@@ -937,7 +1081,28 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         cash_on_bs = cce_series + sti_series
     st_debt = safe_get(balance_sheet, "Current Debt", default=0)[::-1]
 
-    nwc = (current_assets - cash_on_bs) - (current_liabs - st_debt)
+    # Exclude captive finance / consolidated NBFC customer loan receivables above normal trade DSO (22% of rev)
+    # from operating Current Assets so captive finance loan books do not inflate operating working capital
+    ar_series = safe_get(balance_sheet, "Accounts Receivable", default=0)[::-1]
+    other_rec_series = safe_get(balance_sheet, "Other Receivables", default=0)[::-1]
+    tot_rec_col = (
+        safe_get(balance_sheet, "Receivables", default=0)[::-1]
+        if "Receivables" in balance_sheet.columns
+        else np.zeros_like(ar_series)
+    )
+    rec_series = np.maximum(tot_rec_col, ar_series + other_rec_series)
+    excess_fin_rec_series = np.where(
+        (not is_financial) & (rec_series > 0.30 * revenue),
+        np.maximum(0.0, rec_series - 0.20 * revenue),
+        0.0,
+    )
+    # Cap NWC receivable deduction so non-current receivables inside 'Receivables' do not push NWC artificially negative
+    nwc_rec_deduction = np.minimum(
+        excess_fin_rec_series,
+        np.maximum(0.0, current_assets - cash_on_bs - 0.15 * revenue),
+    )
+
+    nwc = (current_assets - cash_on_bs - nwc_rec_deduction) - (current_liabs - st_debt)
     delta_nwc = np.diff(nwc, prepend=nwc[0])
 
     # ------------------------------------------------------------------
@@ -945,6 +1110,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     rev_growth = np.diff(revenue) / np.where(revenue[:-1] != 0, revenue[:-1], 1.0)
     ebit_margins = ebit / np.where(revenue != 0, revenue, 1.0)
+    ebitda_margins = ebitda_arr / np.where(revenue != 0, revenue, 1.0)
     if stock_data.get("is_capital_light_financial", False):
         # Capital-light financial infrastructure (exchanges, AMCs, depositories) often include
         # treasury yield in reported EBIT; cap operating margin at 75% for sustainable FCFF.
@@ -954,6 +1120,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     std_rev_growth = float(np.std(rev_growth, ddof=1)) if len(rev_growth) > 1 else 0.05
     avg_ebit_margin = float(np.mean(ebit_margins))
     std_ebit_margin = float(np.std(ebit_margins, ddof=1)) if len(ebit_margins) > 1 else 0.02
+    avg_ebitda_margin = float(np.mean(ebitda_margins))
 
     # Banking specific ratio calculations (ROE, Payout, Net Income growth)
     roes = []
@@ -999,11 +1166,25 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     gross_margins = gross_profit_arr / np.where(revenue != 0, revenue, 1.0)
     avg_gross_margin = float(np.mean(gross_margins)) if np.any(gross_profit_arr) else 0.0
 
-    cfo_arr = safe_get(cash_flow, "Operating Cash Flow", default=0)[::-1]
     fcf_arr = cfo_arr - capex
     fcf_margins = fcf_arr / np.where(revenue != 0, revenue, 1.0)
     avg_fcf_margin = float(np.mean(fcf_margins)) if np.any(cfo_arr) else 0.0
     latest_fcf_margin = float(fcf_margins[-1]) if len(fcf_margins) > 0 else 0.0
+
+    # Check if Yahoo Finance info provides a more current TTM Free Cash Flow snapshot
+    # (e.g. DNUT where TTM FCF is +$52.68M = +3.71% after CapEx optimization vs FY25 -$64.0M)
+    info_dict = stock_data.get("info") or {}
+    ttm_fcf = info_dict.get("freeCashflow")
+    ttm_rev = info_dict.get("totalRevenue") or (float(revenue[-1]) if len(revenue) > 0 else 0.0)
+    if ttm_fcf and ttm_rev and float(ttm_rev) > 0:
+        try:
+            ttm_fcf_m = float(ttm_fcf) / float(ttm_rev)
+            if -0.50 <= ttm_fcf_m <= 0.60 and ttm_fcf_m > latest_fcf_margin:
+                latest_fcf_margin = float(ttm_fcf_m)
+                if avg_fcf_margin < 0 and ttm_fcf_m > 0:
+                    avg_fcf_margin = float(0.5 * avg_fcf_margin + 0.5 * ttm_fcf_m)
+        except (ValueError, TypeError):
+            pass
 
     raw_sbc = safe_get(cash_flow, "Stock Based Compensation", default=0)[::-1]
     sbc_arr = np.where(raw_sbc < 0, -raw_sbc, raw_sbc)
@@ -1022,39 +1203,66 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # float (e.g. -40% in SaaS) or one-off working capital spikes do not distort perpetual UFCF.
         normalized_nwc_to_revenue = float(np.clip(normalized_nwc_to_revenue, -0.08, 0.15))
 
-    # Total debt and cash (most recent year – index [0] is newest before reversal,
-    # but after [::-1] index [-1] is newest … however the original notebook uses
-    # balance_sheet *before* reversal with index [0] for the latest snapshot).
-    total_debt = float(safe_get(balance_sheet, "Total Debt")[0])  # newest row
-    
-    # For the EV-to-Equity bridge, cash MUST include marketable securities / short-term investments
-    if "Cash Cash Equivalents And Short Term Investments" in balance_sheet.columns:
-        cash_and_equivalents = float(safe_get(balance_sheet, "Cash Cash Equivalents And Short Term Investments")[0])
-    else:
-        cce = float(safe_get(balance_sheet, "Cash And Cash Equivalents")[0])
-        sti = float(safe_get(balance_sheet, "Other Short Term Investments")[0])
-        cash_and_equivalents = cce + sti
+    # Total debt and cash (most recent year – index [0] is newest before reversal)
+    raw_total_debt = float(safe_get(balance_sheet, "Total Debt")[0])  # newest row
+    total_debt = raw_total_debt
 
-    # Captive financing receivables (e.g. HPE Financial Services, Caterpillar Financial, John Deere Credit)
-    # For non-banking firms with captive financing operations, long-term customer IT/equipment lease receivables
-    # are non-operating financial assets funded by captive debt. Netting captive financing receivables against
-    # total debt prevents captive debt from unfairly wiping out operating equity value.
-    if not is_financial:
+    # For the EV-to-Equity bridge, cash MUST include marketable securities / short-term investments
+    cash_and_equivalents = float(cash_on_bs[-1]) if len(cash_on_bs) > 0 else 0.0
+
+    # 1. Exclude ASC 842 / IFRS 16 / Ind AS 116 Operating Lease Liabilities ('Capital Lease Obligations')
+    # from Total Debt in the EV-to-Equity bridge and WACC weights.
+    # Because operating lease rent is already expensed inside Operating Expense (reducing EBIT & NOPAT),
+    # subtracting capitalized lease liabilities in the EV bridge double-counts lease obligations
+    # (e.g. DNUT $447M, DG $11.1B, SBUX $10.5B, CVS $15.4B, JACK $1.42B).
+    lease_obligations = 0.0
+    if not is_financial and total_debt > 0:
+        if "Capital Lease Obligations" in balance_sheet.columns:
+            lease_obligations = float(safe_get(balance_sheet, "Capital Lease Obligations", default=0.0)[0])
+        else:
+            lt_lease = float(safe_get(balance_sheet, "Long Term Capital Lease Obligation", default=0.0)[0]) if "Long Term Capital Lease Obligation" in balance_sheet.columns else 0.0
+            st_lease = float(safe_get(balance_sheet, "Current Capital Lease Obligation", default=0.0)[0]) if "Current Capital Lease Obligation" in balance_sheet.columns else 0.0
+            lease_obligations = lt_lease + st_lease
+        if lease_obligations > 0 and total_debt > lease_obligations:
+            total_debt = max(0.0, total_debt - lease_obligations)
+
+    # 2. Captive financing & consolidated NBFC receivables (e.g. John Deere Credit, Caterpillar Financial,
+    # HPE Financial Services, Grasim's consolidated Aditya Birla Capital NBFC loan book, Mahindra Finance)
+    # Netting non-operating financial loan/lease receivables against total debt isolates corporate operating debt.
+    if not is_financial and total_debt > 0:
         captive_rec = 0.0
-        for col_name in ["Non Current Accounts Receivable", "Non Current Note Receivables", "Long Term Receivables"]:
+        for col_name in [
+            "Non Current Accounts Receivable",
+            "Non Current Note Receivables",
+            "Long Term Receivables",
+            "Loans Receivable",
+        ]:
             if col_name in balance_sheet.columns:
                 val = float(safe_get(balance_sheet, col_name, default=0.0)[0])
-                if val > 0:
-                    captive_rec += val
-                    break
-        if captive_rec > 0 and total_debt > captive_rec:
+                if val > captive_rec:
+                    captive_rec = val
+        # Also check if consolidated customer financing loans sit inside total Receivables (above 20% trade DSO)
+        latest_excess_rec = float(excess_fin_rec_series[-1]) if len(excess_fin_rec_series) > 0 else 0.0
+        total_captive_offset = max(captive_rec, latest_excess_rec)
+
+        # For conglomerates consolidating an NBFC / financial services subsidiary (e.g. Grasim consolidating
+        # Aditya Birla Capital's ₹1.21T financial assets + ₹469.5B NBFC receivables alongside ₹1.90T NBFC debt),
+        # include 'Investmentin Financial Assets' when Total Debt > 70% of Revenue
+        latest_rev = float(revenue[-1]) if len(revenue) > 0 else 0.0
+        if latest_rev > 0 and total_debt > 0.70 * latest_rev and "Investmentin Financial Assets" in balance_sheet.columns:
+            fin_inv_assets = float(safe_get(balance_sheet, "Investmentin Financial Assets", default=0.0)[0])
+            if fin_inv_assets > 0.25 * total_debt:
+                total_captive_offset += fin_inv_assets
+
+        if total_captive_offset > 0:
+            offset_applied = min(total_debt * 0.85, total_captive_offset)
             sym = stock_data.get("ticker", "")
             logger.info(
-                "Detected captive financing receivables of %.2f. "
-                "Netting against total debt (%.2f -> %.2f) to isolate operating debt for %s.",
-                captive_rec, total_debt, total_debt - captive_rec, sym
+                "Detected captive/NBFC financing receivables/assets of %.2f. "
+                "Netting %.2f against total debt (%.2f -> %.2f) to isolate operating debt for %s.",
+                total_captive_offset, offset_applied, total_debt, total_debt - offset_applied, sym
             )
-            total_debt = max(0.0, total_debt - captive_rec)
+            total_debt = max(0.0, total_debt - offset_applied)
 
 
     # Interest expense (for cost-of-debt calculation)
@@ -1063,7 +1271,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         if ie_col in income_stmt.columns:
             ie_vals = income_stmt[ie_col].dropna()
             if len(ie_vals) > 0:
-                interest_expense = float(ie_vals.iloc[0])
+                interest_expense = abs(float(ie_vals.iloc[0]))
                 break
 
     last_ebit = float(ebit[-1]) if len(ebit) > 0 else 0.0
@@ -1077,10 +1285,11 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     def _extract_series(df, col_candidates, default=0.0):
         if isinstance(col_candidates, str):
             col_candidates = [col_candidates]
-        for col_name in col_candidates:
-            if col_name in df.columns:
-                series = df[col_name].fillna(default).values[::-1]
-                return [float(x) for x in series]
+        present = [c for c in col_candidates if c in df.columns]
+        if present:
+            sub = df[present].apply(pd.to_numeric, errors="coerce")
+            series = sub.bfill(axis=1).iloc[:, 0].fillna(default).values[::-1]
+            return [float(x) for x in series]
         return [default] * n_years
 
     # Full structured 3-statements matching HUL FINAL MODEL.xlsx (plus Banking specifics)
@@ -1092,7 +1301,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             "Cost of Goods Sold (COGS)": _extract_series(income_stmt, ["Cost Of Revenue", "Reconciled Cost Of Revenue"]),
             "Gross Profit": _extract_series(income_stmt, ["Gross Profit"]),
             "Selling, General & Admin (SG&A)": _extract_series(income_stmt, ["Selling General And Administration", "Operating Expense"]),
-            "Operating Profit (EBITDA)": _extract_series(income_stmt, ["EBITDA", "Normalized EBITDA"]),
+            "Operating Profit (EBITDA)": ebitda_arr.tolist(),
             "Depreciation & Amortization (D&A)": dna.tolist(),
             "Operating Income (EBIT)": ebit.tolist(),
             "Interest Expense": _extract_series(income_stmt, ["Interest Expense", "Interest Expense Non Operating"]),
@@ -1151,12 +1360,14 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # Raw arrays (as lists for JSON-serialisability)
         "revenue": revenue.tolist(),
         "ebit": ebit.tolist(),
+        "ebitda": ebitda_arr.tolist(),
         "capex": capex.tolist(),
         "dna": dna.tolist(),
         "nwc": nwc.tolist(),
         "delta_nwc": delta_nwc.tolist(),
         "rev_growth": rev_growth.tolist(),
         "ebit_margins": ebit_margins.tolist(),
+        "ebitda_margins": ebitda_margins.tolist(),
         # Banking & Financial Services Specifics
         "net_income": net_income.tolist(),
         "net_interest_income": net_interest_income.tolist(),
@@ -1173,6 +1384,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "std_rev_growth": std_rev_growth,
         "avg_ebit_margin": avg_ebit_margin,
         "std_ebit_margin": std_ebit_margin,
+        "avg_ebitda_margin": avg_ebitda_margin,
         "avg_capex_pct": avg_capex_pct,
         "avg_dna_pct": avg_dna_pct,
         "avg_dnwc_pct": avg_dnwc_pct,
@@ -1189,6 +1401,8 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "n_years": n_years,
         "last_revenue": float(revenue[-1]),
         "total_debt": total_debt,
+        "raw_total_debt": raw_total_debt,
+        "lease_obligations": lease_obligations,
         "cash_and_equivalents": cash_and_equivalents,
         "interest_expense": interest_expense,
         "interest_coverage": float(interest_coverage),

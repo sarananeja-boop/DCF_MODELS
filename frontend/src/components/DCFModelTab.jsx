@@ -77,12 +77,12 @@ const DCFModelTab = ({ data }) => {
         </div>
         
         <div className="overflow-x-auto rounded-xl border border-[#f4eedf]/10">
-          <table className="w-full text-sm text-left">
+          <table className="w-full text-xs sm:text-sm text-left">
             <thead className="bg-[#0d121a] text-[#a6b0c3] uppercase text-xs tracking-wider border-b border-[#f4eedf]/10">
               <tr>
-                <th className="px-4 py-3 font-bold sticky left-0 bg-[#0d121a] z-10 border-r border-[#f4eedf]/10">Line Item</th>
+                <th className="px-2.5 sm:px-4 py-3 font-bold sticky left-0 bg-[#0d121a] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none">Line Item</th>
                 {Array.from({ length: projectionYears }).map((_, i) => (
-                  <th key={i} className="px-4 py-3 font-bold text-right min-w-[115px]">
+                  <th key={i} className="px-3 sm:px-4 py-3 font-bold text-right min-w-[100px] sm:min-w-[115px]">
                     Year {i + 1}
                   </th>
                 ))}
@@ -90,32 +90,32 @@ const DCFModelTab = ({ data }) => {
             </thead>
             <tbody className="divide-y divide-[#f4eedf]/8">
               <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
-                <td className="px-4 py-3 font-semibold text-[#f4eedf] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10">
+                <td className="px-2.5 sm:px-4 py-3 font-semibold text-[#f4eedf] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                   {isEquityModel ? 'Projected Net Income' : 'Projected Revenue'}
                 </td>
                 {dcf.projected_revenue?.map((val, i) => (
-                  <td key={i} className="px-4 py-3 text-right font-display font-bold tabular-nums text-[#f4eedf]">
+                  <td key={i} className="px-3 sm:px-4 py-3 text-right font-display font-bold tabular-nums text-[#f4eedf]">
                     {formatNum(val)}
                   </td>
                 ))}
               </tr>
               <tr className="bg-[#0d121a]/60 hover:bg-[#1a2332] transition-colors">
-                <td className="px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10">
+                <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                   {isEquityModel ? 'Net Income Growth (g)' : 'Revenue Growth (%)'}
                 </td>
                 {dcf.growth_schedule?.map((val, i) => (
-                  <td key={i} className="px-4 py-2.5 text-right font-display font-bold tabular-nums text-[#e3b23c]">
+                  <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-bold tabular-nums text-[#e3b23c]">
                     {formatPct(val)}
                   </td>
                 ))}
               </tr>
               {dcf.margin_schedule && (
                 <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     {isEquityModel ? 'Target ROE (%)' : 'EBIT Margin (%)'}
                   </td>
                   {dcf.margin_schedule.map((val, i) => (
-                    <td key={i} className="px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#a6b0c3]">
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#a6b0c3]">
                       {formatPct(val)}
                     </td>
                   ))}
@@ -123,11 +123,11 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.projected_nopat && !isEquityModel && (
                 <tr className="bg-[#0d121a]/60 hover:bg-[#1a2332] transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-[#f4eedf] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#f4eedf] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     NOPAT (After-Tax EBIT)
                   </td>
                   {dcf.projected_nopat.map((val, i) => (
-                    <td key={i} className="px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#f4eedf]">
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#f4eedf]">
                       {formatNum(val)}
                     </td>
                   ))}
@@ -135,7 +135,7 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.projected_dna && (
                 <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     {isFinancial
                       ? '(−) Regulatory Capital Retained'
                       : isEquityModel
@@ -143,7 +143,7 @@ const DCFModelTab = ({ data }) => {
                       : '(+) Depreciation & Amortization'}
                   </td>
                   {dcf.projected_dna.map((val, i) => (
-                    <td key={i} className="px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
                       {isEquityModel ? `- ${formatNum(val)}` : formatNum(val)}
                     </td>
                   ))}
@@ -151,11 +151,11 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.projected_capex && !isEquityModel && (
                 <tr className="bg-[#0d121a]/60 hover:bg-[#1a2332] transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     (−) Capital Expenditures (CapEx)
                   </td>
                   {dcf.projected_capex.map((val, i) => (
-                    <td key={i} className="px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
                       {formatNum(val)}
                     </td>
                   ))}
@@ -163,18 +163,18 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.projected_dnwc && !isEquityModel && (
                 <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     (−) Change in Working Capital (ΔNWC)
                   </td>
                   {dcf.projected_dnwc.map((val, i) => (
-                    <td key={i} className="px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
                       {formatNum(val)}
                     </td>
                   ))}
                 </tr>
               )}
               <tr className="bg-[#182232] border-t border-[#f4eedf]/20">
-                <td className="px-4 py-3 font-bold text-[#f4eedf] sticky left-0 bg-[#182232] z-10 border-r border-[#f4eedf]/10">
+                <td className="px-2.5 sm:px-4 py-3 font-bold text-[#f4eedf] sticky left-0 bg-[#182232] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                   {isFinancial
                     ? 'Free Cash Flow to Equity (FCFE)'
                     : isEquityModel
@@ -182,18 +182,18 @@ const DCFModelTab = ({ data }) => {
                     : 'Unlevered Free Cash Flow (FCFF)'}
                 </td>
                 {dcf.projected_ufcf?.map((val, i) => (
-                  <td key={i} className="px-4 py-3 text-right font-display font-bold tabular-nums text-[#34b38a]">
+                  <td key={i} className="px-3 sm:px-4 py-3 text-right font-display font-bold tabular-nums text-[#34b38a]">
                     {formatNum(val)}
                   </td>
                 ))}
               </tr>
               {dcf.discount_periods && (
                 <tr className="bg-[#0d121a]/60 text-xs">
-                  <td className="px-4 py-2 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     Mid-Year Period (t)
                   </td>
                   {dcf.discount_periods.map((t, i) => (
-                    <td key={i} className="px-4 py-2 text-right font-display tabular-nums text-[#a6b0c3]">
+                    <td key={i} className="px-3 sm:px-4 py-2 text-right font-display tabular-nums text-[#a6b0c3]">
                       {t.toFixed(1)}
                     </td>
                   ))}
@@ -201,11 +201,11 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.discount_factors && (
                 <tr className="bg-[#141b26] text-xs">
-                  <td className="px-4 py-2 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-2 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     {isEquityModel ? 'Discount Factor [1/(1+Ke)^t]' : 'Discount Factor [1/(1+WACC)^t]'}
                   </td>
                   {dcf.discount_factors.map((df, i) => (
-                    <td key={i} className="px-4 py-2 text-right font-display tabular-nums text-[#8ab4f8]">
+                    <td key={i} className="px-3 sm:px-4 py-2 text-right font-display tabular-nums text-[#8ab4f8]">
                       {df.toFixed(4)}
                     </td>
                   ))}
@@ -213,11 +213,11 @@ const DCFModelTab = ({ data }) => {
               )}
               {dcf.pv_ufcf_list && (
                 <tr className="bg-[#34b38a]/10 border-t border-[#34b38a]/30">
-                  <td className="px-4 py-3 font-bold text-[#34b38a] sticky left-0 bg-[#132225] z-10 border-r border-[#f4eedf]/10">
+                  <td className="px-2.5 sm:px-4 py-3 font-bold text-[#34b38a] sticky left-0 bg-[#132225] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
                     {isEquityModel ? 'Present Value of Dividends / FCFE' : 'Present Value of FCFF'}
                   </td>
                   {dcf.pv_ufcf_list.map((pv, i) => (
-                    <td key={i} className="px-4 py-3 text-right font-display font-bold tabular-nums text-[#34b38a]">
+                    <td key={i} className="px-3 sm:px-4 py-3 text-right font-display font-bold tabular-nums text-[#34b38a]">
                       {formatNum(pv)}
                     </td>
                   ))}
@@ -305,7 +305,7 @@ const DCFModelTab = ({ data }) => {
           </div>
         ) : (
           /* Corporate / Industrial Enterprise-to-Equity Bridge with Arithmetic Operators */
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-3 border-t border-[#f4eedf]/10 items-center">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 pt-3 border-t border-[#f4eedf]/10 items-center">
             <div className="bg-[#0d121a] rounded-xl p-3 text-center border border-[#f4eedf]/8">
               <div className="text-[10px] text-[#a6b0c3] font-bold uppercase">Enterprise Value</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-0.5">{formatNum(dcf.enterprise_value)}</div>

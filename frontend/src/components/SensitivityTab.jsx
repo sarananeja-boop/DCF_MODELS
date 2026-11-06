@@ -215,7 +215,7 @@ export default function SensitivityTab({ data }) {
 
             {/* Interactive HTML Heatmap Table */}
             <div className="overflow-x-auto rounded-xl border border-[#f4eedf]/10 bg-[#0d121a]">
-              <table className="w-full text-center border-collapse text-xs">
+              <table className="w-full min-w-[340px] text-center border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
@@ -242,6 +242,7 @@ export default function SensitivityTab({ data }) {
                             key={ci}
                             onMouseEnter={() => setActiveCell1({ price, wacc: wy, growth: gx })}
                             onMouseLeave={() => setActiveCell1(null)}
+                            onClick={() => setActiveCell1({ price, wacc: wy, growth: gx })}
                             className={`p-2 font-display font-bold tabular-nums transition-all cursor-pointer ${getCellBg(price)} ${
                               isBase ? 'ring-2 ring-[#e3b23c] z-20 relative bg-[#e3b23c]/25' : 'hover:ring-1 hover:ring-[#f4eedf]/50'
                             }`}
@@ -308,7 +309,7 @@ export default function SensitivityTab({ data }) {
 
             {/* Interactive HTML Heatmap Table */}
             <div className="overflow-x-auto rounded-xl border border-[#f4eedf]/10 bg-[#0d121a]">
-              <table className="w-full text-center border-collapse text-xs">
+              <table className="w-full min-w-[340px] text-center border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
@@ -335,6 +336,7 @@ export default function SensitivityTab({ data }) {
                             key={ci}
                             onMouseEnter={() => setActiveCell2({ price, wacc: wy, margin: mx })}
                             onMouseLeave={() => setActiveCell2(null)}
+                            onClick={() => setActiveCell2({ price, wacc: wy, margin: mx })}
                             className={`p-2 font-display font-bold tabular-nums transition-all cursor-pointer ${getCellBg(price)} ${
                               isBase ? 'ring-2 ring-[#8ab4f8] z-20 relative bg-[#5b8fd9]/25' : 'hover:ring-1 hover:ring-[#f4eedf]/50'
                             }`}
@@ -405,7 +407,7 @@ export default function SensitivityTab({ data }) {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[#f4eedf]/10 bg-[#0d121a]">
-              <table className="w-full text-center border-collapse text-xs">
+              <table className="w-full min-w-[340px] text-center border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
@@ -432,6 +434,7 @@ export default function SensitivityTab({ data }) {
                             key={ci}
                             onMouseEnter={() => setActiveCellTv({ price, wacc: w, g })}
                             onMouseLeave={() => setActiveCellTv(null)}
+                            onClick={() => setActiveCellTv({ price, wacc: w, g })}
                             className={`p-2.5 font-display font-bold tabular-nums transition-all cursor-pointer ${getCellBg(price)} ${
                               isBase ? 'ring-2 ring-[#34b38a] z-20 relative bg-[#34b38a]/25' : 'hover:ring-1 hover:ring-[#f4eedf]/50'
                             }`}
@@ -497,13 +500,13 @@ export default function SensitivityTab({ data }) {
                   {/* Horizontal Tornado Bar */}
                   <div className="grid grid-cols-2 gap-2 text-xs font-display tabular-nums">
                     {/* Bear Shock */}
-                    <div className="bg-[#e07a5f]/12 border border-[#e07a5f]/25 rounded-lg p-2 flex justify-between items-center">
+                    <div className="bg-[#e07a5f]/12 border border-[#e07a5f]/25 rounded-lg p-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-0.5">
                       <span className="text-[#e07a5f] font-bold">Downside</span>
                       <span className="font-bold text-[#f4eedf]">{sym}{formatNumber(t.low, 0)} ({t.lowPct.toFixed(1)}%)</span>
                     </div>
 
                     {/* Bull Shock */}
-                    <div className="bg-[#34b38a]/12 border border-[#34b38a]/25 rounded-lg p-2 flex justify-between items-center">
+                    <div className="bg-[#34b38a]/12 border border-[#34b38a]/25 rounded-lg p-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-0.5">
                       <span className="text-[#34b38a] font-bold">Upside</span>
                       <span className="font-bold text-[#f4eedf]">{sym}{formatNumber(t.high, 0)} (+{t.highPct.toFixed(1)}%)</span>
                     </div>

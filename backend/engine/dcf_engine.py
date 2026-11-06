@@ -165,22 +165,38 @@ def compute_wacc(
     cash_equiv: float = float(metrics.get("cash_and_equivalents", 0.0))
     hist_dna = metrics.get("dna", [])
     last_dna = float(hist_dna[-1]) if len(hist_dna) > 0 else 0.0
-    last_ebitda = last_ebit + last_dna
+    hist_ebitda = metrics.get("ebitda", [])
+    last_ebitda = max(
+        last_ebit + last_dna,
+        float(hist_ebitda[-1]) if len(hist_ebitda) > 0 else 0.0,
+    )
     last_rev = float(metrics.get("last_revenue", 0.0))
+    avg_ebit = float(metrics.get("avg_ebit_margin", 0.0)) * last_rev
+    avg_ebitda = float(metrics.get("avg_ebitda_margin", 0.0)) * last_rev
     latest_fcf = float(metrics.get("latest_fcf_margin", 0.0)) * last_rev
 
     if interest_expense > 0:
-        # For net-cash or cash-generative firms where GAAP EBIT is depressed by non-cash SBC/R&D/D&A,
-        # evaluate coverage using cash-flow/EBITDA backing so solvent net-cash firms are not rated 'D'.
+        # For cash-generative or high-D&A operating firms where single-year GAAP EBIT is depressed
+        # by non-cash amortization, restructuring, or CapEx cycles, evaluate interest coverage using
+        # normalized EBIT / EBITDA / FCF backing so solvent going-concern firms are not rated 'D'.
         if cash_equiv >= total_debt and max(last_ebitda, latest_fcf) > last_ebit:
             effective_coverage_earnings = max(last_ebit, last_ebitda, latest_fcf * 0.75)
-        elif cash_equiv >= 0.5 * total_debt and last_ebitda > 0 and last_ebit <= 0:
-            effective_coverage_earnings = last_ebitda
+        elif last_ebitda > 0:
+            effective_coverage_earnings = max(
+                last_ebit,
+                avg_ebit,
+                0.75 * last_ebitda,
+                0.75 * avg_ebitda,
+                latest_fcf,
+            )
         else:
             effective_coverage_earnings = last_ebit
         interest_coverage = float(effective_coverage_earnings / interest_expense)
     else:
         interest_coverage = 999.0
+
+    # Keep metrics["interest_coverage"] synchronized with WACC coverage
+    metrics["interest_coverage"] = float(interest_coverage)
 
     synthetic_rating, default_spread = get_synthetic_rating_and_spread(
         interest_coverage, market_cap, currency=currency
@@ -189,26 +205,39 @@ def compute_wacc(
     # Point 2: Rf already embeds sovereign default spread (G-Sec/Treasury). Kd = Rf + Company Default Spread.
     synthetic_kd = risk_free_rate + default_spread
 
-    if total_debt > 0 and interest_expense > 0:
-        hist_kd = abs(interest_expense / total_debt)
-        if interest_coverage < 3.0:
-            cost_of_debt = max(hist_kd, synthetic_kd)
+    raw_debt_denom = max(total_debt, float(metrics.get("raw_total_debt", total_debt) or total_debt))
+    if total_debt > 0 and interest_expense > 0 and raw_debt_denom > 0:
+        hist_kd = abs(interest_expense / raw_debt_denom)
+        if risk_free_rate <= hist_kd <= risk_free_rate + 0.075 and last_ebitda > 0:
+            if interest_coverage < 3.0:
+                cost_of_debt = 0.50 * hist_kd + 0.50 * synthetic_kd
+            else:
+                cost_of_debt = min(hist_kd, synthetic_kd) if hist_kd >= 0.04 else synthetic_kd
+        elif interest_coverage < 3.0:
+            cost_of_debt = max(min(hist_kd, risk_free_rate + 0.08), synthetic_kd)
         else:
             cost_of_debt = min(hist_kd, synthetic_kd) if hist_kd >= 0.04 else synthetic_kd
     else:
         cost_of_debt = synthetic_kd if total_debt > 0 else 0.04
 
-    # Point 6: Cap interest tax shield at usable EBIT (using marginal statutory rate)
+    # Point 6: Interest tax shield evaluation (using sustainable operating earnings backing)
     marginal_tax_rate = tax_rate
     conventional_kd_after_tax = cost_of_debt * (1.0 - marginal_tax_rate)
     tax_shield_capped = False
     usable_tax_shield = 0.0
     if total_debt > 0:
-        usable_interest = max(0.0, min(interest_expense, max(0.0, last_ebit)))
+        taxable_capacity = max(0.0, last_ebit, avg_ebit, 0.70 * last_ebitda)
+        usable_interest = max(0.0, min(interest_expense, taxable_capacity))
+        if interest_expense > 0:
+            shield_ratio = usable_interest / interest_expense
+        else:
+            shield_ratio = 1.0
         usable_tax_shield = marginal_tax_rate * usable_interest
-        effective_kd_after_tax = cost_of_debt - (usable_tax_shield / total_debt)
-        effective_kd_after_tax = float(np.clip(effective_kd_after_tax, 0.02, cost_of_debt))
-        if interest_expense > 0 and usable_interest < interest_expense:
+        effective_kd_after_tax = cost_of_debt * (1.0 - marginal_tax_rate * shield_ratio)
+        # Senior debt after tax cannot exceed junior Cost of Equity in a going-concern WACC
+        max_kd_after_tax = max(conventional_kd_after_tax, cost_of_equity - 0.005)
+        effective_kd_after_tax = float(np.clip(effective_kd_after_tax, 0.02, min(cost_of_debt, max_kd_after_tax)))
+        if interest_expense > 0 and usable_interest < interest_expense * 0.99:
             tax_shield_capped = True
     else:
         effective_kd_after_tax = conventional_kd_after_tax
@@ -331,26 +360,43 @@ def run_dcf(
     else:
         growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
     
-    # Margin schedule
+    # Margin schedule (step from Year-0 current_margin toward Year-N target ebit_margin)
     if current_margin is not None:
-        margin_schedule = np.linspace(current_margin, ebit_margin, projection_years)
+        margin_schedule = np.linspace(current_margin, ebit_margin, projection_years + 1)[1:]
     else:
         margin_schedule = np.array([ebit_margin] * projection_years)
 
+    # Bound D&A when non-PPE amortization (e.g. streaming content amortization in NFLX or acquisition
+    # intangible amortization in LBOs) makes D&A far exceed physical CapEx.
+    effective_dna_pct = (
+        min(avg_dna_pct, max(avg_capex_pct * 1.05, 0.045))
+        if avg_dna_pct > avg_capex_pct * 1.15
+        else avg_dna_pct
+    )
+
     # In corporate finance / Damodaran framework, CapEx% converges towards steady-state
     # maintenance CapEx: D&A * (1 + terminal_growth).
-    # However, for extractive / depleting sectors (oil & gas upstream, thermal coal, mining),
-    # physical reserves deplete continuously. Sustaining production requires real exploration and drilling CapEx,
-    # which cannot drop below historical sustaining CapEx (avg_capex_pct).
-    base_steady_state = avg_dna_pct * (1.0 + terminal_growth)
+    # For regulated utilities, telecoms, and greenfield infrastructure builders where historical CapEx
+    # includes multi-decade expansion CapEx (> 1.45x D&A), bound explicit 5-year CapEx to the reinvestment
+    # required for the modeled 5-year growth schedule rather than charging 30-year greenfield CapEx
+    # without its post-Year-5 revenue stream.
+    base_steady_state = effective_dna_pct * (1.0 + terminal_growth)
     if is_extractive:
-        steady_state_capex_pct = max(base_steady_state, avg_capex_pct)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, effective_dna_pct * 1.25))
     elif is_cyclical:
-        steady_state_capex_pct = max(base_steady_state, avg_capex_pct * 0.85)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.85, effective_dna_pct * 1.15))
     else:
         steady_state_capex_pct = base_steady_state
 
-    capex_schedule = np.linspace(avg_capex_pct, steady_state_capex_pct, projection_years)
+    if avg_capex_pct > effective_dna_pct * 1.45 and avg_capex_pct > 0.14:
+        eff_start_capex = min(
+            avg_capex_pct,
+            max(effective_dna_pct * (1.0 + max(0.05, start_growth * 1.4)), effective_dna_pct + 0.055),
+        )
+    else:
+        eff_start_capex = avg_capex_pct
+
+    capex_schedule = np.linspace(eff_start_capex, steady_state_capex_pct, projection_years)
 
     for yr in range(projection_years):
         g = growth_schedule[yr]
@@ -358,7 +404,7 @@ def run_dcf(
         margin = margin_schedule[yr]
 
         nopat = next_rev * margin * (1 - tax_rate)
-        dna_add = next_rev * avg_dna_pct
+        dna_add = next_rev * effective_dna_pct
         capex_sub = next_rev * capex_schedule[yr]
         delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
         
@@ -392,54 +438,40 @@ def run_dcf(
     terminal_growth_capped = False
     effective_terminal_growth = terminal_growth
     
-    # Calculate Sustainable Terminal ROIC & Reinvestment Rate
+    # Calculate Sustainable Terminal ROIC & Reinvestment Rate (excluding historical M&A Goodwill
+    # for organic marginal reinvestment, floored at 15% of revenue)
     bs = metrics.get("statements", {}).get("balance_sheet", {}) if isinstance(metrics.get("statements"), dict) else {}
     equity_series = bs.get("Total Stockholders' Equity", [0]) if isinstance(bs, dict) else [0]
     equity_bv = equity_series[-1] if equity_series else 0.0
+    gw_series = bs.get("Intangible Assets & Goodwill", [0]) if isinstance(bs, dict) else [0]
+    gw_val = float(gw_series[-1]) if gw_series else 0.0
     invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
+    tangible_ic = max(last_revenue * 0.15, invested_capital - 0.80 * max(0.0, gw_val))
     
     hist_ebit = metrics.get("ebit", [])
     last_ebit = hist_ebit[-1] if hist_ebit else (last_rev * ebit_margin)
     hist_nopat = last_ebit * (1 - tax_rate)
-    hist_roic = (hist_nopat / invested_capital) if (invested_capital > 0 and hist_nopat > 0) else 0.0
+    hist_roic = (hist_nopat / tangible_ic) if (tangible_ic > 0 and hist_nopat > 0) else 0.0
     proj_roic = (
-        (proj_nopat[-1] / invested_capital)
-        if (invested_capital > 0 and len(proj_nopat) > 0 and proj_nopat[-1] > 0)
+        (proj_nopat[-1] / tangible_ic)
+        if (tangible_ic > 0 and len(proj_nopat) > 0 and proj_nopat[-1] > 0)
         else discount_rate
     )
     effective_roic = max(hist_roic, proj_roic) if (current_margin is not None or hist_roic <= 0) else hist_roic
 
-    # Economic competition bounds sustainable long-term ROIC
-    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.55)
-    max_roic_cap = 0.35 if is_high_gm else 0.25
-    min_reinv_floor = 0.06 if is_high_gm else 0.12
+    # Economic competition bounds sustainable long-term ROIC (accommodating capital-light compounders)
+    is_high_roic = (not is_extractive and not is_cyclical and (float(metrics.get("avg_gross_margin", 0.0)) >= 0.50 or effective_roic >= 0.28))
+    max_roic_cap = 0.45 if is_high_roic else 0.30
+    min_reinv_floor = 0.06 if is_high_roic else 0.10
     sustainable_roic = max(discount_rate, min(effective_roic, max_roic_cap))
-    terminal_reinv_rate = min(0.85, max(min_reinv_floor, terminal_growth / sustainable_roic))
 
-    # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
-    if is_extractive and margin_schedule[-1] > 0:
-        net_capex_reinv = max(0.0, (steady_state_capex_pct - avg_dna_pct) / margin_schedule[-1])
-        terminal_reinv_rate = min(0.85, max(terminal_reinv_rate, net_capex_reinv))
-    elif is_cyclical and margin_schedule[-1] > 0:
-        net_capex_reinv = max(0.0, (steady_state_capex_pct - avg_dna_pct) / margin_schedule[-1])
-        terminal_reinv_rate = min(0.85, max(terminal_reinv_rate, net_capex_reinv * 0.85))
-
-    # Point 5: Tighten terminal growth rule.
-    # Cap terminal growth at long-term GDP/inflation cap (5.0% for India, 2.5% for US)
-    # Extractive / finite commodity constraint:
-    # Perpetual growth for depleting fossil reserves (crude oil, coal) cannot assume macro GDP growth.
-    # Cap at long-term volume/inflation ceiling (2.5% max)
+    is_india = (stock_data.get("market") == "IN")
     if is_extractive:
-        max_g_allowed = 0.025
+        max_g_allowed = 0.040 if is_india else 0.025
     else:
-        is_india = (stock_data.get("market") == "IN")
         max_g_allowed = 0.050 if is_india else 0.025
     clamped_terminal_growth = min(terminal_growth, max_g_allowed)
 
-    # Terminal NOPAT in Year N+1
-    terminal_nopat = proj_rev[-1] * (1 + clamped_terminal_growth) * margin_schedule[-1] * (1 - tax_rate)
-    terminal_ufcf = terminal_nopat * (1 - terminal_reinv_rate)
-    
     # Enforce minimum spread: WACC - g >= 0.025 (2.5% minimum spread)
     min_spread = 0.025
     if discount_rate - clamped_terminal_growth < min_spread:
@@ -451,6 +483,20 @@ def run_dcf(
         )
     else:
         effective_terminal_growth = clamped_terminal_growth
+
+    terminal_reinv_rate = min(0.80, max(min_reinv_floor, effective_terminal_growth / sustainable_roic))
+
+    # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
+    if is_extractive and margin_schedule[-1] > 0:
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / margin_schedule[-1])
+        terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv))
+    elif is_cyclical and margin_schedule[-1] > 0:
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / margin_schedule[-1])
+        terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv * 0.85))
+
+    # Terminal NOPAT in Year N+1
+    terminal_nopat = proj_rev[-1] * (1.0 + effective_terminal_growth) * margin_schedule[-1] * (1.0 - tax_rate)
+    terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
 
     if discount_rate <= effective_terminal_growth:
         terminal_value = None
@@ -464,7 +510,7 @@ def run_dcf(
         terminal_value_note = "Terminal UFCF is negative under current assumptions."
     else:
         spread = discount_rate - effective_terminal_growth
-        terminal_value = (terminal_ufcf * (1.0 + effective_terminal_growth)) / spread
+        terminal_value = terminal_ufcf / spread
         pv_terminal_value = terminal_value / discount_factors[-1]
 
     # EV → Equity bridge
@@ -605,18 +651,33 @@ def run_dcf_batch(
     if current_margin is not None:
         base_m_mean = float(np.mean(sim_margin)) if n > 0 else float(current_margin)
         sim_start_m = float(current_margin) + 0.5 * (sim_margin - base_m_mean)
-        margin_schedule = np.linspace(sim_start_m, sim_margin, projection_years, axis=1)
+        margin_schedule = np.linspace(sim_start_m, sim_margin, projection_years + 1, axis=1)[:, 1:]
     else:
         margin_schedule = np.repeat(sim_margin[:, None], projection_years, axis=1)
 
-    base_steady_state = avg_dna_pct * (1.0 + terminal_growth)
+    effective_dna_pct = (
+        min(avg_dna_pct, max(avg_capex_pct * 1.05, 0.045))
+        if avg_dna_pct > avg_capex_pct * 1.15
+        else avg_dna_pct
+    )
+
+    base_steady_state = effective_dna_pct * (1.0 + terminal_growth)
     if is_extractive:
-        steady_state_capex_pct = max(base_steady_state, avg_capex_pct)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, effective_dna_pct * 1.25))
     elif is_cyclical:
-        steady_state_capex_pct = max(base_steady_state, avg_capex_pct * 0.85)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.85, effective_dna_pct * 1.15))
     else:
         steady_state_capex_pct = base_steady_state
-    capex_schedule = np.linspace(avg_capex_pct, steady_state_capex_pct, projection_years)
+
+    mean_start_g = float(np.mean(sim_growth)) if n > 0 else 0.05
+    if avg_capex_pct > effective_dna_pct * 1.45 and avg_capex_pct > 0.14:
+        eff_start_capex = min(
+            avg_capex_pct,
+            max(effective_dna_pct * (1.0 + max(0.05, mean_start_g * 1.4)), effective_dna_pct + 0.055),
+        )
+    else:
+        eff_start_capex = avg_capex_pct
+    capex_schedule = np.linspace(eff_start_capex, steady_state_capex_pct, projection_years)
 
     if use_mid_year:
         discount_periods = np.arange(projection_years, dtype=float) + 0.5
@@ -633,7 +694,7 @@ def run_dcf_batch(
         m_yr = margin_schedule[:, yr]
         next_rev = last_rev * (1.0 + g)
         nopat = next_rev * m_yr * (1.0 - tax_rate)
-        dna_add = next_rev * avg_dna_pct
+        dna_add = next_rev * effective_dna_pct
         capex_sub = next_rev * capex_schedule[yr]
         delta_nwc = normalized_nwc_to_revenue * (next_rev - last_rev)
         ufcf = nopat + dna_add - capex_sub - delta_nwc
@@ -648,7 +709,10 @@ def run_dcf_batch(
     )
     equity_series = bs.get("Total Stockholders' Equity", [0]) if isinstance(bs, dict) else [0]
     equity_bv = equity_series[-1] if equity_series else 0.0
+    gw_series = bs.get("Intangible Assets & Goodwill", [0]) if isinstance(bs, dict) else [0]
+    gw_val = float(gw_series[-1]) if gw_series else 0.0
     invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
+    tangible_ic = max(last_revenue * 0.15, invested_capital - 0.80 * max(0.0, gw_val))
 
     hist_ebit = metrics.get("ebit", [])
     if hist_ebit:
@@ -657,13 +721,13 @@ def run_dcf_batch(
         last_ebit = last_rev * sim_margin
     hist_nopat = last_ebit * (1.0 - tax_rate)
     hist_roic = np.where(
-        (invested_capital > 0) & (hist_nopat > 0),
-        hist_nopat / invested_capital,
+        (tangible_ic > 0) & (hist_nopat > 0),
+        hist_nopat / tangible_ic,
         0.0,
     )
     proj_roic = np.where(
-        (invested_capital > 0) & (last_nopat > 0),
-        last_nopat / invested_capital,
+        (tangible_ic > 0) & (last_nopat > 0),
+        last_nopat / tangible_ic,
         sim_wacc,
     )
     if current_margin is not None:
@@ -671,46 +735,18 @@ def run_dcf_batch(
     else:
         effective_roic = np.where(hist_roic > 0, hist_roic, proj_roic)
 
-    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.55)
-    max_roic_cap = 0.35 if is_high_gm else 0.25
-    min_reinv_floor = 0.06 if is_high_gm else 0.12
+    is_high_gm = (not is_extractive and not is_cyclical and float(metrics.get("avg_gross_margin", 0.0)) >= 0.50)
+    is_high_roic_arr = (not is_extractive and not is_cyclical) & (is_high_gm | (effective_roic >= 0.28))
+    max_roic_cap = np.where(is_high_roic_arr, 0.45, 0.30)
+    min_reinv_floor = np.where(is_high_roic_arr, 0.06, 0.10)
     sustainable_roic = np.maximum(sim_wacc, np.minimum(effective_roic, max_roic_cap))
-    terminal_reinv_rate = np.minimum(0.85, np.maximum(min_reinv_floor, terminal_growth / sustainable_roic))
 
+    is_india = stock_data.get("market") == "IN"
     if is_extractive:
-        pos_m = sim_margin > 0
-        net_capex_reinv = np.where(
-            pos_m,
-            np.maximum(0.0, (steady_state_capex_pct - avg_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
-            0.0,
-        )
-        terminal_reinv_rate = np.where(
-            pos_m,
-            np.minimum(0.85, np.maximum(terminal_reinv_rate, net_capex_reinv)),
-            terminal_reinv_rate,
-        )
-    elif is_cyclical:
-        pos_m = sim_margin > 0
-        net_capex_reinv = np.where(
-            pos_m,
-            np.maximum(0.0, (steady_state_capex_pct - avg_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
-            0.0,
-        )
-        terminal_reinv_rate = np.where(
-            pos_m,
-            np.minimum(0.85, np.maximum(terminal_reinv_rate, net_capex_reinv * 0.85)),
-            terminal_reinv_rate,
-        )
-
-    if is_extractive:
-        max_g_allowed = 0.025
+        max_g_allowed = 0.040 if is_india else 0.025
     else:
-        is_india = stock_data.get("market") == "IN"
         max_g_allowed = 0.050 if is_india else 0.025
     clamped_terminal_growth = min(terminal_growth, max_g_allowed)
-
-    terminal_nopat = last_rev * (1.0 + clamped_terminal_growth) * sim_margin * (1.0 - tax_rate)
-    terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
 
     min_spread = 0.025
     effective_terminal_growth = np.where(
@@ -719,10 +755,40 @@ def run_dcf_batch(
         clamped_terminal_growth,
     )
 
+    terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, effective_terminal_growth / sustainable_roic))
+
+    if is_extractive:
+        pos_m = sim_margin > 0
+        net_capex_reinv = np.where(
+            pos_m,
+            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            0.0,
+        )
+        terminal_reinv_rate = np.where(
+            pos_m,
+            np.minimum(0.80, np.maximum(terminal_reinv_rate, net_capex_reinv)),
+            terminal_reinv_rate,
+        )
+    elif is_cyclical:
+        pos_m = sim_margin > 0
+        net_capex_reinv = np.where(
+            pos_m,
+            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            0.0,
+        )
+        terminal_reinv_rate = np.where(
+            pos_m,
+            np.minimum(0.80, np.maximum(terminal_reinv_rate, net_capex_reinv * 0.85)),
+            terminal_reinv_rate,
+        )
+
+    terminal_nopat = last_rev * (1.0 + effective_terminal_growth) * sim_margin * (1.0 - tax_rate)
+    terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
+
     valid_tv = (sim_wacc > effective_terminal_growth) & (terminal_ufcf > 0)
     spread = np.where(valid_tv, sim_wacc - effective_terminal_growth, 1.0)
     terminal_value = np.where(
-        valid_tv, (terminal_ufcf * (1.0 + effective_terminal_growth)) / spread, 0.0
+        valid_tv, terminal_ufcf / spread, 0.0
     )
     pv_terminal_value = np.where(valid_tv, terminal_value / discount_factors[:, -1], 0.0)
 

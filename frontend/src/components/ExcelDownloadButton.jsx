@@ -54,16 +54,23 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       type="button"
       onClick={handleDownload}
       disabled={loading || !data}
-      className={`inline-flex items-center justify-center gap-2.5 rounded-xl font-display text-xs sm:text-sm font-bold transition cursor-pointer ${
-        compact ? 'px-4 py-2 sm:py-2.5' : 'w-full px-5 py-3'
+      className={`inline-flex items-center justify-center gap-1.5 sm:gap-2.5 rounded-xl font-display text-xs sm:text-sm font-bold transition cursor-pointer ${
+        compact ? 'px-2.5 sm:px-4 py-1.5 sm:py-2.5' : 'w-full px-5 py-3'
       } ${
         loading || !data
           ? 'bg-[#18202c]/60 text-[#a6b0c3]/40 cursor-not-allowed border border-[#f4eedf]/10'
           : 'bg-[#141b26] hover:bg-[#1f2937] text-[#f4eedf] hover:text-[#e3b23c] border border-[#f4eedf]/15 hover:border-[#e3b23c]/50 shadow-md'
       }`}
     >
-      <FiDownload className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#e3b23c] shrink-0" />
-      <span>{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
+      <FiDownload className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-[#e3b23c] shrink-0" />
+      {compact ? (
+        <>
+          <span className="sm:hidden">{loading ? '...' : 'Excel'}</span>
+          <span className="hidden sm:inline">{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
+        </>
+      ) : (
+        <span>{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
+      )}
     </button>
   );
 }

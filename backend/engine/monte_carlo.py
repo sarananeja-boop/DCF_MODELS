@@ -119,20 +119,21 @@ def run_monte_carlo(
         L = np.eye(num_vars)
 
     # ------------------------------------------------------------------
-    # 5B – Correlated fat-tailed draws
+    # 5B – Correlated fat-tailed draws (Student-t df=5 normalized to unit variance)
     # ------------------------------------------------------------------
     np.random.seed(42)
     oversample = iterations * 3
 
-    independent_draws = np.random.standard_t(5, size=(num_vars, oversample))
+    # Var(t_5) = 5 / (5 - 2) = 5/3; scale by sqrt(3/5) so draws preserve t(5) fat tails with unit variance
+    independent_draws = np.random.standard_t(5, size=(num_vars, oversample)) * np.sqrt(3.0 / 5.0)
     correlated_draws = L @ independent_draws
 
-    # Means and standard deviations (exact values from the refined notebook)
+    # Means and standard deviations (bounded so 1-year historical outliers do not explode perpetual variance)
     mean_rev_growth = base_growth if base_growth is not None else metrics["avg_rev_growth"]
-    std_rev_growth_mc = max(metrics["std_rev_growth"], 0.02)
+    std_rev_growth_mc = float(np.clip(metrics["std_rev_growth"], 0.02, 0.12))
 
     mean_ebit_margin = base_margin if base_margin is not None else metrics["avg_ebit_margin"]
-    std_ebit_margin_mc = max(metrics["std_ebit_margin"], 0.015)
+    std_ebit_margin_mc = float(np.clip(metrics["std_ebit_margin"], 0.015, 0.06))
 
     mean_rf = risk_free_rate
     std_rf = 0.01       # 100 bps assumed volatility for 10Y Treasury
@@ -143,7 +144,11 @@ def run_monte_carlo(
     mean_erp = market_return - risk_free_rate
     std_erp = 0.015      # 150 bps assumed volatility
 
-    mean_cod = wacc_data["cost_of_debt"]
+    # Use pre-tax cost of debt because sim_at_cod = sim_cod * (1 - tax_rate) applies the tax shield below
+    pretax_cod = wacc_data.get("pretax_cost_of_debt")
+    if pretax_cod is None or pretax_cod <= 0:
+        pretax_cod = wacc_data.get("cost_of_debt", 0.05) / max(0.5, 1.0 - tax_rate)
+    mean_cod = float(pretax_cod)
     std_cod = 0.01       # 100 bps assumed volatility
 
     mean_we = wacc_data["weight_equity"]
@@ -160,10 +165,13 @@ def run_monte_carlo(
 
     samples = means[:, None] + correlated_draws * stds[:, None]
 
-    sim_growth = samples[0, :]
-    sim_margin = samples[1, :]
+    margin_floor = max(0.015, mean_ebit_margin * 0.30) if mean_ebit_margin > 0.02 else -0.15
+    margin_ceil = min(0.68, max(mean_ebit_margin + 0.15, mean_ebit_margin + 2.5 * std_ebit_margin_mc))
+
+    sim_growth = np.clip(samples[0, :], -0.20, 0.65)
+    sim_margin = np.clip(samples[1, :], margin_floor, margin_ceil)
     sim_rf     = samples[2, :]
-    sim_beta   = samples[3, :]
+    sim_beta   = np.clip(samples[3, :], 0.25, 3.0)
     sim_erp    = samples[4, :]
     sim_cod    = samples[5, :]
     sim_we     = np.clip(samples[6, :], 0.0, 1.0)

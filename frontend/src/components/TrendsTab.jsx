@@ -25,11 +25,13 @@ export default function TrendsTab({ data }) {
     }
   };
 
+  const plotConfig = { responsive: true, displayModeBar: false };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 text-[#f4eedf]">
       {/* Revenue History */}
-      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
-        <div className="flex justify-between items-center mb-2">
+      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <h3 className="font-display text-base font-bold text-[#f4eedf]">Revenue History (4-Yr)</h3>
           <span className="text-xs bg-[#5b8fd9]/15 text-[#8ab4f8] border border-[#5b8fd9]/30 px-2.5 py-1 rounded-lg font-display font-bold tabular-nums">
             CAGR: {(trends.revenue_cagr * 100).toFixed(1)}%
@@ -46,14 +48,15 @@ export default function TrendsTab({ data }) {
             ...layoutConfig,
             yaxis: { ...layoutConfig.yaxis, tickprefix: sym }
           }}
+          config={plotConfig}
           useResizeHandler={true}
           style={{ width: '100%' }}
         />
       </div>
 
       {/* EBIT Margin Trend */}
-      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
-        <div className="flex justify-between items-center mb-2">
+      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <h3 className="font-display text-base font-bold text-[#f4eedf]">Operating EBIT Margin</h3>
           <span className={`text-xs px-2.5 py-1 rounded-lg font-display font-bold tabular-nums border ${
             trends.margin_trend === 'expanding' ? 'bg-[#34b38a]/15 text-[#34b38a] border-[#34b38a]/30' : 
@@ -75,14 +78,15 @@ export default function TrendsTab({ data }) {
             ...layoutConfig,
             yaxis: { ...layoutConfig.yaxis, tickformat: '.1%' }
           }}
+          config={plotConfig}
           useResizeHandler={true}
           style={{ width: '100%' }}
         />
       </div>
 
       {/* CapEx Intensity */}
-      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
-        <div className="flex justify-between items-center mb-2">
+      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <h3 className="font-display text-base font-bold text-[#f4eedf]">CapEx Intensity (% of Revenue)</h3>
           <span className="text-xs font-display font-bold text-[#e3b23c]">
             {trends.capex_trend}
@@ -101,14 +105,15 @@ export default function TrendsTab({ data }) {
             ...layoutConfig,
             yaxis: { ...layoutConfig.yaxis, tickformat: '.1%' }
           }}
+          config={plotConfig}
           useResizeHandler={true}
           style={{ width: '100%' }}
         />
       </div>
 
       {/* FCF History */}
-      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
-        <div className="flex justify-between items-center mb-2">
+      <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <h3 className="font-display text-base font-bold text-[#f4eedf]">Free Cash Flow History</h3>
         </div>
         <Plot
@@ -124,6 +129,7 @@ export default function TrendsTab({ data }) {
             ...layoutConfig,
             yaxis: { ...layoutConfig.yaxis, tickprefix: sym }
           }}
+          config={plotConfig}
           useResizeHandler={true}
           style={{ width: '100%' }}
         />

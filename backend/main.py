@@ -334,7 +334,7 @@ def analyze(req: AnalyzeRequest):
 
         if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
             from engine.data_layer import classify_sector_dynamics
-            is_ext, is_cyc = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"))
+            is_ext, is_cyc = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker"))
             stock_data["is_extractive"] = is_ext
             stock_data["is_cyclical"] = is_cyc
             
@@ -345,8 +345,8 @@ def analyze(req: AnalyzeRequest):
         if overrides.terminal_growth is not None:
             terminal_growth = overrides.terminal_growth
         elif is_extractive:
-            # Physical reservoir depletion / transition cap (2.5% max for finite extractive assets)
-            terminal_growth = min(default_terminal_g, 0.025)
+            # Physical reservoir depletion / transition cap (4.0% max for INR, 2.5% max for USD)
+            terminal_growth = min(default_terminal_g, 0.040 if market == "IN" else 0.025)
         else:
             terminal_growth = default_terminal_g
 
@@ -484,9 +484,12 @@ def analyze(req: AnalyzeRequest):
                 max_growth_ceiling = 0.85
 
             # 1. Baseline FCFF Growth & Margin Trajectory
+            avg_ebitda_margin = float(metrics.get("avg_ebitda_margin", 0.0) or 0.0)
+            cyc_cap = terminal_growth + 0.035
+            cyc_floor = terminal_growth
             if is_cyclical:
-                fcff_default_growth = min(0.035, max(0.02, hist_growth)) if hist_growth > 0 else 0.025
-            elif avg_ebit_margin > 0 and hist_growth < terminal_growth:
+                fcff_default_growth = float(np.clip(hist_growth, cyc_floor, cyc_cap)) if hist_growth > 0 else cyc_floor
+            elif (avg_ebit_margin > 0 or avg_ebitda_margin > 0.05) and hist_growth < terminal_growth:
                 fcff_default_growth = terminal_growth
             else:
                 fcff_default_growth = min(max_growth_ceiling, hist_growth)
@@ -498,12 +501,14 @@ def analyze(req: AnalyzeRequest):
             latest_fcf_margin = float(metrics.get("latest_fcf_margin", 0.0) or 0.0)
             best_fcf_margin = max(avg_fcf_margin, latest_fcf_margin)
             latest_sbc_pct = float(metrics.get("latest_sbc_pct", 0.0) or 0.0)
+            is_store_opex_below_gp = bool(avg_ebitda_margin > 0 and (avg_gross_margin - avg_ebitda_margin) > 0.35)
 
             if is_cyclical:
-                fcff_default_margin = avg_ebit_margin
+                fcff_default_margin = max(avg_ebit_margin, latest_margin, 0.06)
                 fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.01 else None
             elif (
                 not is_extractive
+                and not is_store_opex_below_gp
                 and (avg_gross_margin >= 0.55 or best_fcf_margin >= 0.18)
                 and (best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.08)
             ):
@@ -512,6 +517,11 @@ def analyze(req: AnalyzeRequest):
                 econ_start = max(latest_margin, min(latest_fcf_margin, avg_fcf_margin) - 0.05)
                 fcff_default_current_margin = float(np.clip(econ_start, 0.05, fcff_default_margin))
                 unit_economics_convergence = True
+            elif is_store_opex_below_gp and avg_ebitda_margin >= 0.05:
+                # QSR / Retail / Multi-unit concepts (e.g. DNUT) where store labor & occupancy OpEx sit below Gross Profit
+                ebitda_target = max(avg_ebit_margin * 1.45, avg_ebitda_margin * 0.85, best_fcf_margin + 0.045, 0.080)
+                fcff_default_margin = float(np.clip(ebitda_target, 0.075, 0.15))
+                fcff_default_current_margin = float(np.clip(max(latest_margin, avg_ebit_margin, 0.55 * avg_ebitda_margin), 0.045, fcff_default_margin))
             else:
                 if latest_margin > 0:
                     if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
@@ -521,8 +531,8 @@ def analyze(req: AnalyzeRequest):
                         fcff_default_margin = avg_ebit_margin
                         fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.02 else None
                 else:
-                    fcff_default_current_margin = latest_margin
-                    fcff_default_margin = float(np.clip(0.30 * avg_gross_margin, 0.10, 0.22)) if avg_gross_margin > 0 else 0.10
+                    fcff_default_current_margin = max(latest_margin, avg_ebit_margin, -0.05)
+                    fcff_default_margin = float(np.clip(0.25 * avg_gross_margin, 0.08, 0.18)) if avg_gross_margin > 0 else 0.10
 
             fcff_default_wacc = float(corp_wacc_data.get("wacc", 0.10))
 
@@ -530,7 +540,7 @@ def analyze(req: AnalyzeRequest):
             ddm_default_roe = float(np.clip(metrics.get("avg_roe", 0.14) or 0.14, 0.05, 0.35))
             raw_ni_g = float(metrics.get("avg_ni_growth", hist_growth) or hist_growth)
             if is_cyclical:
-                ddm_default_growth = min(0.035, max(0.02, raw_ni_g)) if raw_ni_g > 0 else 0.025
+                ddm_default_growth = float(np.clip(raw_ni_g, cyc_floor, cyc_cap)) if raw_ni_g > 0 else cyc_floor
             elif abs(raw_ni_g - fcff_default_growth) > 0.10:
                 ddm_default_growth = 0.50 * fcff_default_growth + 0.50 * float(np.clip(raw_ni_g, -0.05, 0.25))
             else:
@@ -733,6 +743,8 @@ def analyze(req: AnalyzeRequest):
                     current_margin=current_margin,
                     tax_rate=tax_rate,
                     use_mid_year=True,
+                    base_growth=start_growth,
+                    base_wacc=discount_rate,
                 )
                 sens_margin_wacc = generate_margin_sensitivity_grid(
                     metrics=metrics,
@@ -744,6 +756,8 @@ def analyze(req: AnalyzeRequest):
                     target_margin=target_margin,
                     current_margin=current_margin,
                     tax_rate=tax_rate,
+                    base_growth=start_growth,
+                    base_wacc=discount_rate,
                 )
 
                 # Validation (EV/EBITDA cross-check)
@@ -803,10 +817,15 @@ def analyze(req: AnalyzeRequest):
         terminal_value_valid = dcf_result.get("terminal_value_valid", True)
         mc_valid = mc_result.get("actual_iterations", 0) > 0
         
-        # Assess if company is in deep distress (ICR < 1.0 with high leverage, or zero equity value)
-        icr = metrics.get("interest_coverage", 999.0)
-        wd = wacc_data.get("corporate_weight_debt", wacc_data.get("weight_debt", 0.0)) or 0.0
-        is_distressed_firm = bool((icr < 1.0 and wd > 0.60) or (dcf_result.get("equity_value", 1.0) <= 0))
+        # Assess if company is in deep distress (zero baseline equity value, or severe insolvency where EBITDA < Interest & extreme leverage)
+        icr = float(wacc_data.get("interest_coverage", metrics.get("interest_coverage", 999.0)) or 999.0)
+        wd = float(wacc_data.get("corporate_weight_debt", wacc_data.get("weight_debt", 0.0)) or 0.0)
+        trailing_ebitda_val = float(validation.get("trailing_ebitda", 1.0) or 0.0)
+        interest_exp_val = float(metrics.get("interest_expense", 0.0) or 0.0)
+        is_distressed_firm = bool(
+            (dcf_result.get("equity_value", 1.0) <= 0)
+            or (icr < 0.65 and wd > 0.75 and trailing_ebitda_val < interest_exp_val)
+        )
 
         verdict = generate_verdict(
             current_price=current_price,
@@ -990,7 +1009,10 @@ def analyze(req: AnalyzeRequest):
                 "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
                 "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),
                 "historical_fcf_negative": bool(
-                    not is_equity_model and (
+                    not is_equity_model
+                    and float(metrics.get("latest_fcf_margin", 0.0) or 0.0) < 0
+                    and float(metrics.get("avg_fcf_margin", 0.0) or 0.0) < 0
+                    and (
                         metrics.get("avg_ebit_margin", 0.1) <= 0
                         or (metrics.get("ebit") and len(metrics.get("ebit")) > 0 and metrics["ebit"][-1] <= 0)
                     )

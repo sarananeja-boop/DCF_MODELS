@@ -6,12 +6,14 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
     """
     ebit_arr = metrics.get('ebit', [])
     dna_arr = metrics.get('dna', [])
+    ebitda_arr = metrics.get('ebitda', [])
     last_revenue = metrics.get('last_revenue', 0.0)
     
     last_ebit = ebit_arr[-1] if len(ebit_arr) > 0 else 0.0
     last_dna = dna_arr[-1] if len(dna_arr) > 0 else 0.0
+    last_norm_ebitda = float(ebitda_arr[-1]) if len(ebitda_arr) > 0 else 0.0
     
-    trailing_ebitda = last_ebit + last_dna
+    trailing_ebitda = max(last_ebit + last_dna, last_norm_ebitda)
         
     market_cap = stock_data.get('market_cap', 0.0)
     total_debt = wacc_data.get('total_debt', 0.0)
@@ -166,7 +168,7 @@ def generate_verdict(
 
     # Point 7: Change verdict and label for high distress / equity wipeout names
     # Equity in a distressed firm behaves like an option; truncated DCF is unreliable
-    distressed_firm = is_distressed or (zero_price_pct > 0.20) or (p25 is not None and p25 <= 0.0) or (median == 0.0 and mc_valid)
+    distressed_firm = is_distressed or (zero_price_pct > 0.40) or (median is not None and median <= 0.0 and mc_valid)
     if distressed_firm:
         distressed_upside = -100.0 if (is_invalid(median) or median == 0.0) else float(((median / current_price) - 1) * 100 if current_price > 0 else 0.0)
         return {

@@ -14,13 +14,15 @@ def generate_sensitivity_grid(
     current_margin: Optional[float] = None,
     tax_rate: Optional[float] = None,
     use_mid_year: bool = True,
+    base_growth: Optional[float] = None,
+    base_wacc: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Generates a 2D sensitivity grid for Revenue Growth vs. WACC.
     """
-    avg_rev_growth = metrics.get('avg_rev_growth', 0.0)
+    avg_rev_growth = base_growth if base_growth is not None else metrics.get('avg_rev_growth', 0.0)
     ebit_margin = target_margin if target_margin is not None else metrics.get('avg_ebit_margin', 0.0)
-    base_wacc = wacc_data.get('wacc', 0.10)
+    base_wacc = base_wacc if base_wacc is not None else wacc_data.get('wacc', 0.10)
     
     if tax_rate is None and market_profile:
         tax_rate = market_profile.get("tax_rate")
@@ -76,13 +78,15 @@ def generate_margin_sensitivity_grid(
     current_margin: Optional[float] = None,
     tax_rate: Optional[float] = None,
     use_mid_year: bool = True,
+    base_growth: Optional[float] = None,
+    base_wacc: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Generates a 2D sensitivity grid for EBIT Margin vs. WACC.
     """
-    avg_rev_growth = metrics.get('avg_rev_growth', 0.0)
+    avg_rev_growth = base_growth if base_growth is not None else metrics.get('avg_rev_growth', 0.0)
     base_margin = target_margin if target_margin is not None else metrics.get('avg_ebit_margin', 0.0)
-    base_wacc = wacc_data.get('wacc', 0.10)
+    base_wacc = base_wacc if base_wacc is not None else wacc_data.get('wacc', 0.10)
     
     if tax_rate is None and market_profile:
         tax_rate = market_profile.get("tax_rate")

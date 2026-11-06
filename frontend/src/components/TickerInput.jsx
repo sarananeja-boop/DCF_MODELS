@@ -440,7 +440,7 @@ export default function TickerInput({
                       }`}>
                         {cleanSymbol}
                       </span>
-                      <span className={`text-xs truncate max-w-[320px] sm:max-w-lg font-normal ${
+                      <span className={`text-xs truncate block w-full font-normal ${
                         isSelected ? 'text-[#e2e8f0]' : 'text-[#a6b0c3]'
                       }`}>
                         {item.name}
@@ -491,22 +491,22 @@ export default function TickerInput({
   if (compact) {
     return (
       <div className="relative w-full max-w-2xl" ref={dropdownRef}>
-        <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-[#121824] border border-[#2d3848] hover:border-[#3e4c63] focus-within:border-[#e3b23c] rounded-xl px-4 py-2 transition-all shadow-md">
-          <FiSearch className="w-4 h-4 text-[#e3b23c] shrink-0" />
+        <form onSubmit={handleSubmit} className="flex items-center gap-1.5 sm:gap-2 bg-[#121824] border border-[#2d3848] hover:border-[#3e4c63] focus-within:border-[#e3b23c] rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 transition-all shadow-md">
+          <FiSearch className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#e3b23c] shrink-0" />
           <input
             type="text"
             value={query}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
-            className="w-full bg-transparent text-sm text-[#f4eedf] placeholder-[#a6b0c3]/70 focus:outline-none font-sans font-medium tracking-wide"
+            className="w-full min-w-0 flex-1 bg-transparent text-xs sm:text-sm text-[#f4eedf] placeholder-[#a6b0c3]/70 focus:outline-none font-sans font-medium tracking-wide"
             placeholder="Search any Indian or US company (e.g. RELIANCE, HUL, HDFCBANK, AAPL)..."
             autoComplete="off"
           />
           <select
             value={market}
             onChange={(e) => handleMarketChange(e.target.value)}
-            className="bg-[#0c1017] text-xs text-[#f4eedf]/90 border border-[#2d3848] rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer font-sans font-medium shrink-0"
+            className="bg-[#0c1017] text-[11px] sm:text-xs text-[#f4eedf]/90 border border-[#2d3848] rounded-lg px-1.5 sm:px-2.5 py-1 sm:py-1.5 max-w-[92px] sm:max-w-none focus:outline-none cursor-pointer font-sans font-medium shrink-0"
             title="Exchange"
           >
             <option value="auto">🌐 Auto</option>
@@ -516,7 +516,7 @@ export default function TickerInput({
           <button
             type="submit"
             disabled={loading || !ticker.trim()}
-            className="px-4 py-1.5 rounded-lg bg-[#e3b23c] hover:bg-[#eab949] disabled:opacity-40 text-[#0f141c] font-sans font-bold text-xs transition shrink-0 cursor-pointer"
+            className="px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-lg bg-[#e3b23c] hover:bg-[#eab949] disabled:opacity-40 text-[#0f141c] font-sans font-bold text-[11px] sm:text-xs transition shrink-0 cursor-pointer whitespace-nowrap"
           >
             {loading ? '...' : 'Run DCF'}
           </button>
@@ -528,51 +528,55 @@ export default function TickerInput({
 
   // Default & Hero Mode: Wide unified search bar matching the website
   return (
-    <div className={`relative w-full ${heroMode ? '' : 'bg-[#151c27]/90 rounded-2xl border border-[#f4eedf]/12 shadow-2xl p-5 sm:p-6'}`} ref={dropdownRef}>
+    <div className={`relative w-full ${heroMode ? '' : 'bg-[#151c27]/90 rounded-2xl border border-[#f4eedf]/12 shadow-2xl p-4 sm:p-6'}`} ref={dropdownRef}>
       <form 
         onSubmit={handleSubmit} 
-        className="flex items-center gap-2 sm:gap-3 bg-[#0d121a] border border-[#f4eedf]/15 hover:border-[#f4eedf]/30 focus-within:border-[#e3b23c] rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 transition-all shadow-md w-full"
+        className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 bg-[#0d121a] border border-[#f4eedf]/15 hover:border-[#f4eedf]/30 focus-within:border-[#e3b23c] rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 transition-all shadow-md w-full"
       >
-        <FiSearch className="w-5 h-5 text-[#e3b23c] shrink-0" />
-        <input
-          type="text"
-          value={query}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
-          className="w-full bg-transparent text-sm sm:text-base text-[#f4eedf] placeholder-[#a6b0c3]/60 focus:outline-none font-sans font-medium tracking-wide"
-          placeholder="Search any Indian or US company (e.g. Reliance, HUL, HDFCBANK, Apple)..."
-          autoComplete="off"
-        />
-        {searching && (
-          <div className="shrink-0 mr-1">
-            <span className="w-4 h-4 rounded-full border-2 border-[#e3b23c]/20 border-t-[#e3b23c] animate-spin inline-block"></span>
-          </div>
-        )}
-        <select
-          value={market}
-          onChange={(e) => handleMarketChange(e.target.value)}
-          className="bg-[#141b26] text-xs sm:text-sm text-[#f4eedf] border border-[#f4eedf]/15 hover:border-[#f4eedf]/30 rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 focus:outline-none cursor-pointer font-sans font-semibold shrink-0 transition"
-          title="Select Exchange"
-        >
-          <option value="auto">🌐 Auto</option>
-          <option value="IN">🇮🇳 NSE India</option>
-          <option value="US">🇺🇸 US Market</option>
-        </select>
-        <button
-          type="submit"
-          disabled={loading || !ticker.trim()}
-          className="bg-[#e3b23c] hover:bg-[#ecc052] disabled:opacity-40 text-[#0d131f] text-xs sm:text-sm font-display font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1 shadow-md"
-        >
-          {loading ? (
-            <span>Valuating...</span>
-          ) : (
-            <>
-              <span>Run DCF</span>
-              <FiArrowUpRight className="w-4 h-4" />
-            </>
+        <div className="flex items-center gap-2.5 w-full min-w-0 flex-1">
+          <FiSearch className="w-5 h-5 text-[#e3b23c] shrink-0" />
+          <input
+            type="text"
+            value={query}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => { if (query.trim().length >= 2) setShowDropdown(true); }}
+            className="w-full min-w-0 bg-transparent text-sm sm:text-base text-[#f4eedf] placeholder-[#a6b0c3]/60 focus:outline-none font-sans font-medium tracking-wide"
+            placeholder="Search any Indian or US company (e.g. Reliance, HUL, HDFCBANK, Apple)..."
+            autoComplete="off"
+          />
+          {searching && (
+            <div className="shrink-0 mr-1">
+              <span className="w-4 h-4 rounded-full border-2 border-[#e3b23c]/20 border-t-[#e3b23c] animate-spin inline-block"></span>
+            </div>
           )}
-        </button>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t border-[#f4eedf]/10 sm:border-t-0">
+          <select
+            value={market}
+            onChange={(e) => handleMarketChange(e.target.value)}
+            className="flex-1 sm:flex-initial bg-[#141b26] text-xs sm:text-sm text-[#f4eedf] border border-[#f4eedf]/15 hover:border-[#f4eedf]/30 rounded-lg px-2.5 sm:px-3 py-2 focus:outline-none cursor-pointer font-sans font-semibold shrink-0 transition"
+            title="Select Exchange"
+          >
+            <option value="auto">🌐 Auto</option>
+            <option value="IN">🇮🇳 NSE India</option>
+            <option value="US">🇺🇸 US Market</option>
+          </select>
+          <button
+            type="submit"
+            disabled={loading || !ticker.trim()}
+            className="flex-1 sm:flex-initial justify-center bg-[#e3b23c] hover:bg-[#ecc052] disabled:opacity-40 text-[#0d131f] text-xs sm:text-sm font-display font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1 shadow-md whitespace-nowrap"
+          >
+            {loading ? (
+              <span>Valuating...</span>
+            ) : (
+              <>
+                <span>Run DCF</span>
+                <FiArrowUpRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </div>
       </form>
       {renderDropdown()}
     </div>

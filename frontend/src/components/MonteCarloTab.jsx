@@ -91,10 +91,7 @@ const MonteCarloTab = ({ data }) => {
 
   const histogramLayout = useMemo(() => ({
     ...warmLayout,
-    title: {
-      text: `Implied Share Price Distribution (${iterations.toLocaleString()} Runs | ${isEquityModel ? 'Growth–ROE' : 'Growth–Margin'} ρ = ${Number(histCorrGm).toFixed(2)})`,
-      font: { color: '#f4eedf', size: 13, family: 'Space Grotesk, sans-serif' }
-    },
+    margin: { l: 50, r: 20, t: 35, b: 45 },
     xaxis: { ...warmLayout.xaxis, title: `Implied Share Price (${currency})` },
     yaxis: { ...warmLayout.yaxis, title: 'Frequency' },
     shapes: [
@@ -148,38 +145,38 @@ const MonteCarloTab = ({ data }) => {
     annotations: [
       {
         x: currentPrice,
-        y: 1.03,
+        y: 1.05,
         yref: 'paper',
-        text: 'Market Price',
+        text: 'Mkt Price',
         showarrow: false,
         font: { color: '#e07a5f', size: 10, family: 'Space Grotesk, sans-serif' }
       },
       {
         x: median,
-        y: 1.03,
+        y: 0.94,
         yref: 'paper',
-        text: 'Median Fair Value',
+        text: 'Median',
         showarrow: false,
         font: { color: '#34b38a', size: 10, family: 'Space Grotesk, sans-serif' }
       },
       {
         x: p5,
-        y: 1.03,
+        y: 1.05,
         yref: 'paper',
-        text: 'P5 (Bear)',
+        text: 'P5',
         showarrow: false,
         font: { color: '#e3b23c', size: 10, family: 'Space Grotesk, sans-serif' }
       },
       {
         x: p95,
-        y: 1.03,
+        y: 1.05,
         yref: 'paper',
-        text: 'P95 (Bull)',
+        text: 'P95',
         showarrow: false,
         font: { color: '#e3b23c', size: 10, family: 'Space Grotesk, sans-serif' }
       }
     ]
-  }), [warmLayout, iterations, histCorrGm, currency, p5, p95, median, currentPrice]);
+  }), [warmLayout, currency, p5, p95, median, currentPrice]);
 
   const statItems = [
     { label: 'P5 (Bear 5%)', value: stats?.p5 },
@@ -259,29 +256,39 @@ const MonteCarloTab = ({ data }) => {
 
         {/* Histogram Chart */}
         {histogram && (
-          <div className="mt-4 pt-4 border-t border-[#f4eedf]/10 min-h-[380px] flex items-center justify-center">
-            {chartsReady ? (
-              <Plot
-                data={[
-                  {
-                    x: histogram.bins,
-                    y: histogram.counts,
-                    type: 'bar',
-                    marker: { color: 'rgba(91, 143, 217, 0.72)' }
-                  }
-                ]}
-                layout={histogramLayout}
-                config={plotConfig}
-                useResizeHandler={true}
-                style={{ width: '100%', height: '380px' }}
-                className="w-full"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 text-xs text-[#a6b0c3]">
-                <div className="w-8 h-8 rounded-full border-2 border-[#5b8fd9]/20 border-t-[#5b8fd9] animate-spin"></div>
-                <span>Rendering 10,000-run distribution...</span>
-              </div>
-            )}
+          <div className="mt-4 pt-4 border-t border-[#f4eedf]/10 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h4 className="font-display font-bold text-xs sm:text-sm text-[#f4eedf]">
+                Implied Share Price Distribution ({iterations.toLocaleString()} Runs)
+              </h4>
+              <span className="text-[11px] font-mono text-[#a6b0c3]">
+                {isEquityModel ? 'Growth–ROE' : 'Growth–Margin'} ρ = {Number(histCorrGm).toFixed(2)}
+              </span>
+            </div>
+            <div className="min-h-[340px] sm:min-h-[380px] flex items-center justify-center">
+              {chartsReady ? (
+                <Plot
+                  data={[
+                    {
+                      x: histogram.bins,
+                      y: histogram.counts,
+                      type: 'bar',
+                      marker: { color: 'rgba(91, 143, 217, 0.72)' }
+                    }
+                  ]}
+                  layout={histogramLayout}
+                  config={plotConfig}
+                  useResizeHandler={true}
+                  style={{ width: '100%', height: '360px' }}
+                  className="w-full"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 text-xs text-[#a6b0c3]">
+                  <div className="w-8 h-8 rounded-full border-2 border-[#5b8fd9]/20 border-t-[#5b8fd9] animate-spin"></div>
+                  <span>Rendering 10,000-run distribution...</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -289,7 +296,10 @@ const MonteCarloTab = ({ data }) => {
       {/* Scatter Plots (Downsampled & Defer-Mounted for Instant Zero-Lag Tab Switching) */}
       {sampledScatter && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px]">
+          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px] overflow-hidden">
+            <h4 className="font-display font-bold text-xs sm:text-sm text-[#f4eedf] mb-1">
+              Growth vs {isEquityModel ? 'ROE' : 'Margin'} (ρ = {Number(histCorrGm).toFixed(2)})
+            </h4>
             {chartsReady ? (
               <Plot
                 data={[
@@ -303,24 +313,26 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: `Growth vs ${isEquityModel ? 'ROE' : 'Margin'} (ρ = ${Number(histCorrGm).toFixed(2)})`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
                   xaxis: { ...warmLayout.xaxis, title: 'Growth Rate', tickformat: '.1%' },
                   yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Target ROE' : 'Operating Margin', tickformat: '.1%' },
-                  margin: { l: 50, r: 20, t: 40, b: 40 }
+                  margin: { l: 50, r: 20, t: 15, b: 40 }
                 }}
                 config={plotConfig}
                 useResizeHandler={true}
-                style={{ width: '100%', height: '270px' }}
+                style={{ width: '100%', height: '250px' }}
                 className="w-full"
               />
             ) : (
-              <div className="h-[270px] flex items-center justify-center text-xs text-[#a6b0c3]">
+              <div className="h-[250px] flex items-center justify-center text-xs text-[#a6b0c3]">
                 <span>Preparing correlation plot...</span>
               </div>
             )}
           </div>
 
-          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px]">
+          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px] overflow-hidden">
+            <h4 className="font-display font-bold text-xs sm:text-sm text-[#f4eedf] mb-1">
+              Growth vs {isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
+            </h4>
             {chartsReady ? (
               <Plot
                 data={[
@@ -334,24 +346,26 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: `Growth vs ${isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
                   xaxis: { ...warmLayout.xaxis, title: 'Growth Rate', tickformat: '.1%' },
                   yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Cost of Equity (Ke)' : 'WACC', tickformat: '.1%' },
-                  margin: { l: 50, r: 20, t: 40, b: 40 }
+                  margin: { l: 50, r: 20, t: 15, b: 40 }
                 }}
                 config={plotConfig}
                 useResizeHandler={true}
-                style={{ width: '100%', height: '270px' }}
+                style={{ width: '100%', height: '250px' }}
                 className="w-full"
               />
             ) : (
-              <div className="h-[270px] flex items-center justify-center text-xs text-[#a6b0c3]">
+              <div className="h-[250px] flex items-center justify-center text-xs text-[#a6b0c3]">
                 <span>Preparing correlation plot...</span>
               </div>
             )}
           </div>
 
-          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px]">
+          <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg min-h-[270px] overflow-hidden">
+            <h4 className="font-display font-bold text-xs sm:text-sm text-[#f4eedf] mb-1">
+              {isEquityModel ? 'ROE' : 'Margin'} vs {isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
+            </h4>
             {chartsReady ? (
               <Plot
                 data={[
@@ -365,18 +379,17 @@ const MonteCarloTab = ({ data }) => {
                 ]}
                 layout={{
                   ...warmLayout,
-                  title: { text: `${isEquityModel ? 'ROE' : 'Margin'} vs ${isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}`, font: { color: '#f4eedf', size: 12, family: 'Space Grotesk, sans-serif' } },
                   xaxis: { ...warmLayout.xaxis, title: isEquityModel ? 'Target ROE' : 'Operating Margin', tickformat: '.1%' },
                   yaxis: { ...warmLayout.yaxis, title: isEquityModel ? 'Cost of Equity (Ke)' : 'WACC', tickformat: '.1%' },
-                  margin: { l: 50, r: 20, t: 40, b: 40 }
+                  margin: { l: 50, r: 20, t: 15, b: 40 }
                 }}
                 config={plotConfig}
                 useResizeHandler={true}
-                style={{ width: '100%', height: '270px' }}
+                style={{ width: '100%', height: '250px' }}
                 className="w-full"
               />
             ) : (
-              <div className="h-[270px] flex items-center justify-center text-xs text-[#a6b0c3]">
+              <div className="h-[250px] flex items-center justify-center text-xs text-[#a6b0c3]">
                 <span>Preparing correlation plot...</span>
               </div>
             )}

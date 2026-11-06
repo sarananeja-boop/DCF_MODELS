@@ -140,11 +140,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const p5PosPct = Math.min(92, Math.max(2, (p5 / scaleMax) * 100));
   const p95PosPct = Math.min(98, Math.max(p5PosPct + 4, (p95 / scaleMax) * 100));
 
-  // Dynamic alignment helper to ensure callout badges never bleed off the card edges
+  // Dynamic alignment helper to ensure callout badges never bleed off the card edges on mobile or desktop
   const getCalloutAlign = (pct) => {
-    if (pct < 18) return { transform: 'translateX(0%)', align: 'items-start' };
-    if (pct > 82) return { transform: 'translateX(-100%)', align: 'items-end' };
-    return { transform: 'translateX(-50%)', align: 'items-center' };
+    const clampedPct = Math.min(96, Math.max(4, pct));
+    return {
+      transform: `translateX(-${Math.round(clampedPct)}%)`,
+      pointerLeft: `${Math.round(clampedPct)}%`,
+    };
   };
   const fairAlign = getCalloutAlign(fairPosPct);
   const priceAlign = getCalloutAlign(pricePosPct);
@@ -292,16 +294,18 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
             </div>
 
             {/* Horizontal Bar Visualization (Simply Wall St style) */}
-            <div className="relative pt-8 pb-8 px-3 sm:px-4 my-1">
+            <div className="relative pt-8 pb-8 px-2 sm:px-4 my-1">
               {/* Fair Value Marker (Top Callout) */}
               <div
-                className={`absolute top-0 flex flex-col ${fairAlign.align} transition-all duration-300 z-20`}
+                className="absolute top-0 flex flex-col transition-all duration-300 z-20 max-w-[92vw]"
                 style={{ left: `${fairPosPct}%`, transform: fairAlign.transform }}
               >
-                <div className="px-3 py-1 rounded-lg bg-[#e3b23c] text-[#0f141c] font-display text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
+                <div className="px-2.5 sm:px-3 py-1 rounded-lg bg-[#e3b23c] text-[#0f141c] font-display text-[11px] sm:text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
                   {isEquityModel ? 'DDM Fair Value' : 'DCF Fair Value'}: {symbol}{formatNumber(impliedPrice)}
                 </div>
-                <div className="w-0.5 h-3 bg-[#e3b23c]" />
+                <div className="relative h-3 w-full">
+                  <div className="absolute top-0 w-0.5 h-3 bg-[#e3b23c] -translate-x-1/2" style={{ left: fairAlign.pointerLeft }} />
+                </div>
               </div>
 
               {/* Track with Under/Overvalued Zones & Monte Carlo 90% Confidence Band */}
@@ -331,11 +335,13 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
 
               {/* Current Price Marker (Bottom Callout) */}
               <div
-                className={`absolute bottom-0 flex flex-col ${priceAlign.align} transition-all duration-300 z-20`}
+                className="absolute bottom-0 flex flex-col transition-all duration-300 z-20 max-w-[92vw]"
                 style={{ left: `${pricePosPct}%`, transform: priceAlign.transform }}
               >
-                <div className="w-0.5 h-3 bg-[#f4eedf]" />
-                <div className="px-3 py-1 rounded-lg bg-[#f4eedf] text-[#0f141c] font-display text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
+                <div className="relative h-3 w-full">
+                  <div className="absolute bottom-0 w-0.5 h-3 bg-[#f4eedf] -translate-x-1/2" style={{ left: priceAlign.pointerLeft }} />
+                </div>
+                <div className="px-2.5 sm:px-3 py-1 rounded-lg bg-[#f4eedf] text-[#0f141c] font-display text-[11px] sm:text-xs font-bold whitespace-nowrap shadow-md tabular-nums">
                   Current Price: {symbol}{formatNumber(currentPrice)}
                 </div>
               </div>
@@ -733,7 +739,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
 
             {/* Transparent Formula Reconciliation */}
             {!isEquityModel && wacc_details?.weight_equity != null && wacc_details?.weight_debt != null && (
-              <div className="mb-3 px-2.5 py-1.5 rounded-xl bg-[#0d121a] border border-[#f4eedf]/8 text-[11px] text-[#a6b0c3] flex items-center justify-between">
+              <div className="mb-3 px-2.5 py-1.5 rounded-xl bg-[#0d121a] border border-[#f4eedf]/8 text-[11px] text-[#a6b0c3] flex flex-wrap items-center justify-between gap-1.5">
                 <span className="font-mono text-[10.5px]">WACC = (We × Ke) + (Wd × Kd)</span>
                 <span className="text-[#f4eedf] font-semibold tabular-nums text-xs">
                   ({formatPercent(wacc_details.weight_equity)} × {formatPercent(wacc_details.cost_of_equity)}) + ({formatPercent(wacc_details.weight_debt)} × {formatPercent(wacc_details.cost_of_debt)}) = <strong className="text-[#e3b23c]">{formatPercent(wacc_details.wacc)}</strong>
@@ -900,7 +906,15 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
             {isDistressed ? (
               <div className="border-l-2 border-[#e07a5f] pl-2.5">
                 <strong className="text-[#e07a5f]">Distressed / Invalid DCF Note: </strong>
-                Balance sheet debt ({formatCurrency(totalDebt, symbol, true)}) exceeds discounted operating cash flows ({formatCurrency(dcf_result?.enterprise_value, symbol, true)}), resulting in zero baseline equity value. Use multiples or asset-recovery analysis until leverage normalizes.
+                {dcf_result?.equity_value != null && dcf_result.equity_value <= 0 ? (
+                  <>
+                    Balance sheet debt ({formatCurrency(totalDebt, symbol, true)}) exceeds discounted operating cash flows ({formatCurrency(dcf_result?.enterprise_value, symbol, true)}), resulting in zero baseline equity value. Use multiples or asset-recovery analysis until leverage normalizes.
+                  </>
+                ) : (
+                  <>
+                    High debt leverage ({formatCurrency(totalDebt, symbol, true)}) relative to volatile operating cash flows causes elevated downside tail risk in Monte Carlo stress simulations. Consider peer multiples alongside DCF.
+                  </>
+                )}
               </div>
             ) : validation?.status === 'PASS' ? (
               <div className="border-l-2 border-[#34b38a] pl-2.5">
