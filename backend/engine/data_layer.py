@@ -995,20 +995,6 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # (e.g. DNUT -$447.5M goodwill impairment, JACK -$236M impairment, SBUX -$892M restructuring,
         # CVS -$5.24B special charges, or >85% spin-off gains).
         # 'Operating Income' (Gross Profit - Operating Expense) is recurring GAAP Operating Profit.
-        if "Operating Income" in income_stmt.columns:
-            op_inc = safe_get(income_stmt, "Operating Income")[::-1]
-            for idx in range(len(ebit)):
-                if op_inc[idx] > ebit[idx]:
-                    # EBIT was dragged down below Operating Income by non-operating impairments/losses
-                    # (e.g. DNUT -$447.5M goodwill impairment, JACK -$236M, SBUX -$892M, CVS -$5.24B)
-                    ebit[idx] = op_inc[idx]
-                elif revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85:
-                    # One-off spin-off/divestiture gain (>85% of revenue)
-                    ebit[idx] = op_inc[idx]
-                elif op_inc[idx] > 0 and ebit[idx] > op_inc[idx] * 1.35:
-                    # Large non-operating divestiture gain (>35% above operating income)
-                    ebit[idx] = op_inc[idx]
-
         # Extract Normalized EBITDA (or recurring Operating Income + D&A)
         norm_ebitda = (
             safe_get(income_stmt, "Normalized EBITDA", default=0)[::-1]
@@ -1020,7 +1006,36 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             if "EBITDA" in income_stmt.columns
             else np.zeros_like(ebit)
         )
-        ebitda_arr = np.maximum(ebit + dna, np.maximum(norm_ebitda, raw_ebitda))
+
+        if "Operating Income" in income_stmt.columns:
+            op_inc = safe_get(income_stmt, "Operating Income")[::-1]
+            for idx in range(len(ebit)):
+                if op_inc[idx] > ebit[idx]:
+                    # EBIT was dragged down below Operating Income by non-operating impairments/losses
+                    # (e.g. DNUT -$447.5M goodwill impairment, JACK -$236M, SBUX -$892M, CVS -$5.24B)
+                    ebit[idx] = op_inc[idx]
+                elif op_inc[idx] < 0 and ebit[idx] > 0:
+                    # Non-operating gain (e.g. BYND +$466M debt extinguishment gain) flipped negative
+                    # operating income into positive GAAP EBIT
+                    ebit[idx] = op_inc[idx]
+                elif revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85:
+                    # One-off spin-off/divestiture gain (>85% of revenue)
+                    ebit[idx] = op_inc[idx]
+                elif op_inc[idx] > 0 and ebit[idx] > op_inc[idx] * 1.30:
+                    # Large non-operating divestiture gain (>30% above operating income)
+                    ebit[idx] = op_inc[idx]
+                elif norm_ebitda[idx] != 0 and (ebit[idx] + dna[idx]) > norm_ebitda[idx] * 1.15:
+                    # EBIT + D&A exceeds Normalized EBITDA by >15% due to non-operating gains
+                    ebit[idx] = op_inc[idx]
+
+        # Build clean EBITDA array: do not let raw_ebitda override norm_ebitda when raw_ebitda is
+        # inflated by non-operating gains (e.g. BYND debt-extinguishment gain)
+        clean_yf_ebitda = np.where(
+            (norm_ebitda != 0) & ((norm_ebitda < 0) | (raw_ebitda > norm_ebitda * 1.15)),
+            norm_ebitda,
+            np.maximum(norm_ebitda, raw_ebitda),
+        )
+        ebitda_arr = np.maximum(ebit + dna, clean_yf_ebitda)
 
         # Check for LBO / acquisition intangible amortization & one-off special charges distorting GAAP EBIT
         # when Normalized EBITDA and Operating Cash Flow are consistently positive (e.g. DNUT)
@@ -1096,9 +1111,9 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         if "Receivables" in balance_sheet.columns
         else np.zeros_like(ar_series)
     )
-    rec_series = np.maximum(tot_rec_col, ar_series + other_rec_series)
+    rec_series = np.maximum(tot_rec_col, np.maximum(ar_series, other_rec_series))
     excess_fin_rec_series = np.where(
-        (not is_financial) & (rec_series > 0.30 * revenue),
+        (not is_financial) & (rec_series > 0.35 * revenue),
         np.maximum(0.0, rec_series - 0.20 * revenue),
         0.0,
     )
@@ -1141,10 +1156,15 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             payouts.append(float(min(1.0, max(0.0, div / ni))))
 
     info_roe = stock_data.get("info", {}).get("returnOnEquity")
-    if info_roe and not np.isnan(info_roe) and info_roe > 0:
+    median_hist_roe = float(np.median(roes)) if roes else 0.0
+    if info_roe and not np.isnan(info_roe) and info_roe > 0 and median_hist_roe > 0:
+        # Use the stronger of live TTM ROE and multi-year median ROE so post-merger book-value
+        # denominator spikes (e.g. HDFCBANK.NS absorbing HDFC Ltd) do not artificially depress ROE
+        avg_roe = max(float(info_roe), median_hist_roe)
+    elif info_roe and not np.isnan(info_roe) and info_roe > 0:
         avg_roe = float(info_roe)
     elif roes:
-        avg_roe = float(np.median(roes))
+        avg_roe = median_hist_roe
     else:
         avg_roe = 0.14
 
@@ -1233,9 +1253,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             total_debt = max(0.0, total_debt - lease_obligations)
 
     # 2. Captive financing & consolidated NBFC receivables (e.g. John Deere Credit, Caterpillar Financial,
-    # HPE Financial Services, Grasim's consolidated Aditya Birla Capital NBFC loan book, Mahindra Finance)
+    # HPE Financial Services, Grasim's consolidated Aditya Birla Capital NBFC loan book, L&T Finance)
     # Netting non-operating financial loan/lease receivables against total debt isolates corporate operating debt.
-    if not is_financial and total_debt > 0:
+    latest_rev = float(revenue[-1]) if len(revenue) > 0 else 0.0
+    if not is_financial and total_debt > 0 and latest_rev > 0 and total_debt > 0.30 * latest_rev:
         captive_rec = 0.0
         for col_name in [
             "Non Current Accounts Receivable",
@@ -1254,13 +1275,12 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # For conglomerates consolidating an NBFC / financial services subsidiary (e.g. Grasim consolidating
         # Aditya Birla Capital's ₹1.21T financial assets + ₹469.5B NBFC receivables alongside ₹1.90T NBFC debt),
         # include 'Investmentin Financial Assets' when Total Debt > 70% of Revenue
-        latest_rev = float(revenue[-1]) if len(revenue) > 0 else 0.0
-        if latest_rev > 0 and total_debt > 0.70 * latest_rev and "Investmentin Financial Assets" in balance_sheet.columns:
+        if total_debt > 0.70 * latest_rev and "Investmentin Financial Assets" in balance_sheet.columns:
             fin_inv_assets = float(safe_get(balance_sheet, "Investmentin Financial Assets", default=0.0)[0])
             if fin_inv_assets > 0.25 * total_debt:
                 total_captive_offset += fin_inv_assets
 
-        if total_captive_offset > 0:
+        if total_captive_offset > 0.15 * latest_rev:
             offset_applied = min(total_debt * 0.85, total_captive_offset)
             sym = stock_data.get("ticker", "")
             logger.info(

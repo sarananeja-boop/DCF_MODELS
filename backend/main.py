@@ -345,8 +345,8 @@ def analyze(req: AnalyzeRequest):
         if overrides.terminal_growth is not None:
             terminal_growth = overrides.terminal_growth
         elif is_extractive:
-            # Physical reservoir depletion / transition cap (4.0% max for INR, 2.5% max for USD)
-            terminal_growth = min(default_terminal_g, 0.040 if market == "IN" else 0.025)
+            # Physical reservoir depletion / transition cap (2.5% max)
+            terminal_growth = min(default_terminal_g, 0.025)
         else:
             terminal_growth = default_terminal_g
 

@@ -469,7 +469,7 @@ def run_dcf(
 
     is_india = (stock_data.get("market") == "IN")
     if is_extractive:
-        max_g_allowed = 0.040 if is_india else 0.025
+        max_g_allowed = 0.025
     else:
         max_g_allowed = 0.050 if is_india else 0.025
     clamped_terminal_growth = min(terminal_growth, max_g_allowed)
@@ -759,7 +759,7 @@ def run_dcf_batch(
 
     is_india = stock_data.get("market") == "IN"
     if is_extractive:
-        max_g_allowed = 0.040 if is_india else 0.025
+        max_g_allowed = 0.025
     else:
         max_g_allowed = 0.050 if is_india else 0.025
     clamped_terminal_growth = min(terminal_growth, max_g_allowed)
