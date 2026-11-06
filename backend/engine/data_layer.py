@@ -450,9 +450,9 @@ def classify_sector_dynamics(
     comp_name = (name or "").lower()
     text = f"{sec} {ind} {comp_name}".lower()
 
-    # Diversified conglomerates (e.g. Reliance Industries: Telecom + Retail + O2C) and
-    # branded specialty chemical / consumer adhesive / paint compounders are not commodity mines.
-    if sym_clean in {"RELIANCE", "PIDILITIND", "ASIANPAINT", "BERGEPAINT", "SHW", "LIN", "ECL", "APD"}:
+    # Diversified conglomerates (e.g. Reliance Industries: Telecom + Retail + O2C; Adani Enterprises: Airports + Solar + Roads)
+    # and branded specialty chemical / consumer adhesive / paint compounders are not commodity mines.
+    if sym_clean in {"RELIANCE", "ADANIENT", "PIDILITIND", "ASIANPAINT", "BERGEPAINT", "SHW", "LIN", "ECL", "APD"}:
         return False, False
     if "specialty chemicals" in text:
         return False, False
@@ -883,6 +883,11 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     name_lower = (company_name or "").lower()
     clean_sym = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
 
+    # Correct Yahoo Finance legacy 'Thermal Coal' misclassification for Adani Enterprises (Airports, Solar, Roads, Data Centers)
+    if clean_sym == "ADANIENT":
+        sector = "Industrials"
+        industry = "Infrastructure & Conglomerates"
+
     # Deterministic sector/industry fallback when Yahoo endpoints are rate-limited on cloud IPs
     if not sector:
         if is_extractive:
@@ -905,6 +910,9 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         elif any(k in name_lower for k in ["infosys", "technologies", "software", "consultancy", "tech ", "systems", "infotech", "wipro", "mindtree"]) or clean_sym in {"INFY", "TCS", "WIPRO", "HCLTECH", "TECHM", "LTIM", "PERSISTENT", "COFORGE", "MPHASIS"}:
             sector = "Technology"
             industry = industry or "Information Technology Services"
+        elif clean_sym == "RELIANCE" or "reliance industries" in name_lower:
+            sector = "Energy"
+            industry = industry or "Oil & Gas Refining & Marketing"
 
     beta_info = compute_clean_beta(
         stock=stock,
@@ -1270,6 +1278,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     avg_ebit_margin = float(np.mean(ebit_margins))
     std_ebit_margin = float(np.std(ebit_margins, ddof=1)) if len(ebit_margins) > 1 else 0.02
     avg_ebitda_margin = float(np.mean(ebitda_margins))
+    if len(ebitda_arr) > 1 and np.all(ebitda_arr > 0):
+        avg_ebitda_growth = float(np.mean(np.diff(ebitda_arr) / ebitda_arr[:-1]))
+    else:
+        avg_ebitda_growth = avg_rev_growth
 
     # Banking specific ratio calculations (ROE, Payout, Net Income growth)
     # Use Tangible Book Value (excluding non-earning M&A Goodwill > 10% of equity, e.g. HDFCBANK merger goodwill)
@@ -1475,6 +1487,36 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             )
             cwip_offset = 0.65 * max(0.0, cwip_val - 0.20 * latest_rev) + 0.85 * afs_val
             total_debt = max(0.10 * raw_total_debt, total_debt - cwip_offset)
+        elif (
+            not stock_data.get("is_extractive", False)
+            and avg_capex_pct > 2.2 * avg_dna_pct
+            and total_debt > 0.45 * latest_rev
+        ):
+            # Greenfield Infrastructure Project Debt Alignment (e.g. ADANIENT Airports/Solar/Roads, ADANIGREEN Khavda Solar):
+            # When a company is in a massive multi-year greenfield CapEx buildout (CapEx > 2.2x D&A) funded by project debt,
+            # newly built PPE, CWIP, and concession intangibles are not yet generating steady-state EBIT (<8.5% yield on assets).
+            # Netting the project debt associated with pre-ramp greenfield capital isolates debt on commissioned operations.
+            net_ppe_val = (
+                max(0.0, float(safe_get(balance_sheet, "Net PPE", default=0.0)[0]))
+                if "Net PPE" in balance_sheet.columns
+                else 0.0
+            )
+            other_intang_val = (
+                max(0.0, float(safe_get(balance_sheet, "Other Intangible Assets", default=0.0)[0]))
+                if "Other Intangible Assets" in balance_sheet.columns
+                else 0.0
+            )
+            infra_asset_base = net_ppe_val + cwip_val + other_intang_val
+            recent_net_capex = float(np.sum(np.maximum(0.0, capex[-3:] - dna[-3:] * 1.15)))
+            greenfield_capital = cwip_val + 0.85 * recent_net_capex
+            cur_ebit_val = float(ebit[-1]) if len(ebit) > 0 else 0.0
+            if (
+                infra_asset_base > 0
+                and (cur_ebit_val / infra_asset_base) < 0.085
+                and greenfield_capital > 0.35 * total_debt
+            ):
+                gf_offset = min(total_debt * 0.82, greenfield_capital * 0.85)
+                total_debt = max(0.15 * raw_total_debt, total_debt - gf_offset)
 
 
     # Interest expense (for cost-of-debt calculation)
@@ -1597,6 +1639,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "avg_ebit_margin": avg_ebit_margin,
         "std_ebit_margin": std_ebit_margin,
         "avg_ebitda_margin": avg_ebitda_margin,
+        "avg_ebitda_growth": avg_ebitda_growth,
         "avg_capex_pct": avg_capex_pct,
         "avg_dna_pct": avg_dna_pct,
         "avg_dnwc_pct": avg_dnwc_pct,

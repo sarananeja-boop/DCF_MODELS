@@ -490,10 +490,24 @@ def analyze(req: AnalyzeRequest):
 
             # 1. Baseline FCFF Growth & Margin Trajectory
             avg_ebitda_margin = float(metrics.get("avg_ebitda_margin", 0.0) or 0.0)
+            avg_ebitda_growth = float(metrics.get("avg_ebitda_growth", hist_growth) or hist_growth)
+            avg_capex_pct_m = float(metrics.get("avg_capex_pct", 0.0) or 0.0)
+            avg_dna_pct_m = float(metrics.get("avg_dna_pct", 0.0) or 0.0)
             cyc_cap = terminal_growth + 0.035
             cyc_floor = terminal_growth
             if is_cyclical:
                 fcff_default_growth = float(np.clip(hist_growth, cyc_floor, cyc_cap)) if hist_growth > 0 else cyc_floor
+            elif (
+                not is_extractive
+                and (hist_growth < terminal_growth + 0.02 or avg_capex_pct_m > avg_dna_pct_m * 4.0)
+                and avg_ebitda_growth > terminal_growth + 0.06
+                and (avg_ebitda_growth > hist_growth + 0.08)
+            ):
+                # Infrastructure / Conglomerate / Mix-Shift Ramp (e.g. ADANIENT, ADANIGREEN):
+                # When high-margin infrastructure EBITDA is compounding rapidly (+22% to +26%/yr)
+                # even as pass-through trading revenue deflates or massive >4x D&A greenfield solar assets ramp up
+                blended_ebitda_g = 0.75 * avg_ebitda_growth + 0.25 * max(terminal_growth, hist_growth)
+                fcff_default_growth = min(0.24, max(hist_growth, blended_ebitda_g))
             elif (avg_ebit_margin > 0 or avg_ebitda_margin > 0.05) and hist_growth < terminal_growth:
                 fcff_default_growth = terminal_growth
             else:
@@ -554,6 +568,21 @@ def analyze(req: AnalyzeRequest):
                     else:
                         fcff_default_margin = avg_ebit_margin
                         fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.02 else None
+                    # For heavy greenfield infrastructure builders (CapEx > 2.2x D&A and expanding EBITDA),
+                    # converge depressed target EBIT margin (<25%) toward mature infrastructure EBITDA margin net of steady-state D&A
+                    if (
+                        not is_extractive
+                        and not is_cyclical
+                        and (fcff_default_margin < 0.25 or avg_capex_pct_m > avg_dna_pct_m * 4.0)
+                        and avg_capex_pct_m > avg_dna_pct_m * 2.2
+                        and avg_ebitda_growth > 0.15
+                    ):
+                        ebitda_margins_hist = metrics.get("ebitda_margins", [])
+                        latest_ebitda_m = float(ebitda_margins_hist[-1]) if ebitda_margins_hist else avg_ebitda_margin
+                        infra_target_m = max(fcff_default_margin, latest_ebitda_m - avg_dna_pct_m * 0.50)
+                        if infra_target_m > fcff_default_margin:
+                            fcff_default_current_margin = max(latest_margin, avg_ebit_margin)
+                            fcff_default_margin = min(0.75, infra_target_m)
                 else:
                     fcff_default_current_margin = max(latest_margin, avg_ebit_margin, -0.05)
                     fcff_default_margin = float(np.clip(0.25 * avg_gross_margin, 0.08, 0.18)) if avg_gross_margin > 0 else 0.10

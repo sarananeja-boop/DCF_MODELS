@@ -400,7 +400,11 @@ def run_dcf(
         eff_start_capex = avg_capex_pct
     else:
         steady_state_capex_pct = base_steady_state
-        if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
+        if avg_capex_pct > effective_dna_pct * 2.20 and avg_capex_pct > 0.15:
+            # Multi-decade greenfield infrastructure buildout (e.g. ADANIENT, ADANIGREEN):
+            # isolate sustaining maintenance CapEx from 30-year project construction CapEx
+            eff_start_capex = effective_dna_pct * (1.0 + max(0.10, terminal_growth))
+        elif avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
             eff_start_capex = min(
                 avg_capex_pct,
                 effective_dna_pct * (1.0 + max(0.15, start_growth * 1.8)),
@@ -475,7 +479,8 @@ def run_dcf(
     is_high_roic = (not is_extractive and not is_cyclical and (float(metrics.get("avg_gross_margin", 0.0)) >= 0.50 or effective_roic >= 0.28))
     max_roic_cap = 0.45 if is_high_roic else 0.30
     min_reinv_floor = 0.06 if is_high_roic else 0.10
-    sustainable_roic = max(discount_rate, min(effective_roic, max_roic_cap))
+    min_roic_floor = (discount_rate + 0.045) if (not is_extractive and not is_cyclical and avg_capex_pct > effective_dna_pct * 2.20) else discount_rate
+    sustainable_roic = max(min_roic_floor, min(effective_roic, max_roic_cap))
 
     is_india = (stock_data.get("market") == "IN")
     if is_extractive:
@@ -715,7 +720,9 @@ def run_dcf_batch(
         eff_start_capex = avg_capex_pct
     else:
         steady_state_capex_pct = base_steady_state
-        if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
+        if avg_capex_pct > effective_dna_pct * 2.20 and avg_capex_pct > 0.15:
+            eff_start_capex = effective_dna_pct * (1.0 + max(0.10, terminal_growth))
+        elif avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
             eff_start_capex = min(
                 avg_capex_pct,
                 effective_dna_pct * (1.0 + max(0.15, mean_start_g * 1.8)),
@@ -784,7 +791,8 @@ def run_dcf_batch(
     is_high_roic_arr = (not is_extractive and not is_cyclical) & (is_high_gm | (effective_roic >= 0.28))
     max_roic_cap = np.where(is_high_roic_arr, 0.45, 0.30)
     min_reinv_floor = np.where(is_high_roic_arr, 0.06, 0.10)
-    sustainable_roic = np.maximum(sim_wacc, np.minimum(effective_roic, max_roic_cap))
+    min_roic_floor_arr = (sim_wacc + 0.045) if (not is_extractive and not is_cyclical and avg_capex_pct > effective_dna_pct * 2.20) else sim_wacc
+    sustainable_roic = np.maximum(min_roic_floor_arr, np.minimum(effective_roic, max_roic_cap))
 
     is_india = stock_data.get("market") == "IN"
     if is_extractive:
