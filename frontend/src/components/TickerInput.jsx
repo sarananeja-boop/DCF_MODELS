@@ -14,6 +14,14 @@ const mapRawStocks = (list) =>
 
 let STOCK_UNIVERSE = mapRawStocks(rawStocks);
 
+const isMarketMatch = (itemMarket, itemSymbol, targetMarket) => {
+  if (!targetMarket || targetMarket === 'auto') return true;
+  const isIndian = itemMarket === 'IN' || (itemSymbol && (itemSymbol.endsWith('.NS') || itemSymbol.endsWith('.BO')));
+  if (targetMarket === 'IN') return isIndian;
+  if (targetMarket === 'US') return !isIndian;
+  return true;
+};
+
 const scoreRelevance = (item, queryStr) => {
   const cleanQ = (queryStr || '').trim().toUpperCase().replace(/\.(NS|BO)$/, '');
   if (!cleanQ) return 999;
@@ -147,7 +155,7 @@ export default function TickerInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filterLocal = (q) => {
+  const filterLocal = (q, targetMarket = market) => {
     if (!q || q.trim().length < 1) return [];
     const lower = q.trim().toLowerCase();
     const cleanLower = lower.replace(/\.(ns|bo)$/, '').trim();
@@ -157,6 +165,9 @@ export default function TickerInput({
 
     for (let i = 0; i < STOCK_UNIVERSE.length; i++) {
       const item = STOCK_UNIVERSE[i];
+      if (!isMarketMatch(item.market, item.symbol, targetMarket)) {
+        continue;
+      }
       const symClean = item.symbol.replace('.NS', '').replace('.BO', '').toLowerCase();
       const symFull = item.symbol.toLowerCase();
       const name = item.name.toLowerCase();
@@ -204,17 +215,18 @@ export default function TickerInput({
     return unique;
   };
 
-  const fetchSuggestions = async (q, localMatches = []) => {
+  const fetchSuggestions = async (q, localMatches = [], targetMarket = market) => {
     if (!q || q.length < 2) return;
     const cleanQ = q.trim().toUpperCase().replace(/\.(NS|BO)$/, '');
     const hasStrongMatch = localMatches.some(
       (m) =>
-        m.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQ ||
-        m.name.toLowerCase().startsWith(q.trim().toLowerCase())
+        isMarketMatch(m.market, m.symbol, targetMarket) &&
+        (m.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQ ||
+          m.name.toLowerCase().startsWith(q.trim().toLowerCase()))
     );
     if (hasStrongMatch && localMatches.length >= 5) return;
 
-    const cacheKey = q.trim().toLowerCase();
+    const cacheKey = `${targetMarket}:${q.trim().toLowerCase()}`;
     if (searchCache.current.has(cacheKey)) {
       const cached = searchCache.current.get(cacheKey);
       setSuggestions(cached);
@@ -224,13 +236,17 @@ export default function TickerInput({
 
     setSearching(true);
     try {
-      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}`, { timeout: 12000 });
+      const mktParam = targetMarket && targetMarket !== 'auto' ? `&market=${encodeURIComponent(targetMarket)}` : '';
+      const response = await axios.get(`/api/search?q=${encodeURIComponent(q)}${mktParam}`, { timeout: 12000 });
       const remoteResults = response.data.results || [];
       
       const seenBase = new Set();
       const combined = [];
       const allCandidates = [...remoteResults, ...localMatches];
       for (const item of allCandidates) {
+        if (!isMarketMatch(item.market, item.symbol, targetMarket)) {
+          continue;
+        }
         const isIN = item.market === 'IN' || item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO');
         const mkt = isIN ? 'IN' : 'US';
         const baseKey = `${mkt}:${item.symbol.replace('.NS', '').replace('.BO', '')}`;
@@ -269,12 +285,39 @@ export default function TickerInput({
     }
   };
 
+  const handleMarketChange = (newMarket) => {
+    setMarket(newMarket);
+    try {
+      sessionStorage.setItem('vl_market', newMarket);
+    } catch (_) {}
+    if (query && query.trim().length >= 1) {
+      const localMatches = filterLocal(query, newMarket);
+      setSuggestions(localMatches);
+      setShowDropdown(localMatches.length > 0);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        fetchSuggestions(query, localMatches, newMarket);
+      }, 150);
+    }
+  };
+
+  // Re-filter suggestions instantly whenever market prop updates
+  useEffect(() => {
+    if (query && query.trim().length >= 1) {
+      const localMatches = filterLocal(query, market);
+      setSuggestions(localMatches);
+      if (showDropdown) {
+        setShowDropdown(localMatches.length > 0);
+      }
+    }
+  }, [market]);
+
   const handleInputChange = (e) => {
     const val = e.target.value;
     setQuery(val);
     setTicker(val);
     
-    const localMatches = filterLocal(val);
+    const localMatches = filterLocal(val, market);
     if (localMatches.length > 0) {
       setSuggestions(localMatches);
       setShowDropdown(true);
@@ -288,16 +331,19 @@ export default function TickerInput({
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      fetchSuggestions(val, localMatches);
+      fetchSuggestions(val, localMatches, market);
     }, 250);
   };
 
   const handleSelectSuggestion = (sym, name, itemMarket) => {
     const isIN = itemMarket === 'IN' || sym.endsWith('.NS') || sym.endsWith('.BO');
     const cleanSym = isIN ? (sym.endsWith('.BO') ? sym : sym.replace('.NS', '')) : sym;
-    const resolvedMarket = isIN ? 'IN' : 'US';
+    const resolvedMarket = market === 'auto' ? (isIN ? 'IN' : 'US') : market;
     
     setMarket(resolvedMarket);
+    try {
+      sessionStorage.setItem('vl_market', resolvedMarket);
+    } catch (_) {}
     setQuery(cleanSym);
     setTicker(cleanSym);
     setShowDropdown(false);
@@ -339,13 +385,15 @@ export default function TickerInput({
       setShowDropdown(false);
       setSelectedIndex(-1);
       
-      const localMatches = filterLocal(cleanQuery);
+      const localMatches = filterLocal(cleanQuery, market);
       const topMatch = suggestions.find(s => 
-        s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
-        s.symbol.toUpperCase() === cleanQuery
+        isMarketMatch(s.market, s.symbol, market) &&
+        (s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
+         s.symbol.toUpperCase() === cleanQuery)
       ) || localMatches.find(s => 
-        s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
-        s.symbol.toUpperCase() === cleanQuery
+        isMarketMatch(s.market, s.symbol, market) &&
+        (s.symbol.toUpperCase().replace(/\.(NS|BO)$/, '') === cleanQuery || 
+         s.symbol.toUpperCase() === cleanQuery)
       );
 
       if (topMatch) {
@@ -424,7 +472,14 @@ export default function TickerInput({
         ) : (
           <div className="px-5 py-4 bg-[#121824] text-center flex flex-col items-center justify-center gap-1">
             <p className="font-medium text-xs text-[#f4eedf]">
-              Press <kbd className="px-1.5 py-0.5 rounded bg-[#1e293b] border border-[#f4eedf]/20 font-display text-[10px] text-[#e3b23c]">Enter</kbd> to query Yahoo Finance directly for &ldquo;{query}&rdquo;
+              {market === 'IN'
+                ? `No NSE / BSE Indian equities matching "${query}"`
+                : market === 'US'
+                ? `No US equities matching "${query}"`
+                : `No companies matching "${query}"`}
+            </p>
+            <p className="text-[11px] text-[#a6b0c3]">
+              Press <kbd className="px-1.5 py-0.5 rounded bg-[#1e293b] border border-[#f4eedf]/20 font-display text-[10px] text-[#e3b23c]">Enter</kbd> to query {market === 'IN' ? 'NSE India' : market === 'US' ? 'US Markets' : 'global exchanges'} directly
             </p>
           </div>
         )}
@@ -450,7 +505,7 @@ export default function TickerInput({
           />
           <select
             value={market}
-            onChange={(e) => setMarket(e.target.value)}
+            onChange={(e) => handleMarketChange(e.target.value)}
             className="bg-[#0c1017] text-xs text-[#f4eedf]/90 border border-[#2d3848] rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer font-sans font-medium shrink-0"
             title="Exchange"
           >
@@ -471,7 +526,7 @@ export default function TickerInput({
     );
   }
 
-  // Default & Hero Mode: Wide, sleek unified institutional search bar matching the rest of the website
+  // Default & Hero Mode: Wide unified search bar matching the website
   return (
     <div className={`relative w-full ${heroMode ? '' : 'bg-[#151c27]/90 rounded-2xl border border-[#f4eedf]/12 shadow-2xl p-5 sm:p-6'}`} ref={dropdownRef}>
       <form 
@@ -496,7 +551,7 @@ export default function TickerInput({
         )}
         <select
           value={market}
-          onChange={(e) => setMarket(e.target.value)}
+          onChange={(e) => handleMarketChange(e.target.value)}
           className="bg-[#141b26] text-xs sm:text-sm text-[#f4eedf] border border-[#f4eedf]/15 hover:border-[#f4eedf]/30 rounded-lg px-2.5 sm:px-3 py-1.5 sm:py-2 focus:outline-none cursor-pointer font-sans font-semibold shrink-0 transition"
           title="Select Exchange"
         >

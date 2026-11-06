@@ -239,6 +239,8 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         ("Exchange Market", company.get("market")),
         ("Reporting Currency", currency),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
+        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
+        ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
         ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
     ]
@@ -284,7 +286,7 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         ("Current Market Price (CMP)", current_price, cfmt_price, False),
         ("DCF Implied Fair Value (FCFF Base Case)", implied_price, cfmt_price, True),
         ("Implied Upside / (Downside)", upside, PCT_FMT, True),
-        ("Investment Verdict", verdict.get("verdict", "FAIR VALUE"), None, True),
+        ("Investment Verdict", verdict.get("verdict", "NEUTRAL"), None, True),
         ("Valuation Methodology", "Enterprise DCF — Unlevered Free Cash Flow (FCFF) discounted at WACC", None, False),
         ("Monte Carlo Median Implied Price", mc_median, cfmt_price, False),
         ("Monte Carlo 50% Confidence Range (P25 – P75)", f"{curr_sym}{p25:,.2f} – {curr_sym}{p75:,.2f}" if p25 else "N/A", None, False),
@@ -1490,8 +1492,8 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     r += 1
 
     # 11. Verdict
-    ws.cell(row=r, column=2, value="Valuation Verdict").font = FONT_LABEL_BOLD
-    v_cell = ws.cell(row=r, column=4, value=verdict.get("verdict", "FAIR VALUE"))
+    ws.cell(row=r, column=2, value="Valuation Outlook").font = FONT_LABEL_BOLD
+    v_cell = ws.cell(row=r, column=4, value=verdict.get("verdict", "NEUTRAL"))
     v_cell.font = FONT_LABEL_BOLD
     v_cell.alignment = ALIGN_RIGHT
     for c in (2, 3, 4, 5):
@@ -2021,6 +2023,8 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
         ("Industry", company.get("industry") or ("Banking / NBFC" if is_fin else "Corporate")),
         ("Reporting Currency", currency),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
+        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
+        ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
         ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
     ]
@@ -2068,7 +2072,7 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
         ("Multi-Stage DDM / FCFE Fair Value per Share", implied_price, cfmt_price, True),
         ("Current Market Price (CMP)", cmp, cfmt_price, False),
         ("Implied Upside / (Downside)", upside, PCT_FMT, True),
-        ("Investment Verdict", verdict_text, None, True),
+        ("Valuation Outlook", verdict_text, None, True),
         (
             "Valuation Methodology",
             "Damodaran Multi-Stage Regulatory Capital FCFE & DDM"

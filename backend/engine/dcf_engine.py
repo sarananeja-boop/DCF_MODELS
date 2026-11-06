@@ -200,13 +200,18 @@ def compute_wacc(
 
     # Point 6: Cap interest tax shield at usable EBIT (using marginal statutory rate)
     marginal_tax_rate = tax_rate
+    conventional_kd_after_tax = cost_of_debt * (1.0 - marginal_tax_rate)
+    tax_shield_capped = False
+    usable_tax_shield = 0.0
     if total_debt > 0:
         usable_interest = max(0.0, min(interest_expense, max(0.0, last_ebit)))
         usable_tax_shield = marginal_tax_rate * usable_interest
         effective_kd_after_tax = cost_of_debt - (usable_tax_shield / total_debt)
         effective_kd_after_tax = float(np.clip(effective_kd_after_tax, 0.02, cost_of_debt))
+        if interest_expense > 0 and usable_interest < interest_expense:
+            tax_shield_capped = True
     else:
-        effective_kd_after_tax = cost_of_debt * (1.0 - marginal_tax_rate)
+        effective_kd_after_tax = conventional_kd_after_tax
 
     # 4C – Capital structure weights
     total_capital = market_cap + total_debt
@@ -242,7 +247,11 @@ def compute_wacc(
         "ke_floored": ke_floored,
         "ke_note": ke_note,
         "cost_of_debt": float(effective_kd_after_tax),
+        "conventional_cost_of_debt": float(conventional_kd_after_tax),
         "pretax_cost_of_debt": float(cost_of_debt),
+        "tax_rate_used": float(marginal_tax_rate),
+        "tax_shield_capped": tax_shield_capped,
+        "usable_tax_shield": float(usable_tax_shield),
         "synthetic_rating": synthetic_rating,
         "default_spread": float(default_spread),
         "interest_coverage": float(interest_coverage),

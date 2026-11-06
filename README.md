@@ -1,11 +1,11 @@
-# ValuationLab: Automated DCF & Monte Carlo Engine
+# ValuationLabs: Automated DCF & Monte Carlo Engine
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![React](https://img.shields.io/badge/Frontend-React%20%7C%20Vite-61DAFB?logo=react)
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python-009688?logo=fastapi)
 ![Quant](https://img.shields.io/badge/Quant-Monte%20Carlo%20%7C%20SciPy-FF6F00)
 
-ValuationLab is an automated, professional full-stack financial valuation platform. It automates the extraction of corporate financial data, computes dynamic intrinsic valuations using Discounted Cash Flow (DCF) mechanics, and maps probability distributions of fair value using a 10,000-iteration Monte Carlo engine.
+ValuationLabs is an automated, professional full-stack financial valuation platform. It automates the extraction of corporate financial data, computes dynamic intrinsic valuations using Discounted Cash Flow (DCF) mechanics, and maps probability distributions of fair value using a 10,000-iteration Monte Carlo engine.
 
 ## 🚀 Key Features
 

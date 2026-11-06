@@ -43,10 +43,10 @@ const formatShares = (shares, market) => {
   return shares.toLocaleString('en-US');
 };
 
-const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
+const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange }) => {
   if (!data) return <div className="p-8 text-center text-[#a6b0c3]">No data available</div>;
 
-  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, diagnostics, historicals } = data;
+  const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, diagnostics, historicals, metadata } = data;
   const isFinancial = Boolean(company?.is_financial || diagnostics?.is_financial || dcf_result?.is_financial);
   const isEquityModel = Boolean(
     isFinancial ||
@@ -269,12 +269,12 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
       {/* =================================================================== */}
       {/* ROW 1: SIMPLY WALL ST PRICE VS FAIR VALUE BAR + EQUITY VALUE BRIDGE */}
       {/* =================================================================== */}
-      <div className="grid grid-cols-1 2xl:grid-cols-12 gap-4 items-stretch">
+      <div className="grid grid-cols-1 2xl:grid-cols-12 gap-4 items-start">
         
         {/* Left 7 Cols: Share Price vs Fair Value Visual Scale & Valuation Range Stats */}
-        <div className="2xl:col-span-7 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between overflow-hidden">
+        <div className="2xl:col-span-7 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col gap-3 overflow-hidden">
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2.5">
                 <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
                   Share Price vs. {isEquityModel ? 'DDM / FCFE' : 'DCF'} Fair Value &amp; Probability Band
@@ -292,7 +292,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
 
             {/* Horizontal Bar Visualization (Simply Wall St style) */}
-            <div className="relative pt-9 pb-9 px-3 sm:px-4 my-2">
+            <div className="relative pt-8 pb-8 px-3 sm:px-4 my-1">
               {/* Fair Value Marker (Top Callout) */}
               <div
                 className={`absolute top-0 flex flex-col ${fairAlign.align} transition-all duration-300 z-20`}
@@ -342,7 +342,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             </div>
 
             {/* Middle Insight Strip (Eliminates Empty Space with Rich Valuation Insights) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-3 py-3 border-t border-b border-[#f4eedf]/10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-2 py-2.5 border-t border-b border-[#f4eedf]/10">
               <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/8">
                 <div className="text-[10px] uppercase font-bold tracking-wider text-[#a6b0c3]">
                   {isPositive ? 'Margin of Safety' : 'Valuation Premium'}
@@ -388,7 +388,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
           </div>
 
           {/* 6-Metric Valuation Range Strip (All Key Price Benchmarks On-Face, Clean & Uniform) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#e3b23c] font-bold">{isEquityModel ? 'DDM Value' : 'DCF Value'}</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
@@ -433,9 +433,9 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
         </div>
 
         {/* Right 5 Cols: Enterprise-to-Equity Bridge & Horizon Split (With Arithmetic Operators & Bank / Corporate DDM Support) */}
-        <div className="2xl:col-span-5 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between overflow-hidden">
+        <div className="2xl:col-span-5 bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-lg flex flex-col gap-3 overflow-hidden">
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
                 {isFinancial
                   ? 'Terminal Value & Bank Equity Bridge'
@@ -443,13 +443,37 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   ? 'Terminal Value & DDM / FCFE Equity Bridge'
                   : 'Enterprise-to-Equity Value Bridge'}
               </h3>
-              <span className="text-xs font-semibold text-[#a6b0c3] tabular-nums shrink-0">
-                TV Share: <strong className="text-[#8ab4f8]">{pvTvShare.toFixed(1)}%</strong>
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`text-xs font-semibold tabular-nums px-2.5 py-1 rounded-lg border ${
+                    pvTvShare >= 65
+                      ? 'bg-[#182232] border-[#e3b23c]/35 text-[#f4eedf]'
+                      : 'bg-[#0d121a] border-[#f4eedf]/10 text-[#a6b0c3]'
+                  }`}
+                  title={pvTvShare >= 65 ? 'High Terminal Value Dependency: >65% of Enterprise Value stems from perpetuity assumption' : 'Terminal Value share of total valuation'}
+                >
+                  TV Share: <strong className={pvTvShare >= 65 ? 'text-[#e3b23c]' : 'text-[#8ab4f8]'}>{pvTvShare.toFixed(1)}%</strong>
+                  {pvTvShare >= 65 && (
+                    <span className="ml-1 text-[10.5px] font-medium text-[#e3b23c]/90">
+                      (High Perpetuity)
+                    </span>
+                  )}
+                </span>
+                {pvTvShare >= 65 && onTabChange && (
+                  <button
+                    type="button"
+                    onClick={() => onTabChange('sensitivity')}
+                    className="text-[11px] text-[#8ab4f8] hover:text-[#f4eedf] font-semibold transition cursor-pointer flex items-center gap-1 hover:underline ml-0.5"
+                    title="Open 2D Sensitivity Matrix (WACC vs. Terminal Growth)"
+                  >
+                    <span>Sensitivity →</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Stacked Horizon Composition Bar */}
-            <div className="mb-4">
+            <div className="mb-3">
               <div className="flex h-3 rounded-full overflow-hidden bg-[#0d121a] border border-[#f4eedf]/10">
                 <div
                   className="bg-[#34b38a] h-full transition-all duration-300"
@@ -485,7 +509,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#8ab4f8]">(+)</span>
-                      <span>PV of Terminal Equity Value (Gordon Growth)</span>
+                      <span>
+                        PV of Terminal Equity Value (Gordon Growth)
+                        <span className="ml-1.5 text-[10.5px] text-[#a6b0c3]/70 font-mono">({pvTvShare.toFixed(1)}% of Eq)</span>
+                      </span>
                     </span>
                     <span className="font-display font-bold tabular-nums text-[#8ab4f8]">+{formatCurrency(pvTv, symbol, true)}</span>
                   </div>
@@ -535,7 +562,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#8ab4f8]">(+)</span>
-                      <span>PV of Terminal Value (g = {formatPercent(dcf_result?.terminal_growth ?? data.macro?.terminal_growth)})</span>
+                      <span>
+                        PV of Terminal Value (g = {formatPercent(dcf_result?.terminal_growth ?? data.macro?.terminal_growth)})
+                        <span className="ml-1.5 text-[10.5px] text-[#a6b0c3]/70 font-mono">({pvTvShare.toFixed(1)}% of EV)</span>
+                      </span>
                     </span>
                     <span className="font-display font-bold tabular-nums text-[#8ab4f8]">+{formatCurrency(pvTv, symbol, true)}</span>
                   </div>
@@ -701,6 +731,16 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
               </div>
             </div>
 
+            {/* Transparent Formula Reconciliation */}
+            {!isEquityModel && wacc_details?.weight_equity != null && wacc_details?.weight_debt != null && (
+              <div className="mb-3 px-2.5 py-1.5 rounded-xl bg-[#0d121a] border border-[#f4eedf]/8 text-[11px] text-[#a6b0c3] flex items-center justify-between">
+                <span className="font-mono text-[10.5px]">WACC = (We × Ke) + (Wd × Kd)</span>
+                <span className="text-[#f4eedf] font-semibold tabular-nums text-xs">
+                  ({formatPercent(wacc_details.weight_equity)} × {formatPercent(wacc_details.cost_of_equity)}) + ({formatPercent(wacc_details.weight_debt)} × {formatPercent(wacc_details.cost_of_debt)}) = <strong className="text-[#e3b23c]">{formatPercent(wacc_details.wacc)}</strong>
+                </span>
+              </div>
+            )}
+
             {/* 4 Key WACC Boxes */}
             <div className="grid grid-cols-2 gap-2.5 mb-3">
               <div className="bg-[#0d121a] p-2.5 rounded-xl border border-[#f4eedf]/6">
@@ -714,6 +754,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
                 <div className="font-display font-bold text-base text-[#f4eedf] tabular-nums mt-0.5">
                   {isEquityModel ? 'Direct FCFE' : formatPercent(wacc_details?.cost_of_debt)}
                 </div>
+                {!isEquityModel && wacc_details?.tax_shield_capped && (
+                  <div className="text-[10px] text-[#e3b23c] mt-0.5" title="Statutory Kd*(1-T) differs because interest deductions are capped by operating EBIT">
+                    EBIT-capped shield (vs {formatPercent(wacc_details?.conventional_cost_of_debt)} stat.)
+                  </div>
+                )}
               </div>
             </div>
 
@@ -939,6 +984,30 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary }) => {
             <AIReportRenderer jsonString={aiSummary} />
           </div>
         )}
+      </div>
+
+      {/* Research Provenance & Model Audit Disclosures */}
+      <div className="bg-[#0d121a] rounded-2xl p-4 border border-white/[0.06] text-xs text-[#818ea4] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4">
+          <span>
+            <strong className="text-[#a6b0c3]">Model Engine:</strong> {metadata?.model_version ? `ValuationLabs v${metadata.model_version}` : 'ValuationLabs v2.4.0'}
+          </span>
+          <span className="text-white/10">|</span>
+          <span>
+            <strong className="text-[#a6b0c3]">Valuation Generated:</strong> {metadata?.valuation_timestamp ? new Date(metadata.valuation_timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'Current Session'}
+          </span>
+          <span className="text-white/10">|</span>
+          <span>
+            <strong className="text-[#a6b0c3]">Market Price Timestamp:</strong> {metadata?.market_data_timestamp || 'Live Session'}
+          </span>
+          <span className="text-white/10">|</span>
+          <span>
+            <strong className="text-[#a6b0c3]">Filings Horizon:</strong> {metadata?.latest_financial_period || 'Audited Annual'}
+          </span>
+        </div>
+        <div className="text-[11px] text-[#64748b]">
+          Data Provenance: SEC EDGAR &amp; NSE-BSE Statutory Filings · Fed &amp; RBI 10Y Sovereign Curves
+        </div>
       </div>
 
     </div>

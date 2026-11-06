@@ -19,8 +19,8 @@ export default function ExcelDownloadButton({ data, compact = false }) {
     setLoading(true);
     const toastId = toast.loading(
       isEquityModel
-        ? 'Generating institutional DDM / FCFE Excel workbook...'
-        : 'Generating institutional FCFF DCF Excel workbook...'
+        ? 'Generating DDM / FCFE Excel workbook...'
+        : 'Generating FCFF DCF Excel workbook...'
     );
     
     try {

@@ -39,6 +39,11 @@ const MonteCarloTab = ({ data }) => {
   const currentPrice = market_data?.current_price || 0;
   const iterations = monte_carlo.actual_iterations || monte_carlo.inputs?.iterations || 10000;
   const histCorrGm = monte_carlo.hist_corr_gm ?? monte_carlo.inputs?.hist_corr_gm ?? 0;
+  const corrSampleSize = monte_carlo.corr_sample_size;
+  const isCorrRegularized = monte_carlo.is_corr_regularized;
+  const totalSimulations = monte_carlo.total_simulations || iterations * 3;
+  const validSimulations = monte_carlo.valid_simulations || iterations;
+  const invalidReasons = monte_carlo.invalid_simulation_reasons || {};
 
   const formatCurrency = (val) => {
     if (val == null) return '-';
@@ -188,6 +193,52 @@ const MonteCarloTab = ({ data }) => {
 
   return (
     <div className="space-y-4 text-[#f4eedf]">
+      {/* 90% Monte Carlo Simulation Range Banner */}
+      <div className="bg-[#101722] rounded-2xl p-4 sm:p-5 border border-white/[0.08] shadow-md flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-bold tracking-wider text-[#e3b23c]">
+              90% Monte Carlo Simulation Range (P5–P95)
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.06] text-[#a6b0c3] font-mono">
+              10,000 Cholesky Draws
+            </span>
+          </div>
+          <div className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tabular-nums mt-1">
+            {formatCurrency(p5)} <span className="text-[#818ea4] text-lg font-normal">to</span> {formatCurrency(p95)}
+          </div>
+          <p className="text-[11px] text-[#a6b0c3] mt-1 max-w-2xl leading-relaxed">
+            Corridor of simulated intrinsic business valuations across 10,000 correlated iterations. This is an outcome distribution under model assumptions, not a market price forecast.
+          </p>
+        </div>
+
+        {/* Simulation Integrity Badge Strip */}
+        <div className="flex flex-wrap items-center gap-3 text-xs bg-[#090d14] px-3.5 py-2.5 rounded-xl border border-white/[0.08]">
+          <div className="text-left">
+            <span className="text-[10px] text-[#818ea4] block">Candidate Draws</span>
+            <span className="font-display font-bold text-xs text-[#f4eedf] tabular-nums">
+              {totalSimulations.toLocaleString()}
+            </span>
+          </div>
+          <div className="h-6 w-px bg-white/[0.08]" />
+          <div className="text-left">
+            <span className="text-[10px] text-[#818ea4] block">Retained Valid</span>
+            <span className="font-display font-bold text-xs text-[#34b38a] tabular-nums">
+              {validSimulations.toLocaleString()}
+            </span>
+          </div>
+          <div className="h-6 w-px bg-white/[0.08]" />
+          <div className="text-left">
+            <span className="text-[10px] text-[#818ea4] block">Input ρ (Correlation)</span>
+            <span className="font-display font-bold text-xs text-[#8ab4f8] tabular-nums">
+              {Number(histCorrGm).toFixed(2)}
+              {corrSampleSize ? <span className="text-[10px] font-normal text-[#818ea4]"> (N={corrSampleSize})</span> : null}
+              {isCorrRegularized ? <span className="text-[9px] text-[#e3b23c] ml-1 uppercase">Reg.</span> : null}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Row */}
       <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg">
         <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2.5">

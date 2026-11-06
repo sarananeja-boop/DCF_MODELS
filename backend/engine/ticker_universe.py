@@ -663,7 +663,7 @@ def fetch_live_nse_equities(timeout: int = 12) -> List[Dict[str, Any]]:
 def fetch_live_us_equities(baseline_us: List[Dict[str, Any]], max_sec_rank: int = 550, timeout: int = 12) -> List[Dict[str, Any]]:
     """Fetch official SEC EDGAR active US equities and merge with verified baseline US stocks."""
     url = "https://www.sec.gov/files/company_tickers.json"
-    headers = {"User-Agent": "ValuationLab/1.0 (contact@valuationlab.app)"}
+    headers = {"User-Agent": "ValuationLabs/1.0 (contact@valuationlabs.tech)"}
     sec_data = requests.get(url, headers=headers, timeout=timeout).json()
 
     # Map all live SEC tickers and CIKs

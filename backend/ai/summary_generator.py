@@ -387,7 +387,7 @@ def _build_fallback(data: Dict[str, Any]) -> str:
                 "percent_of_enterprise_value": float((dcf.get("pv_terminal_value", 0.0) / dcf.get("enterprise_value", 1.0)) * 100) if dcf.get("enterprise_value", 0.0) > 0 else 70.0,
                 "interpretation": "Terminal value reflects steady-state long-run macroeconomic growth rate.",
             },
-            "overall_interpretation": f"Fundamental valuation indicates a {verdict.get('verdict', 'HOLD')} recommendation with {dcf_upside:+.1f}% upside.",
+            "overall_interpretation": f"Fundamental valuation indicates a {verdict.get('verdict', 'NEUTRAL')} outlook with {dcf_upside:+.1f}% upside.",
         },
         "monte_carlo_analysis": {
             "simulation_count": mc.get("actual_iterations", 10000),
@@ -437,7 +437,7 @@ def _build_fallback(data: Dict[str, Any]) -> str:
             },
         ],
         "final_synopsis": {
-            "paragraph": f"Based on multi-stage DCF modeling and Monte Carlo simulation, {name} presents a fair value estimate of {sym}{dcf_value:.2f} (median outcome {sym}{mc_median:.2f}) versus current market trading price of {sym}{current_price:.2f}, supporting a '{verdict.get('verdict', 'HOLD')}' stance.",
+            "paragraph": f"Based on multi-stage DCF modeling and Monte Carlo simulation, {name} presents a fair value estimate of {sym}{dcf_value:.2f} (median outcome {sym}{mc_median:.2f}) versus current market trading price of {sym}{current_price:.2f}, supporting a '{verdict.get('verdict', 'NEUTRAL')}' stance.",
             "monitoring_points": [
                 "Quarterly revenue momentum relative to baseline projections",
                 "EBITDA margin conversion and free cash flow generation",

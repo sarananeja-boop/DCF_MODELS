@@ -91,7 +91,7 @@ export default function SensitivityTab({ data }) {
     return closest;
   }, [g2_x, data, isEquityModel]);
 
-  // Cell coloring helper: smooth institutional shading
+  // Cell coloring helper: valuation heatmap shading
   const getCellBg = (val) => {
     if (val == null || isNaN(val)) return 'bg-[#0d121a] text-[#a6b0c3]';
     const upside = (val / currentPrice) - 1.0;

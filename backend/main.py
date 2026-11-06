@@ -902,7 +902,11 @@ def analyze(req: AnalyzeRequest):
                 "ke_floored": wacc_data.get("ke_floored", False),
                 "ke_note": wacc_data.get("ke_note"),
                 "cost_of_debt": wacc_data.get("cost_of_debt"),
+                "conventional_cost_of_debt": wacc_data.get("conventional_cost_of_debt"),
                 "pretax_cost_of_debt": wacc_data.get("pretax_cost_of_debt"),
+                "tax_rate_used": wacc_data.get("tax_rate_used", tax_rate),
+                "tax_shield_capped": wacc_data.get("tax_shield_capped", False),
+                "usable_tax_shield": wacc_data.get("usable_tax_shield", 0.0),
                 "weight_equity": wacc_data.get("weight_equity"),
                 "weight_debt": wacc_data.get("weight_debt"),
                 "corporate_wacc": wacc_data.get("corporate_wacc", wacc_data.get("wacc")),
@@ -939,6 +943,8 @@ def analyze(req: AnalyzeRequest):
                 "histogram": mc_histogram,
                 "scatter": mc_scatter,
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
+                "corr_sample_size": mc_result.get("corr_sample_size"),
+                "is_corr_regularized": mc_result.get("is_corr_regularized", False),
                 "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])[:2500]],
             },
             "sensitivity": {
@@ -1011,6 +1017,15 @@ def analyze(req: AnalyzeRequest):
                 "wacc": overrides.wacc,
                 "terminal_growth": overrides.terminal_growth,
                 "projection_years": overrides.projection_years,
+            },
+            "metadata": {
+                "model_version": "2.4.0",
+                "engine_name": "ValuationLabs Quantitative DCF & Monte Carlo Engine",
+                "valuation_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "market_data_timestamp": stock_data.get("price_timestamp") or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "latest_financial_period": metrics.get("latest_period") or (f"FY{metrics.get('years', [2025])[-1]}" if metrics.get('years') else "Latest Reported"),
+                "data_provenance": "SEC EDGAR / NSE & BSE Statutory Filings via Yahoo Finance API",
+                "currency": stock_data.get("currency", "USD"),
             },
         }
 
@@ -1100,12 +1115,15 @@ def get_ticker_universe():
 
 
 @app.get("/api/search")
-def search_ticker(q: str):
+def search_ticker(q: str, market: Optional[str] = None):
     q_norm = q.strip().upper()
     if not q_norm:
         return {"results": []}
-    if q_norm in _search_cache:
-        return {"results": _search_cache[q_norm]}
+    
+    target_mkt = (market or "auto").strip().upper()
+    cache_key = f"{q_norm}:{target_mkt}"
+    if cache_key in _search_cache:
+        return {"results": _search_cache[cache_key]}
 
     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=15&newsCount=0"
     try:
@@ -1130,9 +1148,14 @@ def search_ticker(q: str):
         seen_base: set = set()
 
         # Check if query itself is a legacy/renamed ticker in our corporate action registry
-        for probe_mkt in ("IN", "US"):
+        probe_markets = ("IN",) if target_mkt == "IN" else ("US",) if target_mkt == "US" else ("IN", "US")
+        for probe_mkt in probe_markets:
             res_sym, res_mkt, res_note = resolve_ticker(q_norm, probe_mkt)
             if res_note:
+                if target_mkt == "IN" and res_mkt != "IN":
+                    continue
+                if target_mkt == "US" and res_mkt != "US":
+                    continue
                 base_k = f"{res_mkt}:{res_sym.replace('.NS', '').replace('.BO', '')}"
                 if base_k not in seen_base:
                     seen_base.add(base_k)
@@ -1159,6 +1182,12 @@ def search_ticker(q: str):
             is_us = ("." not in raw_sym or raw_sym in ("BRK-B", "BRK.B", "BF-B", "BF.B")) and (
                 not exch or exch in _ALLOWED_EXCHANGES
             )
+
+            # Filter strictly by chosen market
+            if target_mkt == "IN" and not is_in:
+                continue
+            if target_mkt == "US" and not is_us:
+                continue
             if not (is_in or is_us):
                 continue
 
@@ -1184,7 +1213,7 @@ def search_ticker(q: str):
                 break
 
         if results:
-            _search_cache[q_norm] = results
+            _search_cache[cache_key] = results
         return {"results": results}
     except Exception:
         return {"results": []}
@@ -1204,9 +1233,9 @@ def _try_send_email_notification(entry: Dict[str, Any]) -> bool:
     smtp_port = int(os.getenv("SMTP_PORT", 587))
     recipient = os.getenv("FEEDBACK_RECIPIENT", "sarandeepaneja@gmail.com")
 
-    subject = f"[ValuationLab Feedback] {entry['category'].title()} from {entry['name']}"
+    subject = f"[ValuationLabs Feedback] {entry['category'].title()} from {entry['name']}"
     body = (
-        f"New Feedback Received on ValuationLab:\n"
+        f"New Feedback Received on ValuationLabs:\n"
         f"----------------------------------------\n"
         f"Name: {entry['name']}\n"
         f"Email: {entry['email']}\n"

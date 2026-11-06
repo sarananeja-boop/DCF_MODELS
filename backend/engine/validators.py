@@ -190,19 +190,19 @@ def generate_verdict(
     upside_pct = ((median / current_price) - 1) * 100 if current_price > 0 else 0.0
 
     if current_price < p5:
-        verdict = "STRONG BUY"
+        verdict = "STRONGLY BULLISH"
         description = "Trades below the 5th-percentile downside estimate."
     elif current_price > p95:
-        verdict = "STRONG SELL"
+        verdict = "STRONGLY BEARISH"
         description = "Trades above the 95th-percentile upside estimate."
     elif current_price < p25:
-        verdict = "BUY"
+        verdict = "BULLISH"
         description = "Trades below the 25th percentile of outcomes."
     elif current_price > p75:
-        verdict = "SELL"
+        verdict = "BEARISH"
         description = "Trades above the 75th percentile of outcomes."
     else:
-        verdict = "HOLD / FAIR VALUE"
+        verdict = "NEUTRAL"
         description = "Trades within the interquartile range of simulated outcomes."
         
     return {

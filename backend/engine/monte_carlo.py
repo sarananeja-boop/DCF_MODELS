@@ -84,18 +84,27 @@ def run_monte_carlo(
 
     # Empirical correlation between rev_growth and ebit_margins (aligned)
     ebit_margins_aligned = ebit_margins_arr[1:] if len(ebit_margins_arr) > 1 else np.array([])
+    corr_sample_size = min(len(rev_growth_arr), len(ebit_margins_aligned))
+    is_corr_regularized = False
+
     if (
-        len(rev_growth_arr) > 1
-        and len(ebit_margins_aligned) > 0
-        and np.std(rev_growth_arr) > 0
-        and np.std(ebit_margins_aligned) > 0
+        corr_sample_size >= 4
+        and np.std(rev_growth_arr) > 1e-6
+        and np.std(ebit_margins_aligned) > 1e-6
     ):
-        hist_corr_gm = float(np.corrcoef(rev_growth_arr, ebit_margins_aligned)[0, 1])
-        if np.isnan(hist_corr_gm):
+        raw_corr = float(np.corrcoef(rev_growth_arr, ebit_margins_aligned)[0, 1])
+        if np.isnan(raw_corr):
             hist_corr_gm = 0.0
         else:
-            # Clip strictly inside (-1, 1) to guarantee positive definite matrix for Cholesky
-            hist_corr_gm = np.clip(hist_corr_gm, -0.99, 0.99)
+            # Empirical Bayes shrinkage towards neutral 0 for small samples (N < 8)
+            shrinkage = corr_sample_size / (corr_sample_size + 4.0)
+            hist_corr_gm = float(np.clip(raw_corr * shrinkage, -0.90, 0.90))
+            is_corr_regularized = abs(hist_corr_gm - raw_corr) > 0.05
+    elif corr_sample_size in (2, 3):
+        # Sample size too small (2-3 periods yields degenerate ±1.0 correlation)
+        # Regularize to neutral 0.0 to prevent mathematical artifacts like -0.99
+        hist_corr_gm = 0.0
+        is_corr_regularized = True
     else:
         hist_corr_gm = 0.0
 
@@ -279,6 +288,8 @@ def run_monte_carlo(
         "actual_iterations": valid_n,
         "stats": stats,
         "hist_corr_gm": hist_corr_gm,
+        "corr_sample_size": corr_sample_size,
+        "is_corr_regularized": is_corr_regularized,
         "sim_growth": sim_growth.tolist(),
         "sim_margin": sim_margin.tolist(),
         "sim_wacc": sim_wacc.tolist(),

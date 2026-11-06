@@ -211,13 +211,24 @@ export default function App() {
     if (tabBarRef.current) {
       const activeBtn = tabBarRef.current.querySelector('[data-active="true"]');
       if (activeBtn) {
-        activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+        // Only scroll the horizontal tab container, NEVER the window vertically
+        const container = tabBarRef.current;
+        const btnLeft = activeBtn.offsetLeft;
+        const btnRight = btnLeft + activeBtn.offsetWidth;
+        const scrollLeft = container.scrollLeft;
+        const scrollRight = scrollLeft + container.clientWidth;
+        if (btnLeft < scrollLeft) {
+          container.scrollTo({ left: Math.max(0, btnLeft - 16), behavior: 'smooth' });
+        } else if (btnRight > scrollRight) {
+          container.scrollTo({ left: btnRight - container.clientWidth + 16, behavior: 'smooth' });
+        }
       }
     }
   }, [activeTab]);
 
   const [previewStock, setPreviewStock] = useState('CESC');
   const currentPreview = PREVIEW_DATA[previewStock] || PREVIEW_DATA.CESC;
+  const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
     if (analysisData) sessionStorage.setItem('vl_analysisData_v2', JSON.stringify(analysisData));
@@ -588,7 +599,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-lg font-bold tracking-tight text-[#f4eedf]">
-                  Valuation<span className="text-[#e3b23c]">Lab</span>
+                  Valuation<span className="text-[#e3b23c]">Labs</span>
                 </span>
               </div>
             </div>
@@ -649,8 +660,8 @@ export default function App() {
                   <FiFileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-display text-lg font-bold text-[#f4eedf] tracking-tight">DCF &amp; Cholesky Monte Carlo Methodology</h3>
-                  <p className="text-xs text-[#a6b0c3]">Institutional Damodaran-aligned intrinsic valuation pipeline</p>
+                  <h3 className="font-display text-lg font-bold text-[#f4eedf] tracking-tight">DCF &amp; Monte Carlo Methodology</h3>
+                  <p className="text-xs text-[#a6b0c3]">Discounted cash flow &amp; probability model</p>
                 </div>
               </div>
               <button
@@ -839,11 +850,11 @@ export default function App() {
                 <div className="space-y-2 text-xs sm:text-sm text-[#c5cedd]">
                   <div className="flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
-                    <p><strong className="text-[#f4eedf] font-semibold">Why Retail &amp; Street Non-GAAP DCFs Are Higher for SaaS/Cloud:</strong> Online calculators and Wall Street non-GAAP price targets start from reported Cash Flow (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong> (often 15%–35% of revenue in cloud/cybersecurity firms like Zscaler, CrowdStrike, or Snowflake) as if paying employees in stock were free.</p>
+                    <p><strong className="text-[#f4eedf] font-semibold">Stock Compensation in Tech and SaaS Models:</strong> Some valuation calculators start from reported Operating Cash Flow (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong> without accounting for the resulting dilution to existing shareholders.</p>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
-                    <p><strong className="text-[#f4eedf] font-semibold">Damodaran GAAP Discipline:</strong> Following institutional corporate finance principles, ValuationLabs treats employee stock grants as a real compensation cost that dilutes existing shareholders, building cash flows from after-tax operating profit (<span className="font-mono text-[#f4eedf]">NOPAT</span>) rather than treating equity dilution as free cash flow.</p>
+                    <p><strong className="text-[#f4eedf] font-semibold">Accounting for Share Dilution:</strong> ValuationLabs treats stock grants as an ongoing compensation expense that dilutes shareholders, building cash flows from after-tax operating profit (<span className="font-mono text-[#f4eedf]">NOPAT</span>) rather than treating equity dilution as free cash flow.</p>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#34b38a] mt-2 shrink-0" />
@@ -877,7 +888,7 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="font-display text-base sm:text-lg font-bold text-[#f4eedf] tracking-tight">
-                    ValuationLab Feedback &amp; Contact
+                    ValuationLabs Feedback &amp; Contact
                   </h3>
                   <p className="text-xs text-[#a6b0c3]">
                     Report errors, suggest features, or connect with Sarandeep directly
@@ -923,9 +934,9 @@ export default function App() {
               </div>
             </div>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-2">
-              Valuating {ticker || 'Company'}...
+              Running valuation model for {ticker || 'Company'}...
             </h2>
-            <p className="text-[#a6b0c3] max-w-md text-xs sm:text-sm leading-relaxed mb-4 min-h-[40px] flex items-center justify-center">
+            <p className="text-[#a6b0c3] max-w-md text-xs sm:text-sm leading-relaxed mb-5 min-h-[36px] flex items-center justify-center">
               {loadingTimer < 2
                 ? 'Extracting audited SEC / NSE financial statements & market data...'
                 : loadingTimer < 5
@@ -934,6 +945,34 @@ export default function App() {
                 ? 'Waking up cloud valuation engine (~15-25s on cold start)...'
                 : 'Finalizing sensitivity matrices & valuation diagnostics...'}
             </p>
+
+            {/* 4-Stage Transparent Loading Steps */}
+            <div className="w-full max-w-md bg-[#101722] rounded-xl p-3 border border-white/[0.08] mb-5 text-left space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className={loadingTimer >= 1 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
+                  {loadingTimer >= 2 ? '✓' : '●'} 1. Market Data &amp; 10Y Sovereign Yields
+                </span>
+                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 2 ? 'Complete' : 'Fetching...'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={loadingTimer >= 2 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
+                  {loadingTimer >= 4 ? '✓' : loadingTimer >= 2 ? '●' : '○'} 2. Financial Normalization &amp; GAAP SBC Audit
+                </span>
+                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 4 ? 'Complete' : loadingTimer >= 2 ? 'Normalizing...' : 'Pending'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={loadingTimer >= 4 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
+                  {loadingTimer >= 6 ? '✓' : loadingTimer >= 4 ? '●' : '○'} 3. Multi-Stage DCF &amp; WACC Synthesis
+                </span>
+                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 6 ? 'Complete' : loadingTimer >= 4 ? 'Calculating...' : 'Pending'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={loadingTimer >= 6 ? 'text-[#e3b23c] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
+                  {loadingTimer >= 8 ? '●' : '○'} 4. 10,000 Cholesky Monte Carlo Runs
+                </span>
+                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 6 ? 'Simulating...' : 'Pending'}</span>
+              </div>
+            </div>
             <button
               type="button"
               onClick={handleCancelAnalyze}
@@ -1000,7 +1039,7 @@ export default function App() {
                 <div className="absolute inset-0 bg-gradient-to-b from-[#071124]/35 via-transparent to-[#0c1017]/95" />
               </div>
 
-              {/* Top-Center Floating Solid Pill Navbar (Extended Length, Institutional & Sleek) */}
+              {/* Top-Center Floating Solid Pill Navbar */}
               <div className="relative z-20 pt-6 sm:pt-8 px-4 flex justify-center w-full">
                 <nav className="w-full max-w-4xl bg-[#121824]/92 border border-[#f4eedf]/15 rounded-full px-5 sm:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-4 sm:gap-6 shadow-[0_12px_45px_rgba(0,0,0,0.65)] backdrop-blur-xl">
                   {/* Left Brand Unit */}
@@ -1177,20 +1216,20 @@ export default function App() {
                       Grounding stock analysis in real cash flows, not market sentiment.
                     </h3>
                     <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed mb-6 md:min-h-[5.5rem]">
-                      Daily stock prices fluctuate on headlines, momentum, and short-term quarterly speculation. Our purpose is to cut through the noise and give every investor the institutional-grade quantitative tools to value companies from first principles.
+                      Daily stock prices fluctuate on headlines, momentum, and short-term market noise. Our aim is to cut through the noise and give investors straightforward quantitative tools to value companies based on fundamentals and real cash flows.
                     </p>
 
                     <ul className="space-y-5 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
                       <li className="flex items-start gap-3">
                         <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
                         <p>
-                          <strong className="text-[#f4eedf] font-semibold">First-Principles Valuation:</strong> Grounding equity research strictly in real cash flows, operating earnings, and audited balance sheets rather than hype or momentum.
+                          <strong className="text-[#f4eedf] font-semibold">First-Principles Valuation:</strong> Grounding equity analysis in real cash flows, operating earnings, and balance sheets rather than hype or momentum.
                         </p>
                       </li>
                       <li className="flex items-start gap-3">
                         <span className="w-2 h-2 rounded-full bg-[#e3b23c] mt-2.5 shrink-0" />
                         <p>
-                          <strong className="text-[#f4eedf] font-semibold">Institutional Rigor for Everyone:</strong> Automating the exact Damodaran-aligned cash flow frameworks and debt rating mechanics previously restricted to costly hedge-fund terminals.
+                          <strong className="text-[#f4eedf] font-semibold">Consistent Methodology:</strong> Applying established corporate finance cash flow frameworks, dynamic cost of capital, and credit spread mechanics automatically.
                         </p>
                       </li>
                       <li className="flex items-start gap-3">
@@ -1216,10 +1255,10 @@ export default function App() {
                       Active Capabilities
                     </span>
                     <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight leading-snug mb-3 md:min-h-[4.5rem] flex items-start">
-                      Institutional financial modeling pipelines ready in your browser.
+                      Automated financial valuation tools right in your browser.
                     </h3>
                     <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed mb-6 md:min-h-[5.5rem]">
-                      Production-ready quantitative valuation workflows executing instantly on live market data across NSE, BSE, and US Equities, backed by audited filings and live sovereign anchors.
+                      Valuation models running directly on market data across NSE, BSE, and US equities, using financial filings and sovereign yield data.
                     </p>
 
                     <ul className="space-y-5 text-base sm:text-[16.5px] text-[#d1d7e0] leading-relaxed">
@@ -1302,18 +1341,18 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Institutional Note on GAAP EBIT vs. Non-GAAP FCF & Stock-Based Compensation (SBC) */}
+                {/* Note on GAAP EBIT vs. Non-GAAP FCF & Stock-Based Compensation (SBC) */}
                 <div className="bg-[#111826] rounded-2xl p-5 sm:p-6 border border-[#f4eedf]/12 text-xs sm:text-sm text-[#c5cedd] leading-relaxed">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <span className="font-display font-bold text-sm sm:text-base text-[#f4eedf]">
-                      Institutional Note: GAAP Operating Profit (EBIT) vs. Street Non-GAAP FCF &amp; Stock-Based Compensation (SBC)
+                      Methodology Note: Operating Profit (EBIT) vs. Non-GAAP Cash Flow &amp; Stock Compensation (SBC)
                     </span>
                     <span className="font-mono text-[11px] uppercase tracking-wider text-[#e3b23c] font-semibold">
-                      Damodaran Accounting Standard
+                      Accounting Treatment
                     </span>
                   </div>
                   <p>
-                    Retail valuation sites and Wall Street non-GAAP price targets frequently value high-growth cloud and SaaS firms (e.g., Zscaler, CrowdStrike, Snowflake) using raw Cash Flow from Operations (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong>—often 15%–35% of revenue—as if employee equity dilution were free. ValuationLabs enforces Damodaran&apos;s GAAP discipline by treating SBC as a real compensation expense in <span className="font-mono text-[#f4eedf]">NOPAT</span>, while automatically modeling <strong className="text-[#f4eedf]">Unit-Economic Margin Convergence</strong> (anchored by Gross Margin and FCF Margin) and stripping short-term Treasury securities from working capital so high-gross-margin R&amp;D compounders are neither inflated by ignoring dilution nor penalized by upfront GAAP R&amp;D expensing.
+                    Many calculators and price targets value high-growth cloud and software companies using reported Cash Flow from Operations (<span className="font-mono text-[#f4eedf]">CFO − CapEx</span>), which adds back 100% of <strong className="text-[#f4eedf]">Stock-Based Compensation (SBC)</strong> without accounting for shareholder dilution. ValuationLabs treats employee stock grants as a compensation expense in <span className="font-mono text-[#f4eedf]">NOPAT</span>, while modeling <strong className="text-[#f4eedf]">Unit-Economic Margin Convergence</strong> and excluding excess cash from working capital so compounders are evaluated fairly without understating dilution.
                   </p>
                 </div>
 
@@ -2196,7 +2235,7 @@ export default function App() {
                     Four Rules for Applying DCF Valuations in Your Portfolio
                   </h2>
                   <p className="text-base sm:text-lg text-[#d1d7e0] leading-relaxed max-w-4xl">
-                    Actionable institutional principles for applying DCF fair value estimates, multiple cross-checks, and probability distributions in your daily investing decisions.
+                    Practical guidelines for applying DCF fair value estimates, multiple cross-checks, and probability distributions in your investing decisions.
                   </p>
                 </div>
 
@@ -2270,7 +2309,7 @@ export default function App() {
                       <li className="flex items-start gap-3">
                         <span className="w-2 h-2 rounded-full bg-[#34b38a] mt-2.5 shrink-0" />
                         <p>
-                          <strong className="text-[#34b38a] font-semibold">Verified Badge:</strong> Less than 50% gap between DCF value and peer EV/EBITDA multiples indicates strong institutional model alignment.
+                          <strong className="text-[#34b38a] font-semibold">Verified Badge:</strong> Less than 50% gap between DCF value and peer EV/EBITDA multiples indicates consistent model alignment.
                         </p>
                       </li>
                       <li className="flex items-start gap-3">
@@ -2357,6 +2396,21 @@ export default function App() {
                 </div>
 
                 <div className="bg-[#101722] rounded-2xl p-6 sm:p-8 border border-[#f4eedf]/12 shadow-xl space-y-6">
+                  {/* Benchmark Snapshot & Reproducibility Disclosure */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#f4eedf]/10 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#e3b23c]/15 text-[#e3b23c] font-bold text-[10.5px] uppercase tracking-wider border border-[#e3b23c]/30">
+                        Dated Benchmark Snapshot
+                      </span>
+                      <span className="text-[#a6b0c3] text-[11px]">
+                        Model Run: October 2026 Archive
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#818ea4]">
+                      *Illustrative static benchmark. Click &quot;Analyze Live&quot; below to compute real-time quotes, sovereign yields &amp; filings.
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pb-6 border-b border-[#f4eedf]/10">
                     <div>
                       <span className="text-xs text-[#a6b0c3] block mb-1">DCF Intrinsic Fair Value</span>
@@ -2480,7 +2534,7 @@ export default function App() {
                   </button>
                 </div>
                 <p className="text-[#f4eedf]/80 font-display font-bold">
-                  ValuationLab — Institutional DCF &amp; Cholesky Monte Carlo Equity Research Platform
+                  ValuationLabs — Automated DCF &amp; Monte Carlo Valuation Platform
                 </p>
                 <p>
                   Audited financial statements via Yahoo Finance; live sovereign bond yields via FRED API &amp; RBI. We continually update the platform with new valuation models and features.
@@ -2634,7 +2688,65 @@ export default function App() {
                             </div>
                           </>
                         )}
+
+                        {/* Reconcile Models Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowReconciliation(!showReconciliation)}
+                          className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-[#f4eedf] text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ml-auto border border-white/[0.06]"
+                        >
+                          <span>{showReconciliation ? 'Hide Reconciliation' : 'Reconcile Models (Why do they differ?)'}</span>
+                        </button>
                       </div>
+
+                      {/* Expandable Cross-Model Valuation Reconciliation Drawer */}
+                      {showReconciliation && (
+                        <div className="w-full mt-3 pt-3 border-t border-white/[0.08] text-xs space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-display font-bold text-xs uppercase tracking-wider text-[#e3b23c]">
+                              Cross-Model Valuation Reconciliation: Enterprise DCF (FCFF) vs. Equity Model (FCFE/DDM)
+                            </span>
+                            <span className="text-[11px] text-[#818ea4]">
+                              Damodaran Valuation Framework
+                            </span>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="border-b border-white/[0.08] text-[#818ea4]">
+                                  <th className="py-2 pr-4 font-semibold">Valuation Dimension</th>
+                                  <th className="py-2 px-4 font-semibold text-[#e3b23c]">Enterprise DCF (FCFF)</th>
+                                  <th className="py-2 pl-4 font-semibold text-[#8ab4f8]">Equity Model (FCFE / DDM)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/[0.04] text-[#d1d7e0]">
+                                <tr>
+                                  <td className="py-2 pr-4 font-medium text-[#f4eedf]">Cash Flow Definition</td>
+                                  <td className="py-2 px-4">Unlevered cash flow (NOPAT + D&amp;A − CapEx − ΔNWC) before debt service. Available to all capital providers.</td>
+                                  <td className="py-2 pl-4">Cash flow to equity (after debt service, interest, and required regulatory reinvestment). Available strictly to shareholders.</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-2 pr-4 font-medium text-[#f4eedf]">Discount Rate (Hurdle)</td>
+                                  <td className="py-2 px-4 tabular-nums">Blended WACC ({((analysisData.method_comparison?.fcff_discount_rate || 0) * 100).toFixed(1)}%) reflecting interest tax shields on debt.</td>
+                                  <td className="py-2 pl-4 tabular-nums">Cost of Equity Ke ({((analysisData.method_comparison?.ddm_discount_rate || 0) * 100).toFixed(1)}%) reflecting pure equity beta and market risk.</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-2 pr-4 font-medium text-[#f4eedf]">Bridge to Equity Value</td>
+                                  <td className="py-2 px-4">Computes Enterprise Value (EV), then subtracts Net Debt (Total Debt − Cash).</td>
+                                  <td className="py-2 pl-4">Directly computes Total Equity Value without subtracting debt (debt service is already accounted for in cash flows).</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-2 pr-4 font-medium text-[#f4eedf]">Why Values Diverge</td>
+                                  <td className="py-2 px-4" colSpan={2}>
+                                    For levered or capital-intensive companies (like utilities or industrials), Ke is substantially higher than WACC. When debt is high, equity holders bear residual leverage risk, and higher discount rates discount terminal value more aggressively in DDM/FCFE.
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     /* Banking Institution Single Mode */
@@ -2735,7 +2847,7 @@ export default function App() {
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
-                      Valuation Verdict
+                      Valuation Outlook
                     </span>
                     <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                       {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : wsIsEquityModel ? 'P/B' : 'EV/EBITDA'}:{' '}
@@ -2747,9 +2859,9 @@ export default function App() {
                   <div className={`font-display ${
                     (analysisData.verdict?.verdict || '').length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
                   } font-bold leading-tight my-1 tracking-tight truncate ${
-                    analysisData.verdict?.verdict?.includes('BUY')
+                    analysisData.verdict?.verdict?.includes('BULLISH') || analysisData.verdict?.verdict?.includes('BUY')
                       ? 'text-[#34b38a]'
-                      : analysisData.verdict?.verdict?.includes('SELL')
+                      : analysisData.verdict?.verdict?.includes('BEARISH') || analysisData.verdict?.verdict?.includes('SELL')
                       ? 'text-[#e07a5f]'
                       : 'text-[#e3b23c]'
                   }`}>
@@ -2830,6 +2942,7 @@ export default function App() {
                         aiSummary={aiSummary}
                         aiLoading={aiLoading}
                         onFetchAISummary={handleFetchAISummary}
+                        onTabChange={setActiveTab}
                       />
                     )}
                     {activeTab === 'dcf' && (
@@ -2854,7 +2967,7 @@ export default function App() {
             <footer className="border-t border-[#f4eedf]/10 pt-8 pb-12 px-4 sm:px-6 text-xs text-[#a6b0c3]">
               <div className="max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                 <p className="text-[#f4eedf]/80 font-medium">
-                  ValuationLab — {analysisData?.company?.name || analysisData?.company?.ticker} DCF Analysis &amp; Monte Carlo Modeling
+                  ValuationLabs — {analysisData?.company?.name || analysisData?.company?.ticker} DCF Analysis &amp; Monte Carlo Modeling
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-semibold">
                   <a

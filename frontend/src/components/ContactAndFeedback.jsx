@@ -48,7 +48,7 @@ export default function ContactAndFeedback({ currentTicker = '' }) {
           topic: category,
           message: cleanMessage,
           ticker: currentTicker.trim() || undefined,
-          _subject: `[ValuationLab Feedback: ${category.toUpperCase()}] from ${cleanName}`,
+          _subject: `[ValuationLabs Feedback: ${category.toUpperCase()}] from ${cleanName}`,
         },
         {
           headers: {
@@ -72,7 +72,7 @@ export default function ContactAndFeedback({ currentTicker = '' }) {
       toast.success('Feedback sent to sarandeepaneja@gmail.com!');
     } catch (_) {
       // Fallback: If Formspree fails, offer direct mailto link
-      const subject = encodeURIComponent(`ValuationLab Feedback (${category}) from ${cleanName}`);
+      const subject = encodeURIComponent(`ValuationLabs Feedback (${category}) from ${cleanName}`);
       const body = encodeURIComponent(
         `Category: ${category}\nName: ${cleanName}\nEmail: ${cleanEmail}\n\n${cleanMessage}`
       );

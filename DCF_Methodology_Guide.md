@@ -1,4 +1,4 @@
-# ValuationLab: Quantitative DCF & Stochastic Monte Carlo Methodology
+# ValuationLabs: Quantitative DCF & Stochastic Monte Carlo Methodology
 
 **Version 2.0 · Institutional Valuation Whitepaper**  
 **Author:** Sarandeep Aneja  
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Mathematical Foundations
 
-ValuationLab implements an institutional fundamental equity research architecture designed to price operating businesses strictly from first principles. Rather than relying on static single-point price targets or heuristic multiples, the platform separates corporate operations into:
+ValuationLabs implements an institutional fundamental equity research architecture designed to price operating businesses strictly from first principles. Rather than relying on static single-point price targets or heuristic multiples, the platform separates corporate operations into:
 
 1. **Operating Cash Flow Generation:** Deterministic multi-stage discounting of distributable cash.
 2. **Dynamic Capital Pricing:** Time-varying Cost of Capital (WACC / CAPM) anchored to live sovereign debt curves.
@@ -58,7 +58,7 @@ ValuationLab implements an institutional fundamental equity research architectur
 
 ## 2. Cross-Border Macroeconomic & Statutory Architectures
 
-ValuationLab treats capital structures differently based on domestic legal, taxation, and sovereign monetary environments. The platform cross-references live macroeconomic feeds with statutory parameters for Indian and US capital markets:
+ValuationLabs treats capital structures differently based on domestic legal, taxation, and sovereign monetary environments. The platform cross-references live macroeconomic feeds with statutory parameters for Indian and US capital markets:
 
 | Parameter | Indian Equities (NSE / BSE) | US Equities (NYSE / NASDAQ) | Mathematical Derivation / Feed |
 | :--- | :--- | :--- | :--- |
@@ -73,7 +73,7 @@ ValuationLab treats capital structures differently based on domestic legal, taxa
 
 ## 3. Data Cleaning, Tri-Statement Date Intersection & Normalization
 
-Raw financial filings often contain trailing twelve-month (TTM) calendar misalignments, restated line items, and non-recurring operational distortions. To ensure quantitative integrity, ValuationLab executes a rigorous tri-statement intersection pipeline:
+Raw financial filings often contain trailing twelve-month (TTM) calendar misalignments, restated line items, and non-recurring operational distortions. To ensure quantitative integrity, ValuationLabs executes a rigorous tri-statement intersection pipeline:
 
 ### 3.1 Date-Intersection Protocol
 Let $\mathcal{D}_I$, $\mathcal{D}_B$, and $\mathcal{D}_C$ represent the set of fiscal reporting dates available in the Income Statement, Balance Sheet, and Cash Flow Statement, respectively:
@@ -137,7 +137,7 @@ $$\beta_U = \frac{\beta_L}{1 + (1 - \tau) \frac{D}{E}}$$
 $$\beta_{L,\text{target}} = \beta_U \left[1 + (1 - \tau) \frac{D_{\text{target}}}{E_{\text{target}}}\right]$$
 
 ### 4.2 Synthetic Debt Rating & Cost of Debt ($K_d$)
-For non-rated and mid-cap companies, book interest rates can be distorted by legacy debt or zero-interest promoter loans. ValuationLab computes a synthetic credit rating by evaluating the company's Interest Coverage Ratio ($ICR$):
+For non-rated and mid-cap companies, book interest rates can be distorted by legacy debt or zero-interest promoter loans. ValuationLabs computes a synthetic credit rating by evaluating the company's Interest Coverage Ratio ($ICR$):
 
 $$ICR = \frac{\text{EBIT}_0}{\text{Interest Expense}_0}$$
 
@@ -168,7 +168,7 @@ $$W_e = \frac{E}{D + E}, \quad W_d = \frac{D}{D + E}$$
 $$WACC = \left(W_e \times K_e\right) + \left(W_d \times K_d \times (1 - \tau)\right)$$
 
 ### 4.4 Mid-Year Discounting Convention
-Because businesses generate free cash flow continuously throughout the fiscal year rather than on December 31, year-end discounting systematically underestimates intrinsic value. ValuationLab applies the mid-year discount convention:
+Because businesses generate free cash flow continuously throughout the fiscal year rather than on December 31, year-end discounting systematically underestimates intrinsic value. ValuationLabs applies the mid-year discount convention:
 
 $$DF_t = \frac{1}{(1 + WACC)^{t - 0.5}} \quad \text{for } t \in \{1, 2, 3, 4, 5\}$$
 
@@ -176,7 +176,7 @@ $$DF_t = \frac{1}{(1 + WACC)^{t - 0.5}} \quad \text{for } t \in \{1, 2, 3, 4, 5\
 
 ## 5. Non-Financial Corporate Pipeline: 5-Year Unlevered FCFF Engine
 
-For industrial, consumer, technology, energy, and healthcare companies, ValuationLab discounts Unlevered Free Cash Flow to Firm (FCFF).
+For industrial, consumer, technology, energy, and healthcare companies, ValuationLabs discounts Unlevered Free Cash Flow to Firm (FCFF).
 
 ### 5.1 Linear Growth Decay & Margin Normalization
 High initial growth decays linearly toward the long-term sustainable terminal rate to avoid compound runaway projections:
@@ -228,12 +228,12 @@ A frequent question in institutional equity research is why a strict **Damodaran
 
 1. **Treatment of Stock-Based Compensation ($\text{SBC}$) as a Real Economic Expense:**
    * **Retail & Street Non-GAAP Models:** Typically start from reported Cash Flow from Operations minus CapEx ($\text{FCF} = \text{CFO} - \text{CapEx}$) or Non-GAAP Operating Income. Because $\text{CFO}$ adds back 100% of non-cash Stock-Based Compensation (which often represents $15\%\text{–}35\%$ of revenue in high-growth software firms), Non-GAAP models treat employee equity grants as "free" cash flow and ignore ongoing shareholder dilution.
-   * **ValuationLab Institutional GAAP Framework:** Following Aswath Damodaran's corporate finance principles, paying employees in shares is a real economic compensation cost (if equity grants ceased, cash salaries would have to replace them to retain engineering and sales talent). ValuationLab therefore builds Unlevered Free Cash Flow from after-tax operating profit ($\text{NOPAT}$) rather than raw $\text{CFO}$, refusing to treat massive stock dilution as free shareholder value.
+   * **ValuationLabs Institutional GAAP Framework:** Following Aswath Damodaran's corporate finance principles, paying employees in shares is a real economic compensation cost (if equity grants ceased, cash salaries would have to replace them to retain engineering and sales talent). ValuationLabs therefore builds Unlevered Free Cash Flow from after-tax operating profit ($\text{NOPAT}$) rather than raw $\text{CFO}$, refusing to treat massive stock dilution as free shareholder value.
 
 2. **Upfront $\text{R\&D}$ / $\text{S\&M}$ Expensing & Unit-Economic Margin Convergence:**
    * Under US GAAP and Ind AS, industrial manufacturers capitalize growth investments ($\text{CapEx}$) on the Balance Sheet, whereas software and $\text{R\&D}$-intensive firms must expense 100% of software engineering ($\text{R\&D}$), customer acquisition ($\text{S\&M}$), and early-stage $\text{SBC}$ immediately on the Income Statement.
    * Consequently, a company with $75\%+$ Gross Margins and $+25\%$ Cash FCF Margins can report near-zero or slightly negative GAAP $\text{EBIT}$ during hypergrowth.
-   * When ValuationLab detects a non-cyclical, high-gross-margin ($\ge 55\%$) or high-cash-flow ($\text{FCF Margin} \ge 18\%$) compounder whose GAAP $\text{EBIT}$ margin is depressed by $>8\%$ below its cash FCF margin, the engine automatically activates **Unit-Economic Operating Margin Convergence**:
+   * When ValuationLabs detects a non-cyclical, high-gross-margin ($\ge 55\%$) or high-cash-flow ($\text{FCF Margin} \ge 18\%$) compounder whose GAAP $\text{EBIT}$ margin is depressed by $>8\%$ below its cash FCF margin, the engine automatically activates **Unit-Economic Operating Margin Convergence**:
      $$\mu_{\text{start}} = \text{clip}\left(\max\left(\mu_{\text{GAAP}, 0},\, \min(\text{FCF Margin}_0, \overline{\text{FCF Margin}}) - 5.0\%\right),\, 5.0\%,\, \mu_{\text{target}}\right)$$
      $$\mu_{\text{target}} = \text{clip}\left(\max\left(0.38 \times \overline{\text{Gross Margin}},\, \max(\text{FCF Margin}_0, \overline{\text{FCF Margin}})\right),\, 20.0\%,\, 38.0\%\right)$$
    * Simultaneously, for high-growth compounders ($g_{\text{start}} > g_{\infty} + 10\%$), revenue growth follows a **concave multi-stage trajectory** ($g_t = g_{\text{start}} - (g_{\text{start}} - g_{\infty})(t/N)^{1.35}$) rather than a steep linear cliff, and Terminal Value is cross-checked against a sector-calibrated Year-5 $\text{EV/EBITDA}$ exit multiple ($16.0\times$ for high-gross-margin technology compounders).
@@ -292,7 +292,7 @@ $$\text{Bank Equity Value} = \sum_{t=1}^{5} \frac{\text{FCFE}_t}{(1 + K_e)^{t - 
 
 Traditional sensitivity tables alter only one or two variables independently in isolation, ignoring macroeconomic correlations (e.g., when risk-free rates rise, borrowing costs surge and valuation multiples contract). 
 
-ValuationLab resolves this by deploying a **10,000-iteration correlated stochastic simulation engine** governed by Cholesky factorization.
+ValuationLabs resolves this by deploying a **10,000-iteration correlated stochastic simulation engine** governed by Cholesky factorization.
 
 ```
        [Historical Financials & Macro Feeds]
@@ -355,7 +355,7 @@ $$L_{j,j} = \sqrt{\Sigma_{j,j} - \sum_{k=1}^{j-1} L_{j,k}^{2}}$$
 $$L_{i,j} = \frac{1}{L_{j,j}} \left(\Sigma_{i,j} - \sum_{k=1}^{j-1} L_{i,k} L_{j,k}\right) \quad \text{for } i > j$$
 
 ### 7.3 Heavy-Tailed Fat-Shock Generation (Student's $t$)
-Standard Gaussian random walks underestimate catastrophic market crises (the "black swan" problem). ValuationLab draws independent random vectors from a Student's $t$ distribution with five degrees of freedom ($\nu = 5$):
+Standard Gaussian random walks underestimate catastrophic market crises (the "black swan" problem). ValuationLabs draws independent random vectors from a Student's $t$ distribution with five degrees of freedom ($\nu = 5$):
 
 $$\mathbf{Z} \sim t_{\nu=5}\left(\mathbf{0}, \mathbf{I}_7\right)$$
 
