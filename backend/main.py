@@ -334,7 +334,12 @@ def analyze(req: AnalyzeRequest):
 
         if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
             from engine.data_layer import classify_sector_dynamics
-            is_ext, is_cyc = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker"))
+            is_ext, is_cyc = classify_sector_dynamics(
+                stock_data.get("sector"),
+                stock_data.get("industry"),
+                stock_data.get("ticker"),
+                stock_data.get("name"),
+            )
             stock_data["is_extractive"] = is_ext
             stock_data["is_cyclical"] = is_cyc
             
@@ -501,11 +506,27 @@ def analyze(req: AnalyzeRequest):
             latest_fcf_margin = float(metrics.get("latest_fcf_margin", 0.0) or 0.0)
             best_fcf_margin = max(avg_fcf_margin, latest_fcf_margin)
             latest_sbc_pct = float(metrics.get("latest_sbc_pct", 0.0) or 0.0)
-            is_store_opex_below_gp = bool(avg_ebitda_margin > 0 and (avg_gross_margin - avg_ebitda_margin) > 0.35)
+            # Only trigger QSR/Retail store-OpEx turnaround convergence when GAAP EBIT margin is depressed (<8%)
+            is_store_opex_below_gp = bool(
+                avg_ebitda_margin > 0
+                and (avg_gross_margin - avg_ebitda_margin) > 0.35
+                and max(latest_margin, avg_ebit_margin) < 0.08
+            )
 
             if is_cyclical:
-                fcff_default_margin = max(avg_ebit_margin, latest_margin, 0.06)
-                fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.01 else None
+                pos_margins = [float(m) for m in ebit_margins_hist if m > 0]
+                median_margin = float(np.median(ebit_margins_hist)) if ebit_margins_hist else avg_ebit_margin
+                min_pos_margin = float(np.min(pos_margins)) if pos_margins else max(0.02, avg_ebit_margin)
+                ind_str = str(stock_data.get("industry") or "").lower()
+                sym_clean_c = str(stock_data.get("ticker") or "").replace(".NS", "").replace(".BO", "").strip().upper()
+                if "refining & marketing" in ind_str or sym_clean_c in {"IOC", "BPCL", "HPCL", "HINDPETRO", "MRPL", "CHENNPETRO"}:
+                    # Downstream oil refining & marketing margins mean-revert to mid-cycle refining cracks
+                    fcff_default_margin = max(0.025, 0.50 * min_pos_margin + 0.50 * min(avg_ebit_margin, median_margin))
+                    fcff_default_current_margin = min(latest_margin, avg_ebit_margin)
+                else:
+                    # Extractive & commodity cyclicals mean-revert toward multi-year cycle average/median
+                    fcff_default_margin = max(0.04, 0.50 * avg_ebit_margin + 0.50 * min(latest_margin, median_margin))
+                    fcff_default_current_margin = latest_margin if abs(latest_margin - fcff_default_margin) > 0.01 else None
             elif (
                 not is_extractive
                 and not is_store_opex_below_gp
@@ -524,8 +545,11 @@ def analyze(req: AnalyzeRequest):
                 fcff_default_current_margin = float(np.clip(max(latest_margin, avg_ebit_margin, 0.55 * avg_ebitda_margin), 0.045, fcff_default_margin))
             else:
                 if latest_margin > 0:
-                    if avg_ebit_margin <= 0 or latest_margin > avg_ebit_margin:
+                    if avg_ebit_margin <= 0:
                         fcff_default_margin = max(latest_margin * 1.5, 0.12) if latest_margin < 0.12 else latest_margin
+                        fcff_default_current_margin = latest_margin
+                    elif latest_margin > avg_ebit_margin:
+                        fcff_default_margin = latest_margin
                         fcff_default_current_margin = latest_margin
                     else:
                         fcff_default_margin = avg_ebit_margin

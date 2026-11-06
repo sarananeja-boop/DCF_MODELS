@@ -337,7 +337,10 @@ def run_dcf(
     if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
         from engine.data_layer import classify_sector_dynamics
         is_extractive, is_cyclical = classify_sector_dynamics(
-            stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker")
+            stock_data.get("sector"),
+            stock_data.get("industry"),
+            stock_data.get("ticker"),
+            stock_data.get("name"),
         )
 
     # Explicit tax rate priority: passed arg -> stock_data._tax_rate -> market fallback
@@ -383,20 +386,27 @@ def run_dcf(
     # required for the modeled 5-year growth schedule rather than charging 30-year greenfield CapEx
     # without its post-Year-5 revenue stream.
     base_steady_state = effective_dna_pct * (1.0 + terminal_growth)
+    cwip_to_rev = float(metrics.get("cwip_to_rev", 0.0) or 0.0)
     if is_extractive:
-        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, effective_dna_pct * 1.25))
+        if cwip_to_rev > 0.50:
+            # Uncommissioned greenfield refinery/plant CWIP (>50% of revenue, e.g. OIL.NS) inflated historical CapEx
+            max_ext_capex = effective_dna_pct * 1.45
+        else:
+            max_ext_capex = max(effective_dna_pct * 2.5, max(0.05, ebit_margin) * (1.0 - tax_rate) * 0.72)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, max_ext_capex))
+        eff_start_capex = min(avg_capex_pct, max_ext_capex * 1.10)
     elif is_cyclical:
-        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.85, effective_dna_pct * 1.15))
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.90, effective_dna_pct * 1.35))
+        eff_start_capex = avg_capex_pct
     else:
         steady_state_capex_pct = base_steady_state
-
-    if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
-        eff_start_capex = min(
-            avg_capex_pct,
-            effective_dna_pct * (1.0 + max(0.15, start_growth * 1.8)),
-        )
-    else:
-        eff_start_capex = avg_capex_pct
+        if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
+            eff_start_capex = min(
+                avg_capex_pct,
+                effective_dna_pct * (1.0 + max(0.15, start_growth * 1.8)),
+            )
+        else:
+            eff_start_capex = avg_capex_pct
 
     capex_schedule = np.linspace(eff_start_capex, steady_state_capex_pct, projection_years)
 
@@ -504,50 +514,27 @@ def run_dcf(
 
     # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
     if is_extractive and margin_schedule[-1] > 0:
-        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / margin_schedule[-1])
+        yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_margin)
         terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv))
     elif is_cyclical and margin_schedule[-1] > 0:
-        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / margin_schedule[-1])
+        yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
+        net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_margin)
         terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv * 0.85))
 
     # Terminal NOPAT in Year N+1
     terminal_nopat = proj_rev[-1] * (1.0 + effective_terminal_growth) * margin_schedule[-1] * (1.0 - tax_rate)
     terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
 
-    if discount_rate <= effective_terminal_growth:
-        terminal_value = None
-        pv_terminal_value = 0.0
-        terminal_value_valid = False
-        terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
-    elif terminal_ufcf <= 0:
-        terminal_value = None
-        pv_terminal_value = 0.0
-        terminal_value_valid = False
-        terminal_value_note = "Terminal UFCF is negative under current assumptions."
-    else:
-        spread = discount_rate - effective_terminal_growth
-        terminal_value = terminal_ufcf / spread
-        pv_terminal_value = terminal_value / discount_factors[-1]
-
-    # EV → Equity bridge
-    enterprise_val = pv_ufcf + pv_terminal_value
-    equity_value = enterprise_val + cash_equiv - total_debt
-    
-    # Implied price per share floored at 0.0
-    implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
-
     # ------------------------------------------------------------------
     # Exit Multiple Valuation Cross-Check (Damodaran & Institutional standard)
     # ------------------------------------------------------------------
     terminal_ebitda = proj_rev[-1] * (1.0 + effective_terminal_growth) * (margin_schedule[-1] + avg_dna_pct)
-    implied_exit_multiple = (terminal_value / terminal_ebitda) if (terminal_value and terminal_ebitda > 0) else None
-
-    # Benchmark exit multiples by sector profile
     avg_gm_val = float(metrics.get("avg_gross_margin", 0.0))
     if is_extractive:
-        benchmark_exit_mult = 4.5
+        benchmark_exit_mult = 4.5 if is_india else 8.0
     elif is_cyclical:
-        benchmark_exit_mult = 5.5
+        benchmark_exit_mult = 5.5 if is_india else 7.5
     elif stock_data.get("is_financial", False):
         benchmark_exit_mult = 8.0
     elif avg_gm_val >= 0.55 and start_growth >= 0.15:
@@ -562,6 +549,38 @@ def run_dcf(
     exit_ev = pv_ufcf + pv_exit_tv
     exit_equity = exit_ev + cash_equiv - total_debt
     exit_implied_price = max(0.0, exit_equity / shares_out) if shares_out > 0 else 0.0
+
+    if discount_rate <= effective_terminal_growth:
+        terminal_value = None
+        pv_terminal_value = 0.0
+        terminal_value_valid = False
+        terminal_value_note = "WACC must exceed terminal growth rate for Gordon Growth model."
+    elif terminal_ufcf <= 0:
+        terminal_value = None
+        pv_terminal_value = 0.0
+        terminal_value_valid = False
+        terminal_value_note = "Terminal UFCF is negative under current assumptions."
+    else:
+        spread = discount_rate - effective_terminal_growth
+        gordon_tv = terminal_ufcf / spread
+        # For extractive resource firms (finite ~12-15 yr reserve life) and commodity cyclicals,
+        # anchor perpetual Gordon Growth TV against the reserve-life / mid-cycle Exit Multiple TV
+        if is_extractive and exit_terminal_value > 0 and gordon_tv > exit_terminal_value:
+            terminal_value = 0.35 * gordon_tv + 0.65 * exit_terminal_value
+        elif is_cyclical and exit_terminal_value > 0 and gordon_tv > exit_terminal_value:
+            terminal_value = 0.45 * gordon_tv + 0.55 * exit_terminal_value
+        else:
+            terminal_value = gordon_tv
+        pv_terminal_value = terminal_value / discount_factors[-1]
+
+    implied_exit_multiple = (terminal_value / terminal_ebitda) if (terminal_value and terminal_ebitda > 0) else None
+
+    # EV → Equity bridge
+    enterprise_val = pv_ufcf + pv_terminal_value
+    equity_value = enterprise_val + cash_equiv - total_debt
+    
+    # Implied price per share floored at 0.0
+    implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
     # Point 5: Terminal Value Share of Enterprise Value (>75% flagged)
     tv_share_of_ev = float(pv_terminal_value / enterprise_val) if enterprise_val > 0 else 0.0
@@ -645,7 +664,10 @@ def run_dcf_batch(
     if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
         from engine.data_layer import classify_sector_dynamics
         is_extractive, is_cyclical = classify_sector_dynamics(
-            stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker")
+            stock_data.get("sector"),
+            stock_data.get("industry"),
+            stock_data.get("ticker"),
+            stock_data.get("name"),
         )
 
     if tax_rate is None:
@@ -678,21 +700,28 @@ def run_dcf_batch(
     )
 
     base_steady_state = effective_dna_pct * (1.0 + terminal_growth)
+    mean_start_g = float(np.mean(sim_growth)) if n > 0 else 0.05
+    mean_sim_m = float(np.mean(sim_margin)) if n > 0 else 0.12
+    cwip_to_rev = float(metrics.get("cwip_to_rev", 0.0) or 0.0)
     if is_extractive:
-        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, effective_dna_pct * 1.25))
+        if cwip_to_rev > 0.50:
+            max_ext_capex = effective_dna_pct * 1.45
+        else:
+            max_ext_capex = max(effective_dna_pct * 2.5, max(0.05, mean_sim_m) * (1.0 - tax_rate) * 0.72)
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct, max_ext_capex))
+        eff_start_capex = min(avg_capex_pct, max_ext_capex * 1.10)
     elif is_cyclical:
-        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.85, effective_dna_pct * 1.15))
+        steady_state_capex_pct = max(base_steady_state, min(avg_capex_pct * 0.90, effective_dna_pct * 1.35))
+        eff_start_capex = avg_capex_pct
     else:
         steady_state_capex_pct = base_steady_state
-
-    mean_start_g = float(np.mean(sim_growth)) if n > 0 else 0.05
-    if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
-        eff_start_capex = min(
-            avg_capex_pct,
-            effective_dna_pct * (1.0 + max(0.15, mean_start_g * 1.8)),
-        )
-    else:
-        eff_start_capex = avg_capex_pct
+        if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
+            eff_start_capex = min(
+                avg_capex_pct,
+                effective_dna_pct * (1.0 + max(0.15, mean_start_g * 1.8)),
+            )
+        else:
+            eff_start_capex = avg_capex_pct
     capex_schedule = np.linspace(eff_start_capex, steady_state_capex_pct, projection_years)
 
     if use_mid_year:
@@ -789,9 +818,10 @@ def run_dcf_batch(
 
     if is_extractive:
         pos_m = sim_margin > 0
+        yr5_nopat_m_arr = np.maximum(0.01, sim_margin * (1.0 - tax_rate))
         net_capex_reinv = np.where(
             pos_m,
-            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_m_arr),
             0.0,
         )
         terminal_reinv_rate = np.where(
@@ -801,9 +831,10 @@ def run_dcf_batch(
         )
     elif is_cyclical:
         pos_m = sim_margin > 0
+        yr5_nopat_m_arr = np.maximum(0.01, sim_margin * (1.0 - tax_rate))
         net_capex_reinv = np.where(
             pos_m,
-            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / np.where(pos_m, sim_margin, 1.0)),
+            np.maximum(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_m_arr),
             0.0,
         )
         terminal_reinv_rate = np.where(
@@ -814,12 +845,31 @@ def run_dcf_batch(
 
     terminal_nopat = last_rev * (1.0 + effective_terminal_growth) * sim_margin * (1.0 - tax_rate)
     terminal_ufcf = terminal_nopat * (1.0 - terminal_reinv_rate)
+    terminal_ebitda = last_rev * (1.0 + effective_terminal_growth) * (sim_margin + avg_dna_pct)
 
     valid_tv = (sim_wacc > effective_terminal_growth) & (terminal_ufcf > 0)
     spread = np.where(valid_tv, sim_wacc - effective_terminal_growth, 1.0)
-    terminal_value = np.where(
+    gordon_tv = np.where(
         valid_tv, terminal_ufcf / spread, 0.0
     )
+    if is_extractive:
+        ext_mult = 4.5 if is_india else 8.0
+        exit_tv_arr = np.maximum(0.0, terminal_ebitda * ext_mult)
+        terminal_value = np.where(
+            (exit_tv_arr > 0) & (gordon_tv > exit_tv_arr),
+            0.35 * gordon_tv + 0.65 * exit_tv_arr,
+            gordon_tv,
+        )
+    elif is_cyclical:
+        cyc_mult = 5.5 if is_india else 7.5
+        exit_tv_arr = np.maximum(0.0, terminal_ebitda * cyc_mult)
+        terminal_value = np.where(
+            (exit_tv_arr > 0) & (gordon_tv > exit_tv_arr),
+            0.45 * gordon_tv + 0.55 * exit_tv_arr,
+            gordon_tv,
+        )
+    else:
+        terminal_value = gordon_tv
     pv_terminal_value = np.where(valid_tv, terminal_value / discount_factors[:, -1], 0.0)
 
     enterprise_val = pv_ufcf + pv_terminal_value

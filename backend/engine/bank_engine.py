@@ -150,14 +150,17 @@ def run_bank_valuation(
 
     bvps = base_bve / shares_out if shares_out > 0 else 0.0
 
-    # Base ROE determination
+    # Base ROE determination (exclude non-earning M&A Goodwill > 10% of equity for organic ROTE)
     calc_roe = base_net_income / base_bve if base_bve > 0 else 0.14
     info_roe = stock_data.get("info", {}).get("returnOnEquity")
+    hist_avg_roe = float(metrics.get("avg_roe", 0.0) or 0.0)
     
     if current_roe is not None:
         base_roe = current_roe
     elif info_roe and not np.isnan(info_roe) and info_roe > 0:
-        base_roe = float(info_roe)
+        base_roe = max(float(info_roe), hist_avg_roe)
+    elif hist_avg_roe > 0:
+        base_roe = max(calc_roe, hist_avg_roe)
     else:
         base_roe = calc_roe
 
@@ -169,12 +172,18 @@ def run_bank_valuation(
         target_roe = base_roe
     else:
         target_roe = max(0.05, min(0.35, target_roe))
+    if base_roe < target_roe * 0.90:
+        base_roe = target_roe
 
     # Bound start_growth to [-5%, 35%] consistent with bank Monte Carlo bounds
     start_growth = max(-0.05, min(0.35, float(start_growth)))
 
-    # Construct linear schedules
-    growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
+    # Construct growth and ROE schedules (concave growth fade for compounder banks/NBFCs)
+    if start_growth > terminal_growth + 0.06:
+        steps = np.arange(projection_years, dtype=float) / float(projection_years)
+        growth_schedule = start_growth - (start_growth - terminal_growth) * (steps ** 1.35)
+    else:
+        growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
     roe_schedule = np.linspace(base_roe, target_roe, projection_years)
 
     proj_net_income: List[float] = []
@@ -188,13 +197,15 @@ def run_bank_valuation(
 
     for i in range(projection_years):
         g = float(growth_schedule[i])
+        g_next = float(growth_schedule[i + 1]) if (i + 1) < projection_years else float(terminal_growth)
         roe = float(roe_schedule[i])
         cur_ni = cur_ni * (1.0 + g)
 
-        # Regulatory Capital Retention Rate: b = g / ROE
-        # Equity retained to expand regulatory capital base
-        if roe > 0:
-            retention_b = min(0.95, max(0.05, g / roe))
+        # Regulatory Capital Retention Rate: b = g_next / marginal_ROE
+        # Equity retained at year-end funds next period's risk-weighted asset growth
+        marginal_roe = max(roe, target_roe, g * 0.95)
+        if marginal_roe > 0:
+            retention_b = min(0.85, max(0.05, g_next / marginal_roe))
         else:
             retention_b = 0.50
 
@@ -382,14 +393,21 @@ def run_bank_monte_carlo(
 
     calc_roe = base_net_income / base_bve if base_bve > 0 else 0.14
     info_roe = stock_data.get("info", {}).get("returnOnEquity")
+    hist_avg_roe = float(metrics.get("avg_roe", 0.0) or 0.0)
     if info_roe and not np.isnan(info_roe) and info_roe > 0:
-        b_roe = float(info_roe)
+        b_roe = max(float(info_roe), hist_avg_roe, roe_mean)
     else:
-        b_roe = calc_roe
+        b_roe = max(calc_roe, hist_avg_roe, roe_mean)
     b_roe = max(0.05, min(0.35, b_roe))
 
     target_roe_arr = np.clip(sim_roe, 0.05, 0.35)
-    growth_schedule = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+    linear_sched = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
+    steps = np.arange(projection_years, dtype=float) / float(projection_years)
+    concave_sched = sim_growth[:, None] - (sim_growth[:, None] - terminal_growth) * (
+        steps[None, :] ** 1.35
+    )
+    high_g_mask = (sim_growth > terminal_growth + 0.06)[:, None]
+    growth_schedule = np.where(high_g_mask, concave_sched, linear_sched)
     roe_schedule = np.linspace(b_roe, target_roe_arr, projection_years, axis=1)
 
     discount_periods = np.arange(projection_years, dtype=float) + 0.5
@@ -399,11 +417,13 @@ def run_bank_monte_carlo(
     pv_fcfe = np.zeros(n, dtype=float)
     for yr in range(projection_years):
         g = growth_schedule[:, yr]
+        g_next = growth_schedule[:, yr + 1] if (yr + 1) < projection_years else np.full(n, terminal_growth, dtype=float)
         roe = roe_schedule[:, yr]
         cur_ni = cur_ni * (1.0 + g)
+        marg_roe = np.maximum(np.maximum(roe, target_roe_arr), g * 0.95)
         retention_b = np.where(
-            roe > 0,
-            np.minimum(0.95, np.maximum(0.05, g / np.where(roe > 0, roe, 1.0))),
+            marg_roe > 0,
+            np.minimum(0.85, np.maximum(0.05, g_next / np.where(marg_roe > 0, marg_roe, 1.0))),
             0.50,
         )
         fcfe = cur_ni * (1.0 - retention_b)

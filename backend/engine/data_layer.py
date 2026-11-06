@@ -346,14 +346,22 @@ def compute_clean_beta(
                         beta_clamped = False
                         clamp_reason = None
                         
-                        # Only clamp if raw beta is negative or implausibly close to zero (<= 0.15)
+                        # Only clamp if raw beta is negative or implausibly close to zero (<= 0.15),
+                        # or if an Indian PSU/extractive/cyclical commodity company has an artificially low Nifty correlation
                         eff_raw = calc_raw
-                        if calc_raw <= 0.15:
-                            beta_u = get_industry_unlevered_beta(sector, industry)
+                        is_ext_b, is_cyc_b = classify_sector_dynamics(sector, industry, ticker)
+                        if calc_raw <= 0.15 or (market.upper() == "IN" and (is_ext_b or is_cyc_b) and calc_raw < 0.85):
+                            beta_u = max(0.85 if (is_ext_b or is_cyc_b) else 0.45, get_industry_unlevered_beta(sector, industry))
                             eff_de = min(2.5, max(0.0, float(de_ratio))) if de_ratio is not None else 0.5
-                            eff_raw = beta_u * (1.0 + (1.0 - tax_rate) * eff_de)
-                            beta_clamped = True
-                            clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was near-zero; substituted bottom-up unlevered beta {beta_u:.2f} (relevered: {eff_raw:.2f})."
+                            relev_b = beta_u * (1.0 + (1.0 - tax_rate) * min(1.5, eff_de))
+                            if calc_raw <= 0.15:
+                                eff_raw = relev_b
+                                beta_clamped = True
+                                clamp_reason = f"Raw regression beta ({calc_raw:.2f}) was near-zero; substituted bottom-up unlevered beta {beta_u:.2f} (relevered: {eff_raw:.2f})."
+                            elif relev_b > calc_raw:
+                                eff_raw = relev_b
+                                beta_clamped = True
+                                clamp_reason = f"Raw regression beta ({calc_raw:.2f}) understated cyclical/commodity risk; anchored to bottom-up industry beta {beta_u:.2f} (relevered: {eff_raw:.2f})."
                         elif calc_raw > 2.80:
                             eff_raw = 2.80
                             beta_clamped = True
@@ -422,7 +430,12 @@ def _copy_stock_data(d: dict) -> dict:
         cp["cash_flow"] = cp["cash_flow"].copy()
     return cp
 
-def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[str] = None, symbol: Optional[str] = None) -> Tuple[bool, bool]:
+def classify_sector_dynamics(
+    sector: Optional[str] = None,
+    industry: Optional[str] = None,
+    symbol: Optional[str] = None,
+    name: Optional[str] = None,
+) -> Tuple[bool, bool]:
     """
     Classifies company into (is_extractive, is_cyclical).
     - is_extractive: Oil & Gas exploration/drilling/upstream/integrated, Thermal Coal, Mining & Minerals.
@@ -434,7 +447,8 @@ def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[st
     sec = sector or ""
     ind = industry or ""
     sym_clean = (symbol or "").replace(".NS", "").replace(".BO", "").strip().upper()
-    text = (sec + " " + ind).lower()
+    comp_name = (name or "").lower()
+    text = f"{sec} {ind} {comp_name}".lower()
 
     # Diversified conglomerates (e.g. Reliance Industries: Telecom + Retail + O2C) and
     # branded specialty chemical / consumer adhesive / paint compounders are not commodity mines.
@@ -443,19 +457,38 @@ def classify_sector_dynamics(sector: Optional[str] = None, industry: Optional[st
     if "specialty chemicals" in text:
         return False, False
 
+    KNOWN_EXTRACTIVE_SYMBOLS = {
+        "ONGC", "OIL", "COALINDIA", "VEDL", "NMDC", "MOIL", "GMDC", "HINDCOPPER", "HINDZINC",
+        "XOM", "CVX", "COP", "OXY", "EOG", "DVN", "FANG", "APA", "HES", "MRO", "CTRA", "EQT",
+        "BHP", "RIO", "VALE", "FCX", "NEM", "GOLD", "AEM", "SCCO", "TECK", "BTU", "ARCH", "AMR",
+    }
+    KNOWN_CYCLICAL_SYMBOLS = KNOWN_EXTRACTIVE_SYMBOLS | {
+        "IOC", "BPCL", "HPCL", "HINDPETRO", "HNDNPETRO", "MRPL", "CHENNPETRO", "CASTROLIND",
+        "TATASTEEL", "JSWSTEEL", "SAIL", "JINDALSTEL", "JSL", "APLAPOLLO", "HINDALCO", "NATIONALUM",
+        "ULTRACEMCO", "AMBUJACEM", "SHREECEM", "ACC", "DALBHARAT", "RAMCOCEM", "JKCEMENT",
+        "NUE", "STLD", "CLF", "X", "AA", "DOW", "LYB", "PSX", "MPC", "VLO", "CF", "MOS", "NTR",
+    }
+
+    if sym_clean in KNOWN_EXTRACTIVE_SYMBOLS:
+        return True, True
+    if sym_clean in KNOWN_CYCLICAL_SYMBOLS:
+        return False, True
+
     extractive_keywords = [
         "oil & gas e&p", "oil & gas exploration", "oil & gas drilling", "oil & gas integrated",
-        "thermal coal", "coal", "integrated oil", "drilling",
+        "thermal coal", "coal india", "coking coal", "integrated oil", "drilling",
         "exploration & production", "upstream", "crude", "mining", "gold", "silver", "copper",
-        "other industrial metals & mining", "other precious metals & mining", "coking coal"
+        "other industrial metals & mining", "other precious metals & mining",
+        "oil & natural gas", "oil india", "mineral development", "iron ore",
     ]
     is_extractive = any(k in text for k in extractive_keywords)
-    if not is_extractive and ("oil & gas" in text or "petroleum" in text) and "refining & marketing" not in text and "equipment" not in text and "midstream" not in text:
-        is_extractive = True
+    if not is_extractive and ("oil & gas" in text or "petroleum" in text or "coal" in text) and "refining & marketing" not in text and "equipment" not in text and "midstream" not in text and "gas distribution" not in text and "utilities" not in text:
+        if any(w in text for w in ["exploration", "natural gas corp", "oil india", "integrated", "production", "upstream", "coal"]):
+            is_extractive = True
 
     cyclical_keywords = extractive_keywords + [
         "steel", "aluminum", "aluminium", "metals", "commodity chemicals",
-        "agricultural inputs", "iron", "fertilizer", "refining", "paper & forest", "lumber",
+        "agricultural inputs", "iron", "fertilizer", "refining", "petroleum", "paper & forest", "lumber",
         "building materials", "cement"
     ]
     is_cyclical = is_extractive or any(k in text for k in cyclical_keywords)
@@ -534,23 +567,71 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         return yf.Ticker(yf_ticker, session=session).cashflow.T
 
     def _fetch_fast():
-        price, shares = None, None
+        price, shares, fast_curr = None, None, None
         try:
             fast = yf.Ticker(yf_ticker, session=session).fast_info
             price = getattr(fast, "last_price", None) or fast.get("lastPrice") or fast.get("regularMarketPreviousClose")
             shares = getattr(fast, "shares", None) or fast.get("shares")
+            fast_curr = getattr(fast, "currency", None) or fast.get("currency")
             if shares is None and fast.get("marketCap") and price:
                 shares = float(fast.get("marketCap")) / float(price)
         except Exception:
             pass
-        return price, shares
+        return price, shares, fast_curr
 
     def _fetch_info():
+        info_dict = {}
         try:
-            return yf.Ticker(yf_ticker, session=session).info or {}
+            info_dict = dict(yf.Ticker(yf_ticker, session=session).info or {})
         except Exception as e:
             logger.warning("Could not fetch stock.info for %s: %s", yf_ticker, e)
-            return {}
+
+        # Crumb-free fallback 1: Yahoo Search API (/v1/finance/search) for sector, industry, name, quoteType
+        # Works reliably on cloud/datacenter IPs (e.g. Render) even when quoteSummary (.info) is rate-limited.
+        if not info_dict.get("sector") or not info_dict.get("industry") or not info_dict.get("longName"):
+            try:
+                sr = session.get(
+                    f"https://query2.finance.yahoo.com/v1/finance/search?q={yf_ticker}&quotesCount=5&newsCount=0",
+                    timeout=4,
+                )
+                if sr.status_code == 200:
+                    quotes = sr.json().get("quotes", [])
+                    q = next(
+                        (x for x in quotes if str(x.get("symbol", "")).upper() == yf_ticker.upper()),
+                        quotes[0] if quotes else {},
+                    )
+                    if q:
+                        if not info_dict.get("sector"):
+                            info_dict["sector"] = q.get("sectorDisp") or q.get("sector")
+                        if not info_dict.get("industry"):
+                            info_dict["industry"] = q.get("industryDisp") or q.get("industry")
+                        if not info_dict.get("longName"):
+                            info_dict["longName"] = q.get("longname") or q.get("shortname")
+                        if not info_dict.get("shortName"):
+                            info_dict["shortName"] = q.get("shortname") or q.get("longname")
+                        if not info_dict.get("quoteType"):
+                            info_dict["quoteType"] = q.get("quoteType")
+            except Exception as search_err:
+                logger.debug("Search metadata fallback failed for %s: %s", yf_ticker, search_err)
+
+        # Crumb-free fallback 2: Yahoo Fundamentals Timeseries for financialCurrency (e.g. INFY.NS reporting in USD)
+        if not info_dict.get("financialCurrency"):
+            try:
+                ts_url = (
+                    f"https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{yf_ticker}"
+                    f"?type=annualTotalRevenue&period1=1600000000&period2=1950000000"
+                )
+                tr = session.get(ts_url, timeout=4)
+                if tr.status_code == 200:
+                    for item in tr.json().get("timeseries", {}).get("result", []):
+                        for v in item.get("annualTotalRevenue", []):
+                            if isinstance(v, dict) and v.get("currencyCode"):
+                                info_dict["financialCurrency"] = v["currencyCode"]
+                                break
+            except Exception as ts_err:
+                logger.debug("Timeseries currency fallback failed for %s: %s", yf_ticker, ts_err)
+
+        return info_dict
 
     def _fetch_h1y():
         try:
@@ -577,11 +658,14 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         income_stmt: pd.DataFrame = fut_fin.result()
         balance_sheet: pd.DataFrame = fut_bs.result()
         cash_flow: pd.DataFrame = fut_cf.result()
-        current_price, shares_out = fut_fast.result()
+        current_price, shares_out, fast_currency = fut_fast.result()
         info: dict = fut_info.result()
         hist_1y: pd.DataFrame = fut_h1y.result()
         hist_2y: pd.DataFrame = fut_h2y.result()
         _ = fut_bench.result()
+
+    if not info.get("currency"):
+        info["currency"] = fast_currency or ("INR" if market.upper() == "IN" else "USD")
 
     # Gatekeeper: reject ETFs, Commodity Funds, Mutual Funds, Indices, REITs, InvITs with a clear domain message
     is_excl, _, excl_msg = is_non_dcf_instrument(
@@ -651,19 +735,28 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     was_cross_currency = False
     try:
         fin_currency = str(info.get("financialCurrency") or "").upper()
-        trade_currency = str(info.get("currency") or "").upper()
+        trade_currency = str(info.get("currency") or ("INR" if market.upper() == "IN" else "USD")).upper()
+        raw_stmt_rev = None
+        if not income_stmt.empty:
+            for col in ["Total Revenue", "Operating Revenue", "Revenue"]:
+                if col in income_stmt.columns:
+                    v = income_stmt[col].dropna()
+                    if not v.empty and float(v.iloc[0]) > 0:
+                        raw_stmt_rev = float(v.iloc[0])
+                        break
+
+        # Deterministic USD-reporting fallback for ADR-linked Indian companies (e.g. INFY.NS)
+        # when cloud IP rate-limiting blocks Yahoo metadata endpoints
+        if (not fin_currency or fin_currency == trade_currency) and trade_currency == "INR" and raw_stmt_rev and market_cap > 50e9:
+            raw_rev_ratio = raw_stmt_rev / market_cap
+            sym_base = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
+            if 0.001 <= raw_rev_ratio <= 0.022 and (sym_base in {"INFY", "WIT"} or raw_rev_ratio < 0.012):
+                fin_currency = "USD"
+                info["financialCurrency"] = "USD"
+
         if fin_currency and trade_currency and fin_currency != trade_currency:
             fx_rate = get_cross_fx_rate(fin_currency, trade_currency)
             if fx_rate and abs(fx_rate - 1.0) > 0.001:
-                # Sanity check: verify that statement revenue isn't ALREADY in trade_currency
-                raw_stmt_rev = None
-                if not income_stmt.empty:
-                    for col in ["Total Revenue", "Operating Revenue", "Revenue"]:
-                        if col in income_stmt.columns:
-                            v = income_stmt[col].dropna()
-                            if not v.empty and float(v.iloc[0]) > 0:
-                                raw_stmt_rev = float(v.iloc[0])
-                                break
                 already_in_trade_curr = False
                 if raw_stmt_rev and market_cap > 0 and fx_rate > 10.0:
                     # E.g. HCLTECH.NS: fin_currency='USD', trade_currency='INR', fx_rate ~ 86-94.
@@ -775,20 +868,6 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
                 approx_debt -= float(cl_vals.iloc[0])
     de_ratio = (approx_debt / market_cap) if market_cap > 0 else 0.0
 
-    beta_info = compute_clean_beta(
-        stock=stock,
-        ticker=yf_ticker,
-        market=market,
-        raw_info_beta=info.get("beta"),
-        sector=info.get("sector"),
-        industry=info.get("industry"),
-        de_ratio=de_ratio,
-        tax_rate=profile.get("tax_rate", 0.2517 if market.upper() == "IN" else 0.21),
-        tradeable=info.get("tradeable"),
-        hist_1y=hist_1y,
-        hist_2y=hist_2y,
-    )
-
     from engine.ticker_universe import clean_company_name, lookup_company_name
     long_name = info.get("longName")
     short_name = info.get("shortName")
@@ -800,6 +879,47 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     sector = info.get("sector")
     industry = info.get("industry")
 
+    is_extractive, is_cyclical = classify_sector_dynamics(sector, industry, yf_ticker, company_name)
+    name_lower = (company_name or "").lower()
+    clean_sym = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
+
+    # Deterministic sector/industry fallback when Yahoo endpoints are rate-limited on cloud IPs
+    if not sector:
+        if is_extractive:
+            if any(k in name_lower for k in ["oil", "gas", "petroleum"]) or clean_sym in {"ONGC", "OIL", "XOM", "CVX", "COP", "OXY", "EOG"}:
+                sector = "Energy"
+                industry = industry or "Oil & Gas Integrated"
+            else:
+                sector = "Basic Materials"
+                industry = industry or "Metals & Mining"
+        elif is_cyclical:
+            if any(k in name_lower for k in ["petroleum", "oil", "refin"]) or clean_sym in {"IOC", "BPCL", "HPCL", "HINDPETRO", "MRPL", "CHENNPETRO"}:
+                sector = "Energy"
+                industry = industry or "Oil & Gas Refining & Marketing"
+            else:
+                sector = "Basic Materials"
+                industry = industry or "Steel & Basic Materials"
+        elif any(k in name_lower for k in ["pharma", "laboratories", "healthcare", "biocon", "hospital", "lifesciences"]) or clean_sym in {"SUNPHARMA", "CIPLA", "DRREDDY", "DIVISLAB", "LUPIN", "AUROPHARMA", "TORNTPHARM", "ZYDUSLIFE"}:
+            sector = "Healthcare"
+            industry = industry or "Drug Manufacturers - Specialty & Generic"
+        elif any(k in name_lower for k in ["infosys", "technologies", "software", "consultancy", "tech ", "systems", "infotech", "wipro", "mindtree"]) or clean_sym in {"INFY", "TCS", "WIPRO", "HCLTECH", "TECHM", "LTIM", "PERSISTENT", "COFORGE", "MPHASIS"}:
+            sector = "Technology"
+            industry = industry or "Information Technology Services"
+
+    beta_info = compute_clean_beta(
+        stock=stock,
+        ticker=yf_ticker,
+        market=market,
+        raw_info_beta=info.get("beta"),
+        sector=sector,
+        industry=industry,
+        de_ratio=de_ratio,
+        tax_rate=profile.get("tax_rate", 0.2517 if market.upper() == "IN" else 0.21),
+        tradeable=info.get("tradeable"),
+        hist_1y=hist_1y,
+        hist_2y=hist_2y,
+    )
+
     # Banking & Balance-Sheet Financial Services Detection (Banks, NBFCs, Insurance, Lending Institutions)
     # Note: Capital-light fee-based financial infrastructure (Exchanges like MCX/BSE, Depositories like CDSL,
     # RTAs like CAMS/KFINTECH, Rating Agencies like CRISIL, and AMCs) are routed to Standard FCFF DCF.
@@ -807,8 +927,6 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     is_financial = False
     sec_lower = (sector or "").lower()
     ind_lower = (industry or "").lower()
-    name_lower = (company_name or "").lower()
-    clean_sym = yf_ticker.replace(".NS", "").replace(".BO", "").upper()
 
     KNOWN_BALANCE_SHEET_FINANCIALS = {
         "IREDA", "PFC", "REC", "IRFC", "HUDCO", "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", 
@@ -862,8 +980,6 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         sector = "Financial Services"
     if is_financial and not industry:
         industry = "Financial Services & Lending"
-
-    is_extractive, is_cyclical = classify_sector_dynamics(sector, industry, yf_ticker)
 
     result = {
         "ticker": yf_ticker,
@@ -1103,7 +1219,19 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     st_debt = safe_get(balance_sheet, "Current Debt", default=0)[::-1]
 
     # Exclude captive finance / consolidated NBFC customer loan receivables above normal trade DSO (22% of rev)
-    # from operating Current Assets so captive finance loan books do not inflate operating working capital
+    # from operating Current Assets ONLY for verified industrial conglomerates with captive finance arms
+    CAPTIVE_FINANCE_SYMBOLS = {
+        "DE", "CAT", "PCAR", "F", "GM", "TM", "HMC", "HPE", "IBM",
+        "LT", "M&M", "TATAMOTORS", "TMPV", "TMCV", "BAJAJ-AUTO", "TVSMOTOR",
+        "ASHOKLEY", "GRASIM", "ABREL", "CHOLAHLDNG", "BAJAJFINSV",
+    }
+    sym_clean_m = str(stock_data.get("ticker") or "").replace(".NS", "").replace(".BO", "").strip().upper()
+    has_captive_arm = (
+        sym_clean_m in CAPTIVE_FINANCE_SYMBOLS
+        or "Loans Receivable" in balance_sheet.columns
+        or "Finance Lease Receivables" in balance_sheet.columns
+    )
+
     ar_series = safe_get(balance_sheet, "Accounts Receivable", default=0)[::-1]
     other_rec_series = safe_get(balance_sheet, "Other Receivables", default=0)[::-1]
     tot_rec_col = (
@@ -1113,7 +1241,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     )
     rec_series = np.maximum(tot_rec_col, np.maximum(ar_series, other_rec_series))
     excess_fin_rec_series = np.where(
-        (not is_financial) & (rec_series > 0.35 * revenue),
+        (not is_financial) & has_captive_arm & (rec_series > 0.35 * revenue),
         np.maximum(0.0, rec_series - 0.20 * revenue),
         0.0,
     )
@@ -1144,10 +1272,22 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     avg_ebitda_margin = float(np.mean(ebitda_margins))
 
     # Banking specific ratio calculations (ROE, Payout, Net Income growth)
+    # Use Tangible Book Value (excluding non-earning M&A Goodwill > 10% of equity, e.g. HDFCBANK merger goodwill)
+    # because RBI / Basel Tier-1 regulatory capital (CET1) deducts goodwill & intangibles.
+    gw_for_bv = (
+        safe_get(balance_sheet, "Goodwill And Other Intangible Assets", default=0)[::-1]
+        if "Goodwill And Other Intangible Assets" in balance_sheet.columns
+        else safe_get(balance_sheet, "Goodwill", default=0)[::-1]
+    )
+    tang_book_value = np.where(
+        (book_value > 0) & (gw_for_bv > 0.10 * book_value),
+        np.maximum(book_value * 0.40, book_value - 0.85 * gw_for_bv),
+        book_value,
+    )
     roes = []
     payouts = []
     for idx in range(len(net_income)):
-        bv = book_value[idx - 1] if idx > 0 else book_value[idx]
+        bv = tang_book_value[idx - 1] if idx > 0 else tang_book_value[idx]
         ni = net_income[idx]
         div = dividends_paid[idx] if idx < len(dividends_paid) else 0.0
         if bv > 0 and ni != 0:
@@ -1176,6 +1316,11 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         ni_growth = np.diff(valid_ni) / valid_ni[:-1]
         avg_ni_growth = float(np.mean(ni_growth))
         std_ni_growth = float(np.std(ni_growth, ddof=1)) if len(ni_growth) > 1 else 0.05
+        # When a bank underwent a major merger (Goodwill > 15% of BVE, e.g. HDFCBANK),
+        # blend Net Income growth with top-line NII/Revenue growth to reflect combined franchise expansion
+        if is_financial and len(book_value) > 0 and book_value[-1] > 0 and gw_for_bv[-1] > 0.15 * book_value[-1]:
+            if avg_rev_growth > avg_ni_growth:
+                avg_ni_growth = float(0.45 * avg_ni_growth + 0.55 * min(0.24, avg_rev_growth))
     else:
         avg_ni_growth = avg_rev_growth
         std_ni_growth = std_rev_growth
@@ -1256,7 +1401,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # HPE Financial Services, Grasim's consolidated Aditya Birla Capital NBFC loan book, L&T Finance)
     # Netting non-operating financial loan/lease receivables against total debt isolates corporate operating debt.
     latest_rev = float(revenue[-1]) if len(revenue) > 0 else 0.0
-    if not is_financial and total_debt > 0 and latest_rev > 0 and total_debt > 0.30 * latest_rev:
+    if not is_financial and has_captive_arm and total_debt > 0 and latest_rev > 0 and total_debt > 0.30 * latest_rev:
         captive_rec = 0.0
         for col_name in [
             "Non Current Accounts Receivable",
@@ -1275,7 +1420,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         # For conglomerates consolidating an NBFC / financial services subsidiary (e.g. Grasim consolidating
         # Aditya Birla Capital's ₹1.21T financial assets + ₹469.5B NBFC receivables alongside ₹1.90T NBFC debt),
         # include 'Investmentin Financial Assets' when Total Debt > 70% of Revenue
-        if total_debt > 0.70 * latest_rev and "Investmentin Financial Assets" in balance_sheet.columns:
+        if sym_clean_m in {"GRASIM", "ABREL", "LT", "M&M", "BAJAJFINSV"} and total_debt > 0.70 * latest_rev and "Investmentin Financial Assets" in balance_sheet.columns:
             fin_inv_assets = float(safe_get(balance_sheet, "Investmentin Financial Assets", default=0.0)[0])
             if fin_inv_assets > 0.25 * total_debt:
                 total_captive_offset += fin_inv_assets
@@ -1289,6 +1434,47 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                 total_captive_offset, offset_applied, total_debt, total_debt - offset_applied, sym
             )
             total_debt = max(0.0, total_debt - offset_applied)
+
+    # 3. Consolidated Minority Interest (Noncontrolling Interest), Extractive ARO, & Uncommissioned CWIP
+    # When a parent consolidates 100% of partially-owned subsidiaries' EBIT/Revenue (e.g. ONGC consolidating HPCL/MRPL,
+    # Vedanta consolidating Hindustan Zinc), the minority shareholders' claim must be deducted in the EV-to-Equity bridge.
+    # For extractive oil/gas/mining firms (ONGC, OIL, COALINDIA, VEDL), statutory Long Term Provisions represent
+    # Well Decommissioning / Asset Retirement Obligations (ARO) & Mine Closure liabilities against which cash is earmarked.
+    cwip_to_rev = 0.0
+    if not is_financial and latest_rev > 0:
+        cwip_val = (
+            max(0.0, float(safe_get(balance_sheet, "Construction In Progress", default=0.0)[0]))
+            if "Construction In Progress" in balance_sheet.columns
+            else 0.0
+        )
+        cwip_to_rev = cwip_val / latest_rev
+
+        bs_minority = (
+            max(0.0, float(safe_get(balance_sheet, "Minority Interest", default=0.0)[0]))
+            if "Minority Interest" in balance_sheet.columns
+            else 0.0
+        )
+        if bs_minority > 0.02 * latest_rev:
+            minority_claim = bs_minority * 0.50 if bs_minority > 0.20 * latest_rev else bs_minority
+            total_debt += minority_claim
+
+        if stock_data.get("is_extractive", False) and "Long Term Provisions" in balance_sheet.columns:
+            lt_provisions = max(0.0, float(safe_get(balance_sheet, "Long Term Provisions", default=0.0)[0]))
+            if lt_provisions > 0.05 * latest_rev:
+                total_debt += 0.75 * lt_provisions
+
+        # When a company carries massive uncommissioned greenfield Construction In Progress (CWIP > 50% of revenue,
+        # e.g. OIL.NS's ₹38,103 Cr Numaligarh Refinery expansion on ₹33,943 Cr revenue) that generates zero current
+        # EBIT, plus liquid Available For Sale Securities (e.g. OIL.NS's ₹11,331 Cr listed IOCL shares), do not
+        # penalize Equity Value for the project debt funding uncommissioned CWIP & liquid AFS holdings.
+        if cwip_to_rev > 0.50 and total_debt > 0:
+            afs_val = (
+                max(0.0, float(safe_get(balance_sheet, "Available For Sale Securities", default=0.0)[0]))
+                if "Available For Sale Securities" in balance_sheet.columns
+                else 0.0
+            )
+            cwip_offset = 0.65 * max(0.0, cwip_val - 0.20 * latest_rev) + 0.85 * afs_val
+            total_debt = max(0.10 * raw_total_debt, total_debt - cwip_offset)
 
 
     # Interest expense (for cost-of-debt calculation)
@@ -1429,6 +1615,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "total_debt": total_debt,
         "raw_total_debt": raw_total_debt,
         "lease_obligations": lease_obligations,
+        "cwip_to_rev": float(cwip_to_rev),
         "cash_and_equivalents": cash_and_equivalents,
         "interest_expense": interest_expense,
         "interest_coverage": float(interest_coverage),
