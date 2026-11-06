@@ -334,9 +334,11 @@ def run_dcf(
 
     is_extractive = stock_data.get("is_extractive", False)
     is_cyclical = stock_data.get("is_cyclical", False)
-    if not is_extractive and not is_cyclical:
+    if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
         from engine.data_layer import classify_sector_dynamics
-        is_extractive, is_cyclical = classify_sector_dynamics(stock_data.get("sector"), stock_data.get("industry"))
+        is_extractive, is_cyclical = classify_sector_dynamics(
+            stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker")
+        )
 
     # Explicit tax rate priority: passed arg -> stock_data._tax_rate -> market fallback
     if tax_rate is None:
@@ -388,10 +390,10 @@ def run_dcf(
     else:
         steady_state_capex_pct = base_steady_state
 
-    if avg_capex_pct > effective_dna_pct * 1.45 and avg_capex_pct > 0.14:
+    if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
         eff_start_capex = min(
             avg_capex_pct,
-            max(effective_dna_pct * (1.0 + max(0.05, start_growth * 1.4)), effective_dna_pct + 0.055),
+            effective_dna_pct * (1.0 + max(0.15, start_growth * 1.8)),
         )
     else:
         eff_start_capex = avg_capex_pct
@@ -484,7 +486,21 @@ def run_dcf(
     else:
         effective_terminal_growth = clamped_terminal_growth
 
-    terminal_reinv_rate = min(0.80, max(min_reinv_floor, effective_terminal_growth / sustainable_roic))
+    roic_reinv = effective_terminal_growth / sustainable_roic
+    if not is_extractive and not is_cyclical and margin_schedule[-1] > 0:
+        yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
+        model_yr5_reinv = max(
+            0.0,
+            (
+                (steady_state_capex_pct - effective_dna_pct)
+                + max(0.0, normalized_nwc_to_revenue * effective_terminal_growth)
+            )
+            / yr5_nopat_margin,
+        )
+        blended_reinv = min(roic_reinv, 0.35 * roic_reinv + 0.65 * model_yr5_reinv)
+        terminal_reinv_rate = min(0.80, max(min_reinv_floor, blended_reinv))
+    else:
+        terminal_reinv_rate = min(0.80, max(min_reinv_floor, roic_reinv))
 
     # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
     if is_extractive and margin_schedule[-1] > 0:
@@ -626,10 +642,10 @@ def run_dcf_batch(
 
     is_extractive = stock_data.get("is_extractive", False)
     is_cyclical = stock_data.get("is_cyclical", False)
-    if not is_extractive and not is_cyclical:
+    if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
         from engine.data_layer import classify_sector_dynamics
         is_extractive, is_cyclical = classify_sector_dynamics(
-            stock_data.get("sector"), stock_data.get("industry")
+            stock_data.get("sector"), stock_data.get("industry"), stock_data.get("ticker")
         )
 
     if tax_rate is None:
@@ -670,10 +686,10 @@ def run_dcf_batch(
         steady_state_capex_pct = base_steady_state
 
     mean_start_g = float(np.mean(sim_growth)) if n > 0 else 0.05
-    if avg_capex_pct > effective_dna_pct * 1.45 and avg_capex_pct > 0.14:
+    if avg_capex_pct > effective_dna_pct * 1.40 and avg_capex_pct > 0.12:
         eff_start_capex = min(
             avg_capex_pct,
-            max(effective_dna_pct * (1.0 + max(0.05, mean_start_g * 1.4)), effective_dna_pct + 0.055),
+            effective_dna_pct * (1.0 + max(0.15, mean_start_g * 1.8)),
         )
     else:
         eff_start_capex = avg_capex_pct
@@ -755,7 +771,21 @@ def run_dcf_batch(
         clamped_terminal_growth,
     )
 
-    terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, effective_terminal_growth / sustainable_roic))
+    roic_reinv = effective_terminal_growth / sustainable_roic
+    if not is_extractive and not is_cyclical:
+        yr5_nopat_m = np.maximum(0.01, sim_margin * (1.0 - tax_rate))
+        model_yr5_reinv = np.maximum(
+            0.0,
+            (
+                (steady_state_capex_pct - effective_dna_pct)
+                + np.maximum(0.0, normalized_nwc_to_revenue * effective_terminal_growth)
+            )
+            / yr5_nopat_m,
+        )
+        blended_reinv = np.minimum(roic_reinv, 0.35 * roic_reinv + 0.65 * model_yr5_reinv)
+        terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, blended_reinv))
+    else:
+        terminal_reinv_rate = np.minimum(0.80, np.maximum(min_reinv_floor, roic_reinv))
 
     if is_extractive:
         pos_m = sim_margin > 0

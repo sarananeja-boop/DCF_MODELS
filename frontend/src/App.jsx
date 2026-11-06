@@ -169,12 +169,16 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
     sessionStorage.removeItem('vl_analysisData'); // Clear stale legacy cache
-    const saved = sessionStorage.getItem('vl_analysisData_v2');
+    if (sessionStorage.getItem('vl_analysisData_v2')) {
+      sessionStorage.removeItem('vl_analysisData_v2');
+      sessionStorage.removeItem('vl_overrides');
+    }
+    const saved = sessionStorage.getItem('vl_analysisData_v3');
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
-        sessionStorage.removeItem('vl_analysisData_v2');
+        sessionStorage.removeItem('vl_analysisData_v3');
         return null;
       }
       return parsed;
@@ -231,8 +235,8 @@ export default function App() {
   const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData_v2', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData_v2');
+    if (analysisData) sessionStorage.setItem('vl_analysisData_v3', JSON.stringify(analysisData));
+    else sessionStorage.removeItem('vl_analysisData_v3');
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
@@ -503,6 +507,7 @@ export default function App() {
     setActiveTab('overview');
     sessionStorage.removeItem('vl_analysisData');
     sessionStorage.removeItem('vl_analysisData_v2');
+    sessionStorage.removeItem('vl_analysisData_v3');
     sessionStorage.removeItem('vl_ticker');
     sessionStorage.removeItem('vl_valuationMethod');
     sessionStorage.removeItem('vl_overrides');

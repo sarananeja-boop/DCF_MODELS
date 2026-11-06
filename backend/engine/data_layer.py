@@ -998,9 +998,15 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         if "Operating Income" in income_stmt.columns:
             op_inc = safe_get(income_stmt, "Operating Income")[::-1]
             for idx in range(len(ebit)):
-                if op_inc[idx] != 0:
+                if op_inc[idx] > ebit[idx]:
+                    # EBIT was dragged down below Operating Income by non-operating impairments/losses
+                    # (e.g. DNUT -$447.5M goodwill impairment, JACK -$236M, SBUX -$892M, CVS -$5.24B)
                     ebit[idx] = op_inc[idx]
                 elif revenue[idx] > 0 and (ebit[idx] / revenue[idx]) > 0.85:
+                    # One-off spin-off/divestiture gain (>85% of revenue)
+                    ebit[idx] = op_inc[idx]
+                elif op_inc[idx] > 0 and ebit[idx] > op_inc[idx] * 1.35:
+                    # Large non-operating divestiture gain (>35% above operating income)
                     ebit[idx] = op_inc[idx]
 
         # Extract Normalized EBITDA (or recurring Operating Income + D&A)
