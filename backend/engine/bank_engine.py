@@ -350,22 +350,22 @@ def run_bank_monte_carlo(
     Stochastically samples Net Income growth, Return on Equity (ROE), and Cost of Equity (Ke).
     """
     g_mean = base_growth if base_growth is not None else float(metrics.get("avg_ni_growth", 0.10))
-    g_std = float(metrics.get("std_ni_growth", 0.04))
+    g_std = float(np.clip(metrics.get("std_ni_growth", 0.04), 0.02, 0.10))
 
     roe_mean = base_roe if base_roe is not None else float(metrics.get("avg_roe", 0.14))
-    roe_std = float(metrics.get("std_roe", 0.02))
+    roe_std = float(np.clip(metrics.get("std_roe", 0.02), 0.01, 0.05))
 
     ke_data = compute_bank_cost_of_equity(stock_data, market_profile)
     ke_mean = base_ke if base_ke is not None else float(ke_data["cost_of_equity"])
     ke_std = 0.015
 
     rng = np.random.default_rng(42)
-    sim_growth = rng.normal(g_mean, max(0.01, g_std), iterations)
-    sim_roe = rng.normal(roe_mean, max(0.01, roe_std), iterations)
+    sim_growth = rng.normal(g_mean, g_std, iterations)
+    sim_roe = rng.normal(roe_mean, roe_std, iterations)
     sim_ke = rng.normal(ke_mean, ke_std, iterations)
 
-    # Bound distributions
-    sim_growth = np.clip(sim_growth, -0.05, 0.35)
+    # Bound distributions symmetrically around high-growth caps so median aligns with base IV
+    sim_growth = np.clip(sim_growth, -0.05, max(0.35, g_mean + 1.5 * g_std))
     sim_roe = np.clip(sim_roe, 0.05, 0.35)
     sim_ke = np.clip(sim_ke, terminal_growth + 0.005, 0.25)
 

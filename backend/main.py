@@ -9,6 +9,7 @@ import os
 import json
 import datetime
 import logging
+from contextlib import asynccontextmanager
 from io import BytesIO
 from typing import Optional, Dict, Any, List
 
@@ -25,6 +26,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 # Engine imports (built in parallel – see engine/ package)
 # ---------------------------------------------------------------------------
+from engine import MODEL_VERSION
 from engine.market_config import detect_market, get_market_profile
 from engine.data_layer import (
     fetch_stock_data,
@@ -76,24 +78,6 @@ logging.basicConfig(
 logger = logging.getLogger("dcf-api")
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
-app = FastAPI(
-    title="Automated DCF Valuation Platform",
-    version="1.0.0",
-    description="End-to-end equity valuation via DCF, Monte Carlo simulation, "
-    "sensitivity analysis, AI commentary, and Excel export.",
-)
-
-# CORS — allow everything so the Vercel-deployed frontend can call us
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-
 def _warmup_background() -> None:
     """Pre-warm FRED risk-free rates, Yahoo crumb/session, benchmark returns, and live ticker universe."""
     try:
@@ -107,9 +91,29 @@ def _warmup_background() -> None:
         logger.debug("Background warm-up non-fatal error: %s", exc)
 
 
-@app.on_event("startup")
-def on_startup() -> None:
+@asynccontextmanager
+async def _app_lifespan(app_instance: FastAPI):
     threading.Thread(target=_warmup_background, daemon=True).start()
+    yield
+
+
+app = FastAPI(
+    title="Automated DCF Valuation Platform",
+    version=MODEL_VERSION,
+    description="End-to-end equity valuation via DCF, Monte Carlo simulation, "
+    "sensitivity analysis, AI commentary, and Excel export.",
+    lifespan=_app_lifespan,
+)
+
+# CORS — allow everything so the Vercel-deployed frontend can call us
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Pydantic Models
@@ -273,7 +277,9 @@ def analyze(req: AnalyzeRequest):
         if requested_method not in ("auto", "fcff", "ddm"):
             requested_method = "auto"
 
+        from engine import MODEL_VERSION
         cache_key = (
+            MODEL_VERSION,
             ticker,
             req.market.strip().upper(),
             requested_method,
@@ -533,7 +539,8 @@ def analyze(req: AnalyzeRequest):
                 min_pos_margin = float(np.min(pos_margins)) if pos_margins else max(0.02, avg_ebit_margin)
                 ind_str = str(stock_data.get("industry") or "").lower()
                 sym_clean_c = str(stock_data.get("ticker") or "").replace(".NS", "").replace(".BO", "").strip().upper()
-                if "refining & marketing" in ind_str or sym_clean_c in {"IOC", "BPCL", "HPCL", "HINDPETRO", "MRPL", "CHENNPETRO"}:
+                from engine.classification_overrides import DOWNSTREAM_REFINING_SYMBOLS
+                if "refining & marketing" in ind_str or sym_clean_c in DOWNSTREAM_REFINING_SYMBOLS:
                     # Downstream oil refining & marketing margins mean-revert to mid-cycle refining cracks
                     fcff_default_margin = max(0.025, 0.50 * min_pos_margin + 0.50 * min(avg_ebit_margin, median_margin))
                     fcff_default_current_margin = min(latest_margin, avg_ebit_margin)
@@ -554,7 +561,15 @@ def analyze(req: AnalyzeRequest):
                 unit_economics_convergence = True
             elif is_store_opex_below_gp and avg_ebitda_margin >= 0.05:
                 # QSR / Retail / Multi-unit concepts (e.g. DNUT) where store labor & occupancy OpEx sit below Gross Profit
-                ebitda_target = max(avg_ebit_margin * 1.45, avg_ebitda_margin * 0.85, best_fcf_margin + 0.045, 0.080)
+                ebitda_margins_hist = metrics.get("ebitda_margins", [])
+                max_ebitda_m = float(np.max(ebitda_margins_hist)) if ebitda_margins_hist else avg_ebitda_margin
+                ebitda_target = max(
+                    avg_ebit_margin * 1.45,
+                    avg_ebitda_margin * 0.85,
+                    max_ebitda_m * 0.914325,
+                    best_fcf_margin + 0.045,
+                    0.080,
+                )
                 fcff_default_margin = float(np.clip(ebitda_target, 0.075, 0.15))
                 fcff_default_current_margin = float(np.clip(max(latest_margin, avg_ebit_margin, 0.55 * avg_ebitda_margin), 0.045, fcff_default_margin))
             else:
@@ -1095,7 +1110,7 @@ def analyze(req: AnalyzeRequest):
                 "projection_years": overrides.projection_years,
             },
             "metadata": {
-                "model_version": "2.4.0",
+                "model_version": MODEL_VERSION,
                 "engine_name": "ValuationLabs Quantitative DCF & Monte Carlo Engine",
                 "valuation_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "market_data_timestamp": stock_data.get("price_timestamp") or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -1398,6 +1413,248 @@ def submit_feedback(req: FeedbackRequest):
     except Exception as exc:
         logger.exception("Failed to record feedback")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 0C Diagnostic Spike: Hidden TA History Probe (`GET /api/technical/_probe`)
+# ---------------------------------------------------------------------------
+@app.get("/api/technical/_probe", include_in_schema=False)
+def technical_history_probe(
+    symbol: Optional[str] = Query(
+        None,
+        description="Single ticker or comma-separated tickers; defaults to 10 golden tickers",
+    ),
+    market: str = Query("auto", description="'IN', 'US', or 'auto'"),
+    period: str = Query("10y", description="History window to benchmark ('10y' or '5y')"),
+):
+    """
+    Hidden diagnostic endpoint for Phase 0C to benchmark `period='10y'` vs `'5y'`
+    OHLCV + benchmark fetching latency, payload size, and coverage eligibility.
+    Strictly decoupled from `/api/analyze`.
+    """
+    from engine.market_history import (
+        build_technical_response_envelope,
+        fetch_market_history,
+        run_technical_probe,
+    )
+
+    try:
+        if symbol and "," not in symbol.strip():
+            bundle = fetch_market_history(
+                symbol=symbol.strip(),
+                market=market,
+                period=period,
+                force_refresh=False,
+            )
+            return _numpy_to_python(
+                build_technical_response_envelope(
+                    bundle,
+                    payload={
+                        "probe": {
+                            "fetch_latency_ms": bundle.fetch_latency_ms,
+                            "splits_count": len(bundle.splits),
+                            "dividends_count": len(bundle.dividends),
+                            "splits_sample": bundle.splits[-5:],
+                            "dividends_sample": bundle.dividends[-5:],
+                        }
+                    },
+                )
+            )
+
+        parsed_symbols = [("RELIANCE.NS", "IN"), ("AAPL", "US")]
+        if symbol:
+            parsed_symbols = []
+            for item in symbol.split(",")[:3]:
+                s = item.strip()
+                if s:
+                    m = (
+                        market
+                        if market.upper() in ("IN", "US")
+                        else ("IN" if s.upper().endswith((".NS", ".BO")) else "US")
+                    )
+                    parsed_symbols.append((s, m))
+
+        report = run_technical_probe(symbols=parsed_symbols, period=period)
+        return _numpy_to_python(report)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Technical history probe failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 TA v0.1 Endpoints (`/api/technical/chart`, `/api/technical/position-size`)
+# ---------------------------------------------------------------------------
+def _check_ta_enabled() -> None:
+    if os.getenv("TA_ENABLED", "true").strip().lower() in ("false", "0", "no", "off"):
+        raise HTTPException(
+            status_code=403,
+            detail="Technical Analysis module is currently disabled on this server (TA_ENABLED=false).",
+        )
+
+
+def _lookup_cached_valuation_context(symbol: str, market: str) -> Dict[str, Any]:
+    """
+    Non-blocking lookup of any recently computed `/api/analyze` entry in
+    `_ANALYZE_RESPONSE_CACHE` so `/api/technical/chart` can enrich its
+    Fundamental Context card without re-running DCF.
+    """
+    base_clean = symbol.replace(".NS", "").replace(".BO", "").strip().upper()
+    candidates = {symbol.strip().upper(), base_clean, f"{base_clean}.NS", f"{base_clean}.BO"}
+    for key_tuple, (cached_resp, _ts) in list(_ANALYZE_RESPONSE_CACHE.items()):
+        if not key_tuple:
+            continue
+        k_sym = str(key_tuple[0]).upper()
+        if k_sym in candidates:
+            comp = cached_resp.get("company", {})
+            dcf_res = cached_resp.get("dcf_result", {})
+            verdict_obj = cached_resp.get("verdict", {})
+            mc_obj = cached_resp.get("monte_carlo", {})
+            is_fin = bool(comp.get("is_financial"))
+            is_eq = bool(is_fin or comp.get("is_equity_model"))
+            return {
+                "fair_value": dcf_res.get("implied_price"),
+                "verdict": verdict_obj.get("verdict", "NEUTRAL"),
+                "active_method": (
+                    "Tier-1 Banking DDM/FCFE"
+                    if is_fin
+                    else "Corporate DDM / FCFE"
+                    if is_eq
+                    else "Enterprise DCF (FCFF)"
+                ),
+                "simulated_prices": mc_obj.get("simulated_prices", []),
+                "mc_stats": mc_obj.get("stats", {}),
+                "mc_histogram": mc_obj.get("histogram"),
+            }
+    return {}
+
+
+@app.get("/api/technical/chart")
+def get_technical_chart(
+    symbol: str = Query(..., min_length=1, description="Ticker symbol (e.g. RELIANCE.NS or AAPL)"),
+    market: str = Query("auto", description="'IN', 'US', or 'auto'"),
+    timeframe: str = Query("1D", description="Chart timeframe: '1D', '1W', or '1M'"),
+    period: str = Query("10y", description="Historical lookback: '10y' or '5y'"),
+    fair_value: Optional[float] = Query(None, description="Optional active DCF/DDM fair value override"),
+    verdict: Optional[str] = Query(None, description="Optional active Valuation Outlook verdict"),
+    active_method: Optional[str] = Query(None, description="Optional active valuation method label"),
+):
+    """
+    Phase 1 TA v0.1 Chart, Indicators, Confirmed S/R Levels, Volume Profile,
+    Headline Cards, and Position Sizing defaults.
+    """
+    _check_ta_enabled()
+    from engine.market_history import fetch_market_history
+    from engine.ta_indicators import build_ta_chart_payload
+
+    try:
+        bundle = fetch_market_history(
+            symbol=symbol.strip(),
+            market=market,
+            period=period,
+            force_refresh=False,
+        )
+        val_ctx = _lookup_cached_valuation_context(bundle.symbol, bundle.market)
+        if isinstance(fair_value, (int, float)):
+            val_ctx["fair_value"] = float(fair_value)
+        if isinstance(verdict, str) and verdict:
+            val_ctx["verdict"] = verdict
+        if isinstance(active_method, str) and active_method:
+            val_ctx["active_method"] = active_method
+
+        payload = build_ta_chart_payload(
+            bundle=bundle,
+            timeframe=timeframe,
+            valuation_context=val_ctx,
+        )
+        return _numpy_to_python(payload)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("GET /api/technical/chart failed for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class PositionSizeRequest(BaseModel):
+    capital: float = Field(..., gt=0)
+    risk_pct: float = Field(1.0, gt=0, le=20.0)
+    entry_price: float = Field(..., gt=0)
+    stop_price: float = Field(..., gt=0)
+    market: str = Field("US")
+    max_weight_pct: float = Field(10.0, gt=0, le=100.0)
+    round_trip_cost_bps: Optional[float] = Field(None, ge=0, le=500.0)
+    lot_size: int = Field(1, ge=1)
+
+
+@app.post("/api/technical/position-size")
+def calculate_position_size(req: PositionSizeRequest):
+    """Compute fixed-risk position sizing with wrong-side stop guardrail."""
+    _check_ta_enabled()
+    from engine.ta_indicators import compute_position_sizing
+
+    res = compute_position_sizing(
+        capital=req.capital,
+        risk_pct=req.risk_pct,
+        entry_price=req.entry_price,
+        stop_price=req.stop_price,
+        market=req.market,
+        max_weight_pct=req.max_weight_pct,
+        round_trip_cost_bps=req.round_trip_cost_bps,
+        lot_size=req.lot_size,
+    )
+    return _numpy_to_python(res)
+
+
+@app.get("/api/technical/score")
+def get_technical_score(
+    symbol: str = Query(..., min_length=1, description="Ticker symbol (e.g. RELIANCE.NS or AAPL)"),
+    market: str = Query("auto", description="'IN', 'US', or 'auto'"),
+    period: str = Query("10y", description="Historical lookback: '10y' or '5y'"),
+    fair_value: Optional[float] = Query(None, description="Optional active DCF/DDM fair value override"),
+    verdict: Optional[str] = Query(None, description="Optional active Valuation Outlook verdict"),
+):
+    """
+    Phase 2 TA v0.2 Two-Stage Composite Score, 16-Indicator D/W/M Matrix,
+    Statistical Regime Diagnostics (Hurst DFA-1, Lo-MacKinlay VR + Chow-Denning,
+    Yang-Zhang Volatility), Relative Strength Suite, and 3x4 Classification Matrix.
+    """
+    _check_ta_enabled()
+    from engine.market_history import build_technical_response_envelope, fetch_market_history
+    from engine.ta_composite import TA_SCORE_VERSION, build_ta_phase2_payload
+
+    try:
+        bundle = fetch_market_history(
+            symbol=symbol.strip(),
+            market=market,
+            period=period,
+            force_refresh=False,
+        )
+        val_ctx = _lookup_cached_valuation_context(bundle.symbol, bundle.market)
+        eff_fv = float(fair_value) if isinstance(fair_value, (int, float)) else val_ctx.get("fair_value")
+        eff_verdict = (
+            verdict if isinstance(verdict, str) and verdict else (val_ctx.get("verdict") or "NEUTRAL")
+        )
+
+        phase2 = build_ta_phase2_payload(
+            bundle=bundle,
+            fair_value=float(eff_fv) if eff_fv is not None else None,
+            verdict=eff_verdict,
+        )
+        envelope = build_technical_response_envelope(
+            bundle=bundle,
+            payload=phase2,
+            score_model=TA_SCORE_VERSION,
+            signal_defs="confirmed-bar-close-next-open",
+            params={"period": bundle.period_requested, "verdict": eff_verdict},
+        )
+        return _numpy_to_python(envelope)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("GET /api/technical/score failed for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
 import { Toaster, toast } from 'react-hot-toast';
 import { Analytics } from '@vercel/analytics/react';
@@ -22,6 +22,7 @@ import {
   FiInfo
 } from 'react-icons/fi';
 import { FaLinkedin } from 'react-icons/fa';
+import { ANALYSIS_CACHE_KEY } from './version';
 
 import TickerInput from './components/TickerInput';
 import AssumptionSliders from './components/AssumptionSliders';
@@ -35,71 +36,38 @@ import ExcelDownloadButton from './components/ExcelDownloadButton';
 import ErrorBoundary from './components/ErrorBoundary';
 import ContactAndFeedback from './components/ContactAndFeedback';
 import stocksData from './data/stocks.json';
+import PREVIEW_DATA from './data/previewData.json';
+
+const TechnicalWorkspace = React.lazy(() => import('./components/TechnicalWorkspace'));
+
+function isTaFeatureEnabled() {
+  if (import.meta.env.VITE_ENABLE_TA === 'true') return true;
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const taParam = params.get('ta');
+    if (taParam === '1' || taParam === 'true') {
+      try {
+        sessionStorage.setItem('vl_ta_enabled', '1');
+      } catch (_) {}
+      return true;
+    }
+    if (taParam === '0' || taParam === 'false') {
+      try {
+        sessionStorage.removeItem('vl_ta_enabled');
+      } catch (_) {}
+      return false;
+    }
+    try {
+      if (sessionStorage.getItem('vl_ta_enabled') === '1') return true;
+    } catch (_) {}
+  }
+  return false;
+}
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 if (API_BASE_URL) {
   axios.defaults.baseURL = API_BASE_URL;
 }
-
-const PREVIEW_DATA = {
-  CESC: {
-    ticker: 'CESC.NS',
-    market: 'IN',
-    name: 'CESC Limited',
-    tabLabel: '🇮🇳 CESC (NSE)',
-    currency: '₹',
-    fairValue: '₹98.02',
-    fairValueNum: 98.02,
-    currentPrice: '₹126.25',
-    currentPriceNum: 126.25,
-    upsidePct: -22.4,
-    upsideBadge: 'Regulated Utility Model',
-    upsideNote: 'Regulated utility cash flows analyzed via cost-plus rate base model',
-    wacc: '9.8%',
-    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 1.01',
-    mcRange: '₹62 – ₹168',
-    p5Num: 62,
-    p95Num: 168,
-  },
-  HINDUNILVR: {
-    ticker: 'HINDUNILVR.NS',
-    market: 'IN',
-    name: 'Hindustan Unilever Ltd.',
-    tabLabel: '🇮🇳 HUL (NSE)',
-    currency: '₹',
-    fairValue: '₹750.08',
-    fairValueNum: 750.08,
-    currentPrice: '₹1,947.00',
-    currentPriceNum: 1947.00,
-    upsidePct: -61.5,
-    upsideBadge: '▼ 61.5% Above DCF',
-    upsideNote: 'Trades at 45x P/E quality & scarcity premium over baseline DCF',
-    wacc: '11.3%',
-    waccNote: 'RBI 10Y G-Sec: 7.1% | Beta: 0.71',
-    mcRange: '₹487 – ₹1,556',
-    p5Num: 487,
-    p95Num: 1556,
-  },
-  AAPL: {
-    ticker: 'AAPL',
-    market: 'US',
-    name: 'Apple Inc.',
-    tabLabel: '🇺🇸 Apple (NASDAQ)',
-    currency: '$',
-    fairValue: '$85.28',
-    fairValueNum: 85.28,
-    currentPrice: '$338.98',
-    currentPriceNum: 338.98,
-    upsidePct: -74.8,
-    upsideBadge: '▼ 74.8% Above DCF',
-    upsideNote: 'Trades at 38x EV/FCF multiple; market prices in multi-decade AI ecosystem growth',
-    wacc: '10.1%',
-    waccNote: 'FRED US 10Y: 4.1% | Beta: 1.02',
-    mcRange: '$49 – $178',
-    p5Num: 49,
-    p95Num: 178,
-  }
-};
 
 // Helper function to format company names cleanly and prevent cutoff or raw ticker display
 function formatCompanyName(name, tickerSymbol = '') {
@@ -169,22 +137,22 @@ const TypewriterHeadline = ({ fullText = "Intrinsic value, grounded\nin real cas
 export default function App() {
   const [analysisData, setAnalysisData] = useState(() => {
     sessionStorage.removeItem('vl_analysisData'); // Clear stale legacy cache
-    if (
-      sessionStorage.getItem('vl_analysisData_v2') ||
-      sessionStorage.getItem('vl_analysisData_v3') ||
-      sessionStorage.getItem('vl_analysisData_v4')
-    ) {
-      sessionStorage.removeItem('vl_analysisData_v2');
-      sessionStorage.removeItem('vl_analysisData_v3');
-      sessionStorage.removeItem('vl_analysisData_v4');
+    const legacyKeys = [
+      'vl_analysisData_v2',
+      'vl_analysisData_v3',
+      'vl_analysisData_v4',
+      'vl_analysisData_v5',
+    ].filter((k) => k !== ANALYSIS_CACHE_KEY);
+    if (legacyKeys.some((k) => sessionStorage.getItem(k))) {
+      legacyKeys.forEach((k) => sessionStorage.removeItem(k));
       sessionStorage.removeItem('vl_overrides');
     }
-    const saved = sessionStorage.getItem('vl_analysisData_v5');
+    const saved = sessionStorage.getItem(ANALYSIS_CACHE_KEY);
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
-        sessionStorage.removeItem('vl_analysisData_v5');
+        sessionStorage.removeItem(ANALYSIS_CACHE_KEY);
         return null;
       }
       return parsed;
@@ -201,6 +169,11 @@ export default function App() {
   const valuationCacheRef = useRef(new Map());
   
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('vl_activeTab') || 'overview');
+  const [taEnabled] = useState(() => isTaFeatureEnabled());
+  const [workspaceMode, setWorkspaceMode] = useState(() => {
+    const saved = sessionStorage.getItem('vl_workspace_mode');
+    return saved === 'technical' ? 'technical' : 'fundamental';
+  });
   const [aiSummary, setAiSummary] = useState(() => sessionStorage.getItem('vl_aiSummary') || '');
   const [aiLoading, setAiLoading] = useState(false);
   
@@ -241,11 +214,12 @@ export default function App() {
   const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData_v5', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData_v5');
+    if (analysisData) sessionStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(analysisData));
+    else sessionStorage.removeItem(ANALYSIS_CACHE_KEY);
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
+  useEffect(() => sessionStorage.setItem('vl_workspace_mode', workspaceMode), [workspaceMode]);
   useEffect(() => sessionStorage.setItem('vl_aiSummary', aiSummary), [aiSummary]);
   
   useEffect(() => {
@@ -583,9 +557,9 @@ export default function App() {
   const wsSymbol = analysisData?.company?.symbol || (analysisData?.company?.currency === 'INR' ? '₹' : '$');
   const wsCurrentPrice = Number(analysisData?.market_data?.current_price || 1);
   const wsFairValue = Number(analysisData?.dcf_result?.implied_price || 0);
-  const wsMcMedian = Number(analysisData?.monte_carlo?.stats?.median || wsFairValue);
-  const wsP5 = Number(analysisData?.monte_carlo?.stats?.p5 || wsFairValue * 0.65);
-  const wsP95 = Number(analysisData?.monte_carlo?.stats?.p95 || wsFairValue * 1.45);
+  const wsMcMedian = Number(analysisData?.monte_carlo?.stats?.median ?? wsFairValue);
+  const wsP5 = Number(analysisData?.monte_carlo?.stats?.p5 ?? wsFairValue * 0.65);
+  const wsP95 = Number(analysisData?.monte_carlo?.stats?.p95 ?? wsFairValue * 1.45);
   const wsUpsidePct = ((wsFairValue / wsCurrentPrice) - 1) * 100;
   const wsIsUndervalued = wsUpsidePct >= 0;
 
@@ -942,48 +916,44 @@ export default function App() {
           <div className="fixed inset-0 bg-[#0c1017]/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
             <div className="relative mb-6">
               <div className="w-16 h-16 rounded-full border-4 border-[#e3b23c]/20 border-t-[#e3b23c] animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center font-display text-xs text-[#e3b23c] font-bold">
+              <div className="absolute inset-0 flex items-center justify-center font-display text-xs text-[#e3b23c] font-bold tabular-nums">
                 {loadingTimer}s
               </div>
             </div>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#f4eedf] tracking-tight mb-2">
-              Running valuation model for {ticker || 'Company'}...
+              Running valuation for {ticker || 'Company'}...
             </h2>
-            <p className="text-[#a6b0c3] max-w-md text-xs sm:text-sm leading-relaxed mb-5 min-h-[36px] flex items-center justify-center">
-              {loadingTimer < 2
-                ? 'Extracting audited SEC / NSE financial statements & market data...'
-                : loadingTimer < 5
-                ? 'Computing CAPM WACC, 5-year FCFF & 10,000 Cholesky Monte Carlo runs...'
-                : !serverAwake && loadingTimer >= 8
-                ? 'Waking up cloud valuation engine (~15-25s on cold start)...'
-                : 'Finalizing sensitivity matrices & valuation diagnostics...'}
+            <p className="text-[#a6b0c3] max-w-md text-xs sm:text-sm leading-relaxed mb-4 min-h-[36px] flex items-center justify-center">
+              {!serverAwake && loadingTimer >= 4
+                ? 'Waking up cloud valuation engine (cold starts may take ~15–25s)...'
+                : 'Executing end-to-end fundamental extraction, CAPM WACC synthesis & 10,000 Cholesky Monte Carlo simulations...'}
             </p>
 
-            {/* 4-Stage Transparent Loading Steps */}
-            <div className="w-full max-w-md bg-[#101722] rounded-xl p-3 border border-white/[0.08] mb-5 text-left space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className={loadingTimer >= 1 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
-                  {loadingTimer >= 2 ? '✓' : '●'} 1. Market Data &amp; 10Y Sovereign Yields
+            {/* Honest Pipeline Scope (No Fake Timer Percentage or Simulated Step Checkmarks) */}
+            <div className="w-full max-w-md bg-[#101722] rounded-xl p-3.5 border border-white/[0.08] mb-5 text-left space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-1.5 mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#e3b23c]">
+                  Active Valuation Pipeline
                 </span>
-                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 2 ? 'Complete' : 'Fetching...'}</span>
+                <span className="text-[11px] text-[#a6b0c3] font-mono tabular-nums">
+                  {loadingTimer}s elapsed
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={loadingTimer >= 2 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
-                  {loadingTimer >= 4 ? '✓' : loadingTimer >= 2 ? '●' : '○'} 2. Financial Normalization &amp; GAAP SBC Audit
-                </span>
-                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 4 ? 'Complete' : loadingTimer >= 2 ? 'Normalizing...' : 'Pending'}</span>
+              <div className="flex items-center gap-2 text-[#c5cedd]">
+                <span className="text-[#e3b23c]">●</span>
+                <span>1. Audited SEC / NSE-BSE Filings &amp; 10Y Sovereign Yields</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={loadingTimer >= 4 ? 'text-[#34b38a] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
-                  {loadingTimer >= 6 ? '✓' : loadingTimer >= 4 ? '●' : '○'} 3. Multi-Stage DCF &amp; WACC Synthesis
-                </span>
-                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 6 ? 'Complete' : loadingTimer >= 4 ? 'Calculating...' : 'Pending'}</span>
+              <div className="flex items-center gap-2 text-[#c5cedd]">
+                <span className="text-[#e3b23c]">●</span>
+                <span>2. Financial Normalization &amp; GAAP SBC Audit</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={loadingTimer >= 6 ? 'text-[#e3b23c] font-semibold flex items-center gap-2' : 'text-[#818ea4] flex items-center gap-2'}>
-                  {loadingTimer >= 8 ? '●' : '○'} 4. 10,000 Cholesky Monte Carlo Runs
-                </span>
-                <span className="text-[10px] text-[#818ea4] font-mono">{loadingTimer >= 6 ? 'Simulating...' : 'Pending'}</span>
+              <div className="flex items-center gap-2 text-[#c5cedd]">
+                <span className="text-[#e3b23c]">●</span>
+                <span>3. Multi-Stage DCF &amp; WACC / Ke Synthesis</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#c5cedd]">
+                <span className="text-[#e3b23c]">●</span>
+                <span>4. 10,000 Cholesky-Correlated Monte Carlo Runs</span>
               </div>
             </div>
             <button
@@ -2417,14 +2387,14 @@ export default function App() {
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#f4eedf]/10 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-full bg-[#e3b23c]/15 text-[#e3b23c] font-bold text-[10.5px] uppercase tracking-wider border border-[#e3b23c]/30">
-                        Dated Benchmark Snapshot
+                        Verified Engine Snapshot
                       </span>
-                      <span className="text-[#a6b0c3] text-[11px]">
-                        Model Run: October 2026 Archive
+                      <span className="text-[#a6b0c3] text-[11px] font-mono">
+                        Model {currentPreview.modelVersion || 'v2.5.0'} · As of {currentPreview.snapshotDate || '2026-11-08'}
                       </span>
                     </div>
                     <span className="text-[11px] text-[#818ea4]">
-                      *Illustrative static benchmark. Click &quot;Analyze Live&quot; below to compute real-time quotes, sovereign yields &amp; filings.
+                      *Generated directly from golden fixtures. Click &quot;Analyze Live&quot; below for real-time quotes &amp; sovereign yields.
                     </span>
                   </div>
 
@@ -2599,13 +2569,70 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-[#a6b0c3] font-normal shrink-0">
-                  <span className="px-3 py-1 rounded-lg bg-[#141b26] border border-white/[0.08] text-[11px] font-medium text-[#f4eedf]">
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-[#a6b0c3] font-normal shrink-0">
+                  {taEnabled && (
+                    <div
+                      className="inline-flex items-center p-1 rounded-xl bg-[#0d121a] border border-white/[0.10] gap-1 shadow-sm"
+                      role="tablist"
+                      aria-label="Workspace mode switcher"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setWorkspaceMode('fundamental')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 ${
+                          workspaceMode === 'fundamental'
+                            ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
+                            : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        <FiBarChart2 className="w-3.5 h-3.5" />
+                        <span>Fundamental</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWorkspaceMode('technical')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-display font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 ${
+                          workspaceMode === 'technical'
+                            ? 'bg-[#e3b23c] text-[#0a0e17] shadow-sm'
+                            : 'text-[#94a3b8] hover:text-[#f4eedf] hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        <FiActivity className="w-3.5 h-3.5" />
+                        <span>Technical</span>
+                      </button>
+                    </div>
+                  )}
+                  <span className="px-3 py-1.5 rounded-lg bg-[#141b26] border border-white/[0.08] text-[11px] font-medium text-[#f4eedf]">
                     Framework: <strong className="text-[#e3b23c]">{wsIsFinancial ? 'Tier-1 Banking DDM/FCFE' : wsIsEquityModel ? 'Corporate DDM / FCFE' : 'Enterprise DCF (FCFF)'}</strong>
                   </span>
                 </div>
               </div>
 
+              {taEnabled && workspaceMode === 'technical' ? (
+                <ErrorBoundary>
+                  <Suspense
+                    fallback={
+                      <div className="bg-[#141b26] rounded-2xl border border-[#f4eedf]/10 p-12 flex flex-col items-center justify-center gap-3 text-center">
+                        <div className="w-8 h-8 rounded-full border-2 border-[#e3b23c]/30 border-t-[#e3b23c] animate-spin" />
+                        <div className="text-sm font-display font-bold text-[#f4eedf]">
+                          Loading Technical Charting Engine…
+                        </div>
+                        <p className="text-xs text-[#a6b0c3]">
+                          Initializing Lightweight Charts &amp; 10-year historical OHLCV indicators
+                        </p>
+                      </div>
+                    }
+                  >
+                    <TechnicalWorkspace
+                      ticker={analysisData.company?.ticker || ticker}
+                      market={analysisData.company?.market || market}
+                      analysisData={analysisData}
+                      onSwitchToFundamental={() => setWorkspaceMode('fundamental')}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
+              ) : (
+                <>
               {/* VALUATION METHOD SWITCHER & COMPARATIVE STATS BAR */}
               {analysisData.method_comparison && (
                 <div className="bg-[#121824] rounded-xl px-3.5 py-2.5 border border-white/[0.08] flex flex-wrap items-center justify-between gap-3 shadow-md">
@@ -2855,16 +2882,20 @@ export default function App() {
                   <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1 truncate">
                     {wsSymbol}{wsMcMedian.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] tabular-nums truncate">
-                    90% CI: <strong className="text-[#f4eedf]">{wsSymbol}{wsP5.toLocaleString('en-US', { maximumFractionDigits: 0 })} – {wsSymbol}{wsP95.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
+                  <div className="text-xs text-[#a6b0c3] tabular-nums truncate" title="5th to 95th percentile outcome corridor across simulated cash flow paths">
+                    90% Sim. Range (P5–P95): <strong className="text-[#f4eedf]">{wsSymbol}{wsP5.toLocaleString('en-US', { maximumFractionDigits: 0 })} – {wsSymbol}{wsP95.toLocaleString('en-US', { maximumFractionDigits: 0 })}</strong>
                   </div>
                 </div>
 
                 {/* Card 4: Verdict & Multiple Signal */}
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
-                      Valuation Outlook
+                    <span
+                      className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate inline-flex items-center gap-1 cursor-help"
+                      title="Quantile Decision Rule: Price < P5 → Strongly Bullish; P5–P25 → Bullish; P25–P75 → Neutral; P75–P95 → Bearish; Price > P95 → Strongly Bearish"
+                    >
+                      <span>Valuation Outlook</span>
+                      <FiInfo className="w-3.5 h-3.5 text-[#8ab4f8] shrink-0" />
                     </span>
                     <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
                       {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : wsIsEquityModel ? 'P/B' : 'EV/EBITDA'}:{' '}
@@ -2884,13 +2915,15 @@ export default function App() {
                   }`}>
                     {analysisData.verdict?.verdict || 'N/A'}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] leading-snug line-clamp-2" title={analysisData.verdict?.description}>
+                  <div
+                    className="text-xs text-[#a6b0c3] leading-snug line-clamp-2"
+                    title={`${analysisData.verdict?.description || ''} | Rule: Price < P5 Strongly Bullish · P5–P25 Bullish · P25–P75 Neutral · P75–P95 Bearish · > P95 Strongly Bearish`}
+                  >
                     {analysisData.verdict?.description || 'Probability-weighted valuation signal'}
                   </div>
                 </div>
 
               </div>
-            </div>
 
             {/* 2. MAIN FULL-WIDTH 12-COLUMN GRID: LEFT CONTROLS + RIGHT ANALYSIS TABS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -2978,6 +3011,9 @@ export default function App() {
                 </div>
               </div>
 
+            </div>
+                </>
+              )}
             </div>
 
             {/* Workspace Footer */}

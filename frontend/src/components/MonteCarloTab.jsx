@@ -54,9 +54,11 @@ const MonteCarloTab = ({ data }) => {
     }).format(val);
   };
 
-  const p5 = stats?.p5 || 0;
-  const p95 = stats?.p95 || 0;
-  const median = stats?.median || 0;
+  const p5 = stats?.p5 ?? 0;
+  const p95 = stats?.p95 ?? 0;
+  const median = stats?.median ?? 0;
+  const zeroPriceSims = monte_carlo.zero_price_simulations ?? 0;
+  const rejectedSims = Math.max(0, totalSimulations - validSimulations);
 
   // Downsample scatter data for instant 0ms rendering
   const sampledScatter = useMemo(() => {
@@ -291,6 +293,37 @@ const MonteCarloTab = ({ data }) => {
             </div>
           </div>
         )}
+
+        {/* Simulation Guardrails, Rejection Criteria & Correlation Disclosure */}
+        <div className="mt-4 pt-3.5 border-t border-[#f4eedf]/10 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-[#a6b0c3]">
+          <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/8">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#e3b23c] mb-1">
+              Sampling &amp; Rejection Guardrails
+            </div>
+            <p className="leading-relaxed">
+              Retained <strong className="text-[#f4eedf] tabular-nums">{validSimulations.toLocaleString()}</strong> valid paths from <strong className="text-[#f4eedf] tabular-nums">{totalSimulations.toLocaleString()}</strong> candidate draws ({rejectedSims.toLocaleString()} rejected). Draws violating <span className="font-mono text-[#f4eedf]">{isEquityModel ? 'Ke' : 'WACC'} ≤ g + 0.50%</span>, <span className="font-mono text-[#f4eedf]">Kd ≤ 0%</span>, or <span className="font-mono text-[#f4eedf]">Rf / ERP ≤ 0%</span> are discarded.
+            </p>
+          </div>
+          <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/8">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#8ab4f8] mb-1">
+              Cholesky Correlation Provenance
+            </div>
+            <p className="leading-relaxed">
+              {isEquityModel ? 'Growth–ROE' : 'Growth–Margin'} correlation (<span className="font-mono text-[#f4eedf]">ρ = {Number(histCorrGm).toFixed(2)}</span>) estimated across{' '}
+              <strong className="text-[#f4eedf]">{corrSampleSize || 4} annual filings</strong>
+              {isCorrRegularized ? ' with Bayesian shrinkage toward 0 for small sample stability (N < 5).' : '.'}{' '}
+              Deterministic seed (<span className="font-mono text-[#f4eedf]">seed=42</span>) ensures reproducible quantiles.
+            </p>
+          </div>
+          <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/8">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#34b38a] mb-1">
+              Limited-Liability Equity Floor
+            </div>
+            <p className="leading-relaxed">
+              Paths where Net Debt exceeds simulated Enterprise Value (<span className="font-mono text-[#f4eedf]">Equity ≤ 0</span>) are floored at <strong className="text-[#f4eedf]">0.00/share</strong> rather than discarded (<strong className="text-[#f4eedf] tabular-nums">{zeroPriceSims.toLocaleString()}</strong> wipeout draws).
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Scatter Plots (Downsampled & Defer-Mounted for Instant Zero-Lag Tab Switching) */}

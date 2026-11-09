@@ -331,8 +331,13 @@ export default function AssumptionSliders({
         {/* 1. Revenue Growth */}
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isEquityModel ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0 inline-flex items-center gap-1.5">
+              <span>{isEquityModel ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}</span>
+              {Math.abs(growth - defaultGrowth * 100) > 0.05 && (
+                <span className="px-1.5 py-0.5 rounded bg-[#e3b23c]/20 text-[#e3b23c] border border-[#e3b23c]/40 text-[10px] font-bold uppercase tracking-wider">
+                  Edited
+                </span>
+              )}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -358,17 +363,27 @@ export default function AssumptionSliders({
             <span>Hist Avg: {(defaultGrowth * 100).toFixed(1)}%</span>
             <span>Default: {(defaultGrowth * 100).toFixed(1)}%</span>
           </div>
+          <div className="text-[10px] text-[#818ea4] mt-0.5 truncate">
+            Source: {isEquityModel ? '4-Yr Net Income CAGR / Sustainable ROE×b' : '4-Yr Hist. Avg / Guidance Convergence'}
+          </div>
         </div>
 
         {/* 2. Operating EBIT Margin / ROE */}
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isEquityModel
-                ? 'Target ROE'
-                : isNegativeMargin
-                ? 'Target EBIT Margin (Yr 5)'
-                : 'EBIT Margin'}
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0 inline-flex items-center gap-1.5">
+              <span>
+                {isEquityModel
+                  ? 'Target ROE'
+                  : isNegativeMargin
+                  ? 'Target EBIT Margin (Yr 5)'
+                  : 'EBIT Margin'}
+              </span>
+              {Math.abs(margin - defaultMargin * 100) > 0.05 && (
+                <span className="px-1.5 py-0.5 rounded bg-[#e3b23c]/20 text-[#e3b23c] border border-[#e3b23c]/40 text-[10px] font-bold uppercase tracking-wider">
+                  Edited
+                </span>
+              )}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -394,13 +409,21 @@ export default function AssumptionSliders({
             <span>Current: {(currentMargin * 100).toFixed(1)}%</span>
             <span>Default: {(defaultMargin * 100).toFixed(1)}%</span>
           </div>
+          <div className="text-[10px] text-[#818ea4] mt-0.5 truncate">
+            Source: {isEquityModel ? 'Normalized 4-Yr Return on Equity (ROE)' : 'Normalized 4-Yr Operating / Unit-Economic Margin'}
+          </div>
         </div>
 
         {/* 3. Discount Rate (WACC / Ke) */}
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0 inline-flex items-center gap-1.5">
+              <span>{isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)'}</span>
+              {Math.abs(wacc - defaultWacc * 100) > 0.05 && (
+                <span className="px-1.5 py-0.5 rounded bg-[#e3b23c]/20 text-[#e3b23c] border border-[#e3b23c]/40 text-[10px] font-bold uppercase tracking-wider">
+                  Edited
+                </span>
+              )}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -429,6 +452,9 @@ export default function AssumptionSliders({
                 <span>Beta: {data.market_data.beta.toFixed(2)}</span>
               )}
             </div>
+            <div className="text-[10px] text-[#818ea4] truncate">
+              Source: CAPM (10Y Sovereign + Beta×ERP) &amp; Synthetic Credit Spread
+            </div>
             {data.diagnostics?.wacc_floored && (
               <span className="text-[#e3b23c] text-xs font-medium block">
                 ⚠️ {data.diagnostics.wacc_note}
@@ -445,8 +471,13 @@ export default function AssumptionSliders({
         {/* 4. Terminal Growth */}
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
-            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              Terminal Growth (g)
+            <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0 inline-flex items-center gap-1.5">
+              <span>Terminal Growth (g)</span>
+              {Math.abs(tgr - defaultTgr) > 0.05 && (
+                <span className="px-1.5 py-0.5 rounded bg-[#e3b23c]/20 text-[#e3b23c] border border-[#e3b23c]/40 text-[10px] font-bold uppercase tracking-wider">
+                  Edited
+                </span>
+              )}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -471,6 +502,9 @@ export default function AssumptionSliders({
           <div className="flex flex-wrap justify-between gap-1 text-[11px] text-[#a6b0c3] mt-1.5 tabular-nums">
             <span>Max Cap: {maxTgr.toFixed(1)}%</span>
             <span>Default: {defaultTgr.toFixed(1)}%</span>
+          </div>
+          <div className="text-[10px] text-[#818ea4] mt-0.5 truncate">
+            Source: Long-Run Sovereign Nominal GDP Growth Cap
           </div>
         </div>
 

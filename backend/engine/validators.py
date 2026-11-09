@@ -122,7 +122,25 @@ def validate_bank_valuation(
     warning_msg: Optional[str] = None
     avg_roe = float(metrics.get("avg_roe", 0.14) or 0.14)
     ke = float(dcf_result.get("cost_of_equity", 0.12) or 0.12)
-    if avg_roe < ke:
+    is_archetype_mismatch = False
+
+    if market_pb and market_pb > 6.0 and multiple_gap_pct > 0.65:
+        capex_pct = float(metrics.get("avg_capex_pct", 0.0) or 0.0)
+        debt_to_rev = (
+            float(metrics.get("total_debt", 0.0)) / float(metrics.get("last_revenue", 1.0))
+            if float(metrics.get("last_revenue", 1.0)) > 0
+            else 0.0
+        )
+        if capex_pct < 0.05 and debt_to_rev < 0.35:
+            is_archetype_mismatch = True
+            warning_msg = (
+                f"Model Archetype Mismatch: Market P/B ({market_pb:.1f}x) and asset-light profile "
+                f"(CapEx {capex_pct*100:.1f}%, Debt/Rev {debt_to_rev:.2f}x) indicate a fee-based fintech/broker platform "
+                f"rather than a regulatory-capital constrained bank. The Bank DDM model retains up to 85% of earnings to fund "
+                f"loans, which depresses fair value (implied {implied_price:.2f} vs CMP {current_price:.2f}). Switch to Standard FCFF."
+            )
+
+    if not warning_msg and avg_roe < ke:
         warning_msg = (
             f"4-Yr Avg ROE ({avg_roe*100:.1f}%) is below Cost of Equity ({ke*100:.1f}%), "
             f"which compresses Justified Gordon P/B ({justified_pb:.2f}x) below 1.0x Book Value."
@@ -131,6 +149,7 @@ def validate_bank_valuation(
     return {
         "status": status,
         "warning": warning_msg,
+        "is_archetype_mismatch": is_archetype_mismatch,
         "metric_used": "price_to_book",
         "market_multiple": float(market_pb) if market_pb is not None else None,
         "model_multiple": float(model_pb) if model_pb is not None else None,

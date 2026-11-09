@@ -408,16 +408,24 @@ def is_non_dcf_instrument(
 # Fee-based market infrastructure & asset-light financial platforms should be
 # valued via Standard Operating Cash Flow (FCFF) DCF, NOT Commercial Bank
 # Tier-1 Regulatory Capital / Price-to-Book (P/B) DDM.
+from .classification_overrides import (
+    KNOWN_BALANCE_SHEET_FINANCIAL_SYMBOLS,
+    KNOWN_CAPITAL_LIGHT_FINANCIAL_SYMBOLS,
+)
+
 CAPITAL_LIGHT_FINANCIAL_INFRA = {
-    # Indian Exchanges, Depositories, RTAs, Rating Agencies, AMCs & Tech Brokers
+    # Indian Exchanges, Depositories, RTAs, Rating Agencies, AMCs & Tech/Discount Brokers
     "MCX", "BSE", "IEX", "CDSL", "CAMS", "CAMSLTD", "KFINTECH",
     "CRISIL", "ICRA", "CAREERP", "HDFCAMC", "NAM-INDIA", "UTIAMC", "ABSLAMC",
     "ANGELONE", "ISEC", "MOTILALOFS", "ANANDRATHI", "PRUDENT", "NUVAMA", "360ONE",
-    "POLICYBZR", "PAYTM",
+    "POLICYBZR", "PAYTM", "GROWW", "5PAISA", "GEOJITFSL", "SMCGLOBAL", "SHAREINDIA",
+    "MONARCH", "DBSTOCKBRO", "ARIHANTCAP", "ASHIKAG", "ALMONDZ", "INDOTHAI",
+    "ALGOQUANT", "ALANKIT", "DAMCAPITAL",
     # US Exchanges, Rating Agencies, Financial Data & Asset-Light Platforms
     "NDAQ", "ICE", "CME", "CBOE", "SPGI", "MCO", "MSCI", "FDS", "V", "MA",
     "PYPL", "XYZ", "SQ", "COIN", "HOOD", "BLK", "TROW", "BEN", "IVZ",
-}
+    "IBKR", "LPLA", "RJF", "VIRT", "FUTU", "TIGR", "XP",
+} | set(KNOWN_CAPITAL_LIGHT_FINANCIAL_SYMBOLS)
 
 
 def is_capital_light_financial(
@@ -426,7 +434,7 @@ def is_capital_light_financial(
     sector: Optional[str] = None,
     industry: Optional[str] = None,
 ) -> bool:
-    """Return True if the company is a fee-based exchange, depository, RTA, rating agency, AMC, or fintech platform."""
+    """Return True if the company is a fee-based exchange, depository, RTA, rating agency, AMC, discount broker, or fintech platform."""
     sym_clean = re.sub(r"\.(NS|BO)$", "", (symbol or "").strip().upper())
     if sym_clean in CAPITAL_LIGHT_FINANCIAL_INFRA:
         return True
@@ -438,6 +446,23 @@ def is_capital_light_financial(
         return True
     if any(k in name_l for k in ["commodity exchange", "stock exchange", "energy exchange", "depository services", "asset management", "computer age management"]):
         return True
+
+    # Electronic discount brokers, wealth platforms, and securities intermediaries in Capital Markets
+    if ("capital markets" in ind_l or "financial" in ind_l) and sym_clean not in KNOWN_BALANCE_SHEET_FINANCIAL_SYMBOLS:
+        broker_keywords = [
+            "broker", "securities", "wealth", "fintech", "discount broker",
+            "online trading", "clearing", "depository", "garage ventures",
+            "billionbrains", "interactive brokers", "algoquant", "share and stock",
+            "networth"
+        ]
+        if any(k in name_l for k in broker_keywords):
+            return True
+
+    # General name detection for stock broking and wealth platforms
+    if any(k in name_l for k in ["stock broker", "stock brokers", "stockbroking", "discount broker", "wealth management", "garage ventures", "billionbrains"]):
+        if sym_clean not in KNOWN_BALANCE_SHEET_FINANCIAL_SYMBOLS:
+            return True
+
     return False
 
 

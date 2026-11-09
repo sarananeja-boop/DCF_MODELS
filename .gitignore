@@ -22,6 +22,9 @@ Thumbs.db
 backend/server.log
 backend/test_*.py
 backend/patch_*.py
+backend/scripts/legacy/
+backend/tests/live_reports/
+.pytest_cache/
 backend/data/*.jsonl
 exports/
 *.xlsx

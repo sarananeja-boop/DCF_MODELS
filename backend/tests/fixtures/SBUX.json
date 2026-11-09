@@ -1,0 +1,4794 @@
+{
+  "ticker": "SBUX",
+  "market": "US",
+  "archetype": "qsr_lease_heavy_negative_bve",
+  "yf_ticker": "SBUX",
+  "recorded_at": "2026-11-07T20:22:05.533159+00:00",
+  "financials": {
+    "index": [
+      "Tax Effect Of Unusual Items",
+      "Tax Rate For Calcs",
+      "Normalized EBITDA",
+      "Total Unusual Items",
+      "Total Unusual Items Excluding Goodwill",
+      "Net Income From Continuing Operation Net Minority Interest",
+      "Reconciled Depreciation",
+      "Reconciled Cost Of Revenue",
+      "EBITDA",
+      "EBIT",
+      "Net Interest Income",
+      "Interest Expense",
+      "Interest Income",
+      "Normalized Income",
+      "Net Income From Continuing And Discontinued Operation",
+      "Total Expenses",
+      "Rent Expense Supplemental",
+      "Total Operating Income As Reported",
+      "Diluted Average Shares",
+      "Basic Average Shares",
+      "Diluted EPS",
+      "Basic EPS",
+      "Diluted NI Availto Com Stockholders",
+      "Net Income Common Stockholders",
+      "Net Income",
+      "Minority Interests",
+      "Net Income Including Noncontrolling Interests",
+      "Net Income Continuous Operations",
+      "Tax Provision",
+      "Pretax Income",
+      "Other Income Expense",
+      "Special Income Charges",
+      "Gain On Sale Of Ppe",
+      "Gain On Sale Of Business",
+      "Restructuring And Mergern Acquisition",
+      "Earnings From Equity Interest",
+      "Net Non Operating Interest Income Expense",
+      "Interest Expense Non Operating",
+      "Interest Income Non Operating",
+      "Operating Income",
+      "Operating Expense",
+      "Other Operating Expenses",
+      "Depreciation Amortization Depletion Income Statement",
+      "Depreciation And Amortization In Income Statement",
+      "Selling General And Administration",
+      "General And Administrative Expense",
+      "Other Gand A",
+      "Gross Profit",
+      "Cost Of Revenue",
+      "Total Revenue",
+      "Operating Revenue"
+    ],
+    "columns": [
+      "2026-09-30T00:00:00",
+      "2025-09-30T00:00:00",
+      "2024-09-30T00:00:00",
+      "2023-09-30T00:00:00",
+      "2022-09-30T00:00:00"
+    ],
+    "data": [
+      [
+        null,
+        -231028000.0,
+        0.0,
+        16402000.0,
+        -10304000.0
+      ],
+      [
+        null,
+        0.259,
+        0.243,
+        0.236,
+        0.224
+      ],
+      [
+        null,
+        5713400000.0,
+        7124000000.0,
+        7332800000.0,
+        6290200000.0
+      ],
+      [
+        null,
+        -892000000.0,
+        0.0,
+        69500000.0,
+        -46000000.0
+      ],
+      [
+        null,
+        -892000000.0,
+        0.0,
+        69500000.0,
+        -46000000.0
+      ],
+      [
+        null,
+        1856400000.0,
+        3760900000.0,
+        4124500000.0,
+        3281600000.0
+      ],
+      [
+        null,
+        1771500000.0,
+        1592400000.0,
+        1450300000.0,
+        1529400000.0
+      ],
+      [
+        null,
+        28630300000.0,
+        26387300000.0,
+        26041700000.0,
+        23797700000.0
+      ],
+      [
+        null,
+        4821400000.0,
+        7124000000.0,
+        7402300000.0,
+        6244200000.0
+      ],
+      [
+        null,
+        3049900000.0,
+        5531600000.0,
+        5952000000.0,
+        4714800000.0
+      ],
+      [
+        null,
+        -429300000.0,
+        -439200000.0,
+        -468900000.0,
+        -385900000.0
+      ],
+      [
+        null,
+        542600000.0,
+        562000000.0,
+        550100000.0,
+        482900000.0
+      ],
+      [
+        null,
+        113300000.0,
+        122800000.0,
+        81200000.0,
+        97000000.0
+      ],
+      [
+        null,
+        2517372000.0,
+        3760900000.0,
+        4071402000.0,
+        3317296000.0
+      ],
+      [
+        null,
+        1856400000.0,
+        3760900000.0,
+        4124500000.0,
+        3281600000.0
+      ],
+      [
+        null,
+        33603600000.0,
+        31068600000.0,
+        30472700000.0,
+        27820600000.0
+      ],
+      [
+        null,
+        3318600000.0,
+        3050600000.0,
+        2871000000.0,
+        2674100000.0
+      ],
+      [
+        null,
+        2936600000.0,
+        5408800000.0,
+        5870800000.0,
+        4617800000.0
+      ],
+      [
+        1143400000.0,
+        1139800000.0,
+        1137300000.0,
+        1151300000.0,
+        null
+      ],
+      [
+        1140100000.0,
+        1136900000.0,
+        1133500000.0,
+        1142600000.0,
+        null
+      ],
+      [
+        2.21,
+        1.63,
+        3.31,
+        3.58,
+        null
+      ],
+      [
+        2.216209,
+        1.632861,
+        3.317953,
+        3.600925,
+        null
+      ],
+      [
+        null,
+        1856400000.0,
+        3760900000.0,
+        4124500000.0,
+        3281600000.0
+      ],
+      [
+        null,
+        1856400000.0,
+        3760900000.0,
+        4124500000.0,
+        3281600000.0
+      ],
+      [
+        null,
+        1856400000.0,
+        3760900000.0,
+        4124500000.0,
+        3281600000.0
+      ],
+      [
+        null,
+        -300000.0,
+        -1400000.0,
+        -200000.0,
+        -1800000.0
+      ],
+      [
+        null,
+        1856700000.0,
+        3762300000.0,
+        4124700000.0,
+        3283400000.0
+      ],
+      [
+        null,
+        1856700000.0,
+        3762300000.0,
+        4124700000.0,
+        3283400000.0
+      ],
+      [
+        null,
+        650600000.0,
+        1207300000.0,
+        1277200000.0,
+        948500000.0
+      ],
+      [
+        null,
+        2507300000.0,
+        4969600000.0,
+        5401900000.0,
+        4231900000.0
+      ],
+      [
+        null,
+        -644200000.0,
+        301200000.0,
+        367900000.0,
+        188100000.0
+      ],
+      [
+        null,
+        -892000000.0,
+        0.0,
+        69500000.0,
+        -46000000.0
+      ],
+      [
+        null,
+        0.0,
+        0.0,
+        91300000.0,
+        0.0
+      ],
+      [
+        null,
+        null,
+        null,
+        0.0,
+        0.0
+      ],
+      [
+        null,
+        892000000.0,
+        0.0,
+        21800000.0,
+        46000000.0
+      ],
+      [
+        null,
+        247800000.0,
+        301200000.0,
+        298400000.0,
+        234100000.0
+      ],
+      [
+        null,
+        -429300000.0,
+        -439200000.0,
+        -468900000.0,
+        -385900000.0
+      ],
+      [
+        null,
+        542600000.0,
+        562000000.0,
+        550100000.0,
+        482900000.0
+      ],
+      [
+        null,
+        113300000.0,
+        122800000.0,
+        81200000.0,
+        97000000.0
+      ],
+      [
+        null,
+        3580800000.0,
+        5107600000.0,
+        5502900000.0,
+        4429700000.0
+      ],
+      [
+        null,
+        4886500000.0,
+        4601500000.0,
+        4343300000.0,
+        3941400000.0
+      ],
+      [
+        null,
+        584600000.0,
+        565600000.0,
+        539400000.0,
+        461500000.0
+      ],
+      [
+        null,
+        1684700000.0,
+        1512600000.0,
+        1362600000.0,
+        1447900000.0
+      ],
+      [
+        null,
+        1684700000.0,
+        1512600000.0,
+        1362600000.0,
+        1447900000.0
+      ],
+      [
+        null,
+        2617200000.0,
+        2523300000.0,
+        2441300000.0,
+        2032000000.0
+      ],
+      [
+        null,
+        2617200000.0,
+        2523300000.0,
+        2441300000.0,
+        2032000000.0
+      ],
+      [
+        null,
+        2617200000.0,
+        2523300000.0,
+        2441300000.0,
+        2032000000.0
+      ],
+      [
+        null,
+        8467300000.0,
+        9709100000.0,
+        9846200000.0,
+        8371100000.0
+      ],
+      [
+        null,
+        28717100000.0,
+        26467100000.0,
+        26129400000.0,
+        23879200000.0
+      ],
+      [
+        null,
+        37184400000.0,
+        36176200000.0,
+        35975600000.0,
+        32250300000.0
+      ],
+      [
+        null,
+        35095200000.0,
+        34271000000.0,
+        33975000000.0,
+        30231600000.0
+      ]
+    ]
+  },
+  "balance_sheet": {
+    "index": [
+      "Ordinary Shares Number",
+      "Share Issued",
+      "Net Debt",
+      "Total Debt",
+      "Tangible Book Value",
+      "Invested Capital",
+      "Working Capital",
+      "Net Tangible Assets",
+      "Capital Lease Obligations",
+      "Common Stock Equity",
+      "Total Capitalization",
+      "Total Equity Gross Minority Interest",
+      "Minority Interest",
+      "Stockholders Equity",
+      "Gains Losses Not Affecting Retained Earnings",
+      "Other Equity Adjustments",
+      "Retained Earnings",
+      "Additional Paid In Capital",
+      "Capital Stock",
+      "Common Stock",
+      "Total Liabilities Net Minority Interest",
+      "Total Non Current Liabilities Net Minority Interest",
+      "Other Non Current Liabilities",
+      "Non Current Deferred Liabilities",
+      "Non Current Deferred Revenue",
+      "Long Term Debt And Capital Lease Obligation",
+      "Long Term Capital Lease Obligation",
+      "Long Term Debt",
+      "Current Liabilities",
+      "Current Deferred Liabilities",
+      "Current Deferred Revenue",
+      "Current Debt And Capital Lease Obligation",
+      "Current Capital Lease Obligation",
+      "Current Debt",
+      "Other Current Borrowings",
+      "Current Provisions",
+      "Payables And Accrued Expenses",
+      "Current Accrued Expenses",
+      "Payables",
+      "Dividends Payable",
+      "Total Tax Payable",
+      "Income Tax Payable",
+      "Accounts Payable",
+      "Total Assets",
+      "Total Non Current Assets",
+      "Other Non Current Assets",
+      "Non Current Deferred Assets",
+      "Non Current Deferred Taxes Assets",
+      "Investments And Advances",
+      "Investmentin Financial Assets",
+      "Available For Sale Securities",
+      "Long Term Equity Investment",
+      "Investmentsin Joint Venturesat Cost",
+      "Investments In Other Ventures Under Equity Method",
+      "Goodwill And Other Intangible Assets",
+      "Other Intangible Assets",
+      "Goodwill",
+      "Net PPE",
+      "Accumulated Depreciation",
+      "Gross PPE",
+      "Leases",
+      "Construction In Progress",
+      "Other Properties",
+      "Machinery Furniture Equipment",
+      "Buildings And Improvements",
+      "Land And Improvements",
+      "Properties",
+      "Current Assets",
+      "Other Current Assets",
+      "Prepaid Assets",
+      "Inventory",
+      "Finished Goods",
+      "Raw Materials",
+      "Receivables",
+      "Other Receivables",
+      "Taxes Receivable",
+      "Accounts Receivable",
+      "Allowance For Doubtful Accounts Receivable",
+      "Gross Accounts Receivable",
+      "Cash Cash Equivalents And Short Term Investments",
+      "Other Short Term Investments",
+      "Cash And Cash Equivalents"
+    ],
+    "columns": [
+      "2025-09-30T00:00:00",
+      "2024-09-30T00:00:00",
+      "2023-09-30T00:00:00",
+      "2022-09-30T00:00:00"
+    ],
+    "data": [
+      [
+        1136900000.0,
+        1133500000.0,
+        1142600000.0,
+        1147900000.0
+      ],
+      [
+        1136900000.0,
+        1133500000.0,
+        1142600000.0,
+        1147900000.0
+      ],
+      [
+        12855000000.0,
+        12282200000.0,
+        11848200000.0,
+        12225500000.0
+      ],
+      [
+        26611500000.0,
+        25803100000.0,
+        24599800000.0,
+        23804800000.0
+      ],
+      [
+        -11632300000.0,
+        -10865500000.0,
+        -11333600000.0,
+        -12146000000.0
+      ],
+      [
+        7978200000.0,
+        8119500000.0,
+        7404900000.0,
+        6337300000.0
+      ],
+      [
+        -2828100000.0,
+        -2222600000.0,
+        -2041900000.0,
+        -2133100000.0
+      ],
+      [
+        -11632300000.0,
+        -10865500000.0,
+        -11333600000.0,
+        -12146000000.0
+      ],
+      [
+        10536700000.0,
+        10234700000.0,
+        9200100000.0,
+        8760900000.0
+      ],
+      [
+        -8096600000.0,
+        -7448900000.0,
+        -7994800000.0,
+        -8706600000.0
+      ],
+      [
+        6479300000.0,
+        6870600000.0,
+        5552800000.0,
+        4413300000.0
+      ],
+      [
+        -8089200000.0,
+        -7441600000.0,
+        -7987800000.0,
+        -8698700000.0
+      ],
+      [
+        7400000.0,
+        7300000.0,
+        7000000.0,
+        7900000.0
+      ],
+      [
+        -8096600000.0,
+        -7448900000.0,
+        -7994800000.0,
+        -8706600000.0
+      ],
+      [
+        -459300000.0,
+        -428800000.0,
+        -778200000.0,
+        -463200000.0
+      ],
+      [
+        -459300000.0,
+        -428800000.0,
+        -778200000.0,
+        -463200000.0
+      ],
+      [
+        -8272500000.0,
+        -7343800000.0,
+        -7255800000.0,
+        -8449800000.0
+      ],
+      [
+        634100000.0,
+        322600000.0,
+        38100000.0,
+        205300000.0
+      ],
+      [
+        1100000.0,
+        1100000.0,
+        1100000.0,
+        1100000.0
+      ],
+      [
+        1100000.0,
+        1100000.0,
+        1100000.0,
+        1100000.0
+      ],
+      [
+        40108900000.0,
+        38780900000.0,
+        37433300000.0,
+        36677100000.0
+      ],
+      [
+        29898500000.0,
+        29710900000.0,
+        28088000000.0,
+        27525300000.0
+      ],
+      [
+        577800000.0,
+        656200000.0,
+        513800000.0,
+        610500000.0
+      ],
+      [
+        5772600000.0,
+        5963600000.0,
+        6101800000.0,
+        6279700000.0
+      ],
+      [
+        5772600000.0,
+        5963600000.0,
+        6101800000.0,
+        6279700000.0
+      ],
+      [
+        23548100000.0,
+        23091100000.0,
+        21472400000.0,
+        20635100000.0
+      ],
+      [
+        8972200000.0,
+        8771600000.0,
+        7924800000.0,
+        7515200000.0
+      ],
+      [
+        14575900000.0,
+        14319500000.0,
+        13547600000.0,
+        13119900000.0
+      ],
+      [
+        10210400000.0,
+        9070000000.0,
+        9345300000.0,
+        9151800000.0
+      ],
+      [
+        1840600000.0,
+        1781200000.0,
+        1700200000.0,
+        1641900000.0
+      ],
+      [
+        1840600000.0,
+        1781200000.0,
+        1700200000.0,
+        1641900000.0
+      ],
+      [
+        3063400000.0,
+        2712000000.0,
+        3127400000.0,
+        3169700000.0
+      ],
+      [
+        1564500000.0,
+        1463100000.0,
+        1275300000.0,
+        1245700000.0
+      ],
+      [
+        1498900000.0,
+        1248900000.0,
+        1852100000.0,
+        1924000000.0
+      ],
+      [
+        1498900000.0,
+        1248900000.0,
+        1852100000.0,
+        1924000000.0
+      ],
+      [
+        282300000.0,
+        244300000.0,
+        233500000.0,
+        232300000.0
+      ],
+      [
+        5024100000.0,
+        4332500000.0,
+        4284200000.0,
+        4107900000.0
+      ],
+      [
+        2080400000.0,
+        1711100000.0,
+        1686700000.0,
+        1724400000.0
+      ],
+      [
+        2943700000.0,
+        2621400000.0,
+        2597500000.0,
+        2383500000.0
+      ],
+      [
+        704800000.0,
+        691200000.0,
+        651200000.0,
+        608300000.0
+      ],
+      [
+        386100000.0,
+        334700000.0,
+        402000000.0,
+        333800000.0
+      ],
+      [
+        150300000.0,
+        123500000.0,
+        189300000.0,
+        139200000.0
+      ],
+      [
+        1852800000.0,
+        1595500000.0,
+        1544300000.0,
+        1441400000.0
+      ],
+      [
+        32019700000.0,
+        31339300000.0,
+        29445500000.0,
+        27978400000.0
+      ],
+      [
+        24637400000.0,
+        24491900000.0,
+        22142100000.0,
+        20959700000.0
+      ],
+      [
+        752500000.0,
+        617000000.0,
+        546500000.0,
+        554200000.0
+      ],
+      [
+        1826900000.0,
+        1766700000.0,
+        1769800000.0,
+        1799700000.0
+      ],
+      [
+        1826900000.0,
+        1766700000.0,
+        1769800000.0,
+        1799700000.0
+      ],
+      [
+        713100000.0,
+        739900000.0,
+        687300000.0,
+        590300000.0
+      ],
+      [
+        246900000.0,
+        276000000.0,
+        247400000.0,
+        279100000.0
+      ],
+      [
+        246900000.0,
+        276000000.0,
+        247400000.0,
+        279100000.0
+      ],
+      [
+        466200000.0,
+        463900000.0,
+        439900000.0,
+        311200000.0
+      ],
+      [
+        418900000.0,
+        424100000.0,
+        415700000.0,
+        283100000.0
+      ],
+      [
+        47300000.0,
+        39800000.0,
+        24200000.0,
+        28100000.0
+      ],
+      [
+        3535700000.0,
+        3416600000.0,
+        3338800000.0,
+        3439400000.0
+      ],
+      [
+        166800000.0,
+        100900000.0,
+        120500000.0,
+        155900000.0
+      ],
+      [
+        3368900000.0,
+        3315700000.0,
+        3218300000.0,
+        3283500000.0
+      ],
+      [
+        17809200000.0,
+        17951700000.0,
+        15799700000.0,
+        14576100000.0
+      ],
+      [
+        -11349200000.0,
+        -10775500000.0,
+        -9923100000.0,
+        -9049300000.0
+      ],
+      [
+        29158400000.0,
+        28727200000.0,
+        25722800000.0,
+        23625400000.0
+      ],
+      [
+        11762400000.0,
+        11453900000.0,
+        10133700000.0,
+        9066800000.0
+      ],
+      [
+        334300000.0,
+        750900000.0,
+        607500000.0,
+        558700000.0
+      ],
+      [
+        14261500000.0,
+        13955500000.0,
+        12604500000.0,
+        11872300000.0
+      ],
+      [
+        2071600000.0,
+        1825200000.0,
+        1664500000.0,
+        1526100000.0
+      ],
+      [
+        673700000.0,
+        684800000.0,
+        666500000.0,
+        555400000.0
+      ],
+      [
+        54900000.0,
+        56900000.0,
+        46100000.0,
+        46100000.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        7382300000.0,
+        6847400000.0,
+        7303400000.0,
+        7018700000.0
+      ],
+      [
+        452200000.0,
+        313100000.0,
+        359900000.0,
+        483700000.0
+      ],
+      [
+        null,
+        null,
+        null,
+        386600000.0
+      ],
+      [
+        2185600000.0,
+        1777300000.0,
+        1806400000.0,
+        2176600000.0
+      ],
+      [
+        741700000.0,
+        636500000.0,
+        644900000.0,
+        741200000.0
+      ],
+      [
+        1443900000.0,
+        1140800000.0,
+        1161500000.0,
+        1435400000.0
+      ],
+      [
+        1277500000.0,
+        1213800000.0,
+        1184100000.0,
+        1175500000.0
+      ],
+      [
+        null,
+        null,
+        null,
+        69400000.0
+      ],
+      [
+        null,
+        null,
+        null,
+        27700000.0
+      ],
+      [
+        1277500000.0,
+        1213800000.0,
+        1184100000.0,
+        1175500000.0
+      ],
+      [
+        -24000000.0,
+        -21200000.0,
+        -23800000.0,
+        -27200000.0
+      ],
+      [
+        1301500000.0,
+        1235000000.0,
+        1207900000.0,
+        1202700000.0
+      ],
+      [
+        3467000000.0,
+        3543200000.0,
+        3953000000.0,
+        3182900000.0
+      ],
+      [
+        247200000.0,
+        257000000.0,
+        401500000.0,
+        364500000.0
+      ],
+      [
+        3219800000.0,
+        3286200000.0,
+        3551500000.0,
+        2818400000.0
+      ]
+    ]
+  },
+  "cashflow": {
+    "index": [
+      "Free Cash Flow",
+      "Repurchase Of Capital Stock",
+      "Repayment Of Debt",
+      "Issuance Of Debt",
+      "Issuance Of Capital Stock",
+      "Capital Expenditure",
+      "Interest Paid Supplemental Data",
+      "Income Tax Paid Supplemental Data",
+      "End Cash Position",
+      "Beginning Cash Position",
+      "Effect Of Exchange Rate Changes",
+      "Changes In Cash",
+      "Financing Cash Flow",
+      "Cash Flow From Continuing Financing Activities",
+      "Net Other Financing Charges",
+      "Cash Dividends Paid",
+      "Common Stock Dividend Paid",
+      "Net Common Stock Issuance",
+      "Common Stock Payments",
+      "Common Stock Issuance",
+      "Net Issuance Payments Of Debt",
+      "Net Short Term Debt Issuance",
+      "Short Term Debt Payments",
+      "Short Term Debt Issuance",
+      "Net Long Term Debt Issuance",
+      "Long Term Debt Payments",
+      "Long Term Debt Issuance",
+      "Investing Cash Flow",
+      "Cash Flow From Continuing Investing Activities",
+      "Net Other Investing Changes",
+      "Net Investment Purchase And Sale",
+      "Sale Of Investment",
+      "Purchase Of Investment",
+      "Net Business Purchase And Sale",
+      "Sale Of Business",
+      "Purchase Of Business",
+      "Net PPE Purchase And Sale",
+      "Purchase Of PPE",
+      "Operating Cash Flow",
+      "Cash Flow From Continuing Operating Activities",
+      "Dividend Received Cfo",
+      "Change In Working Capital",
+      "Change In Other Working Capital",
+      "Change In Other Current Liabilities",
+      "Change In Payables And Accrued Expense",
+      "Change In Payable",
+      "Change In Account Payable",
+      "Change In Tax Payable",
+      "Change In Income Tax Payable",
+      "Change In Inventory",
+      "Change In Receivables",
+      "Changes In Account Receivables",
+      "Other Non Cash Items",
+      "Stock Based Compensation",
+      "Deferred Tax",
+      "Deferred Income Tax",
+      "Depreciation Amortization Depletion",
+      "Depreciation And Amortization",
+      "Operating Gains Losses",
+      "Earnings Losses From Equity Investments",
+      "Gain Loss On Sale Of Business",
+      "Net Income From Continuing Operations"
+    ],
+    "columns": [
+      "2025-09-30T00:00:00",
+      "2024-09-30T00:00:00",
+      "2023-09-30T00:00:00",
+      "2022-09-30T00:00:00"
+    ],
+    "data": [
+      [
+        2442000000.0,
+        3318100000.0,
+        3675100000.0,
+        2556000000.0
+      ],
+      [
+        0.0,
+        -1266700000.0,
+        -984400000.0,
+        -4013000000.0
+      ],
+      [
+        -1257800000.0,
+        -1982600000.0,
+        -1253800000.0,
+        -1036600000.0
+      ],
+      [
+        1750900000.0,
+        2119100000.0,
+        1612400000.0,
+        1709700000.0
+      ],
+      [
+        77000000.0,
+        108000000.0,
+        167400000.0,
+        101600000.0
+      ],
+      [
+        -2305500000.0,
+        -2777500000.0,
+        -2333600000.0,
+        -1841300000.0
+      ],
+      [
+        588300000.0,
+        570700000.0,
+        524300000.0,
+        474700000.0
+      ],
+      [
+        715600000.0,
+        1373300000.0,
+        1294200000.0,
+        1157600000.0
+      ],
+      [
+        3219800000.0,
+        3286200000.0,
+        3551500000.0,
+        2818400000.0
+      ],
+      [
+        3286200000.0,
+        3551500000.0,
+        2818400000.0,
+        6455700000.0
+      ],
+      [
+        -30500000.0,
+        56500000.0,
+        -14200000.0,
+        -250300000.0
+      ],
+      [
+        -35900000.0,
+        -321800000.0,
+        747300000.0,
+        -3387000000.0
+      ],
+      [
+        -2298000000.0,
+        -3718200000.0,
+        -2990600000.0,
+        -5638000000.0
+      ],
+      [
+        -2298000000.0,
+        -3718200000.0,
+        -2990600000.0,
+        -5638000000.0
+      ],
+      [
+        -96700000.0,
+        -111000000.0,
+        -100400000.0,
+        -136400000.0
+      ],
+      [
+        -2771400000.0,
+        -2585000000.0,
+        -2431800000.0,
+        -2263300000.0
+      ],
+      [
+        -2771400000.0,
+        -2585000000.0,
+        -2431800000.0,
+        -2263300000.0
+      ],
+      [
+        77000000.0,
+        -1158700000.0,
+        -817000000.0,
+        -3911400000.0
+      ],
+      [
+        0.0,
+        -1266700000.0,
+        -984400000.0,
+        -4013000000.0
+      ],
+      [
+        77000000.0,
+        108000000.0,
+        167400000.0,
+        101600000.0
+      ],
+      [
+        493100000.0,
+        136500000.0,
+        358600000.0,
+        673100000.0
+      ],
+      [
+        -5400000.0,
+        -33700000.0,
+        -139200000.0,
+        175000000.0
+      ],
+      [
+        -7800000.0,
+        -157500000.0,
+        -253800000.0,
+        -36600000.0
+      ],
+      [
+        2400000.0,
+        123800000.0,
+        114600000.0,
+        211600000.0
+      ],
+      [
+        498500000.0,
+        170200000.0,
+        497800000.0,
+        498100000.0
+      ],
+      [
+        -1250000000.0,
+        -1825100000.0,
+        -1000000000.0,
+        -1000000000.0
+      ],
+      [
+        1748500000.0,
+        1995300000.0,
+        1497800000.0,
+        1498100000.0
+      ],
+      [
+        -2485400000.0,
+        -2699200000.0,
+        -2270800000.0,
+        -2146300000.0
+      ],
+      [
+        -2485400000.0,
+        -2699200000.0,
+        -2270800000.0,
+        -2146300000.0
+      ],
+      [
+        -62100000.0,
+        -72700000.0,
+        53900000.0,
+        -126300000.0
+      ],
+      [
+        59300000.0,
+        151000000.0,
+        8900000.0,
+        -238000000.0
+      ],
+      [
+        392900000.0,
+        778500000.0,
+        619400000.0,
+        139900000.0
+      ],
+      [
+        -333600000.0,
+        -627500000.0,
+        -610500000.0,
+        -377900000.0
+      ],
+      [
+        -177100000.0,
+        0.0,
+        0.0,
+        59300000.0
+      ],
+      [
+        null,
+        0.0,
+        0.0,
+        59300000.0
+      ],
+      [
+        -177100000.0,
+        0.0,
+        0.0,
+        null
+      ],
+      [
+        -2305500000.0,
+        -2777500000.0,
+        -2333600000.0,
+        -1841300000.0
+      ],
+      [
+        -2305500000.0,
+        -2777500000.0,
+        -2333600000.0,
+        -1841300000.0
+      ],
+      [
+        4747500000.0,
+        6095600000.0,
+        6008700000.0,
+        4397300000.0
+      ],
+      [
+        4747500000.0,
+        6095600000.0,
+        6008700000.0,
+        4397300000.0
+      ],
+      [
+        294400000.0,
+        333300000.0,
+        222800000.0,
+        231200000.0
+      ],
+      [
+        -1494400000.0,
+        -1048800000.0,
+        -1133400000.0,
+        -2133000000.0
+      ],
+      [
+        215600000.0,
+        218800000.0,
+        -204500000.0,
+        263800000.0
+      ],
+      [
+        -1576700000.0,
+        -1294900000.0,
+        -1443800000.0,
+        -1625600000.0
+      ],
+      [
+        364800000.0,
+        -33900000.0,
+        152600000.0,
+        195900000.0
+      ],
+      [
+        364800000.0,
+        -33900000.0,
+        152600000.0,
+        195900000.0
+      ],
+      [
+        261000000.0,
+        28000000.0,
+        100100000.0,
+        345500000.0
+      ],
+      [
+        103800000.0,
+        -61900000.0,
+        52500000.0,
+        -149600000.0
+      ],
+      [
+        103800000.0,
+        -61900000.0,
+        52500000.0,
+        -149600000.0
+      ],
+      [
+        -408400000.0,
+        42800000.0,
+        366400000.0,
+        -641000000.0
+      ],
+      [
+        -89700000.0,
+        18400000.0,
+        -4100000.0,
+        -326100000.0
+      ],
+      [
+        -89700000.0,
+        18400000.0,
+        -4100000.0,
+        -326100000.0
+      ],
+      [
+        1531100000.0,
+        1346800000.0,
+        1392700000.0,
+        1429900000.0
+      ],
+      [
+        318300000.0,
+        308300000.0,
+        302700000.0,
+        271500000.0
+      ],
+      [
+        -90600000.0,
+        -13800000.0,
+        -59400000.0,
+        -37800000.0
+      ],
+      [
+        -90600000.0,
+        -13800000.0,
+        -59400000.0,
+        -37800000.0
+      ],
+      [
+        1771500000.0,
+        1592400000.0,
+        1450300000.0,
+        1529400000.0
+      ],
+      [
+        1771500000.0,
+        1592400000.0,
+        1450300000.0,
+        1529400000.0
+      ],
+      [
+        560500000.0,
+        -184900000.0,
+        -291700000.0,
+        -177300000.0
+      ],
+      [
+        -274200000.0,
+        -306400000.0,
+        -301800000.0,
+        -268700000.0
+      ],
+      [
+        null,
+        null,
+        0.0,
+        0.0
+      ],
+      [
+        1856700000.0,
+        3762300000.0,
+        4124700000.0,
+        3283400000.0
+      ]
+    ]
+  },
+  "fast_info": {
+    "last_price": 105.41000366210938,
+    "shares": 1140100000,
+    "currency": "USD",
+    "marketCap": 120177945175.1709
+  },
+  "info": {
+    "address1": "2401 Utah Avenue South",
+    "city": "Seattle",
+    "state": "WA",
+    "zip": "98134",
+    "country": "United States",
+    "phone": "206 447 1575",
+    "website": "https://www.starbucks.com",
+    "industry": "Restaurants",
+    "industryKey": "restaurants",
+    "industryDisp": "Restaurants",
+    "sector": "Consumer Cyclical",
+    "sectorKey": "consumer-cyclical",
+    "sectorDisp": "Consumer Cyclical",
+    "longBusinessSummary": "Starbucks Corporation, together with its subsidiaries, operates as a roaster, marketer, and retailer of coffee internationally. The company operates through three segments: North America, International, and Channel Development. Its stores offer coffee, tea, and other beverages, roasted whole beans and ground coffees, complementary food, packaged coffees, single-serve products, and ready-to-drink beverages; and various food products, such as pastries, breakfast sandwiches, and lunch items. The company also licenses its trademarks through licensed stores, and grocery and foodservice accounts. The company offers its products under the Starbucks Coffee, Teavana, Seattle's Best Coffee, Ethos, and Starbucks Reserve brands. Starbucks Corporation was founded in 1971 and is based in Seattle, Washington.",
+    "companyOfficers": [
+      {
+        "maxAge": 1,
+        "name": "Mr. Brian R. Niccol",
+        "age": 51,
+        "title": "Chairman & CEO",
+        "yearBorn": 1974,
+        "fiscalYear": 2025,
+        "totalPay": 11111188,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Ms. Catherine R. Smith CPA",
+        "age": 61,
+        "title": "Executive VP & CFO",
+        "yearBorn": 1964,
+        "fiscalYear": 2025,
+        "totalPay": 3306718,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Mr. Mike  Grams",
+        "age": 54,
+        "title": "EVP & COO",
+        "yearBorn": 1971,
+        "fiscalYear": 2025,
+        "totalPay": 1380012,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Mr. Bao Giang Val Bauduin",
+        "age": 49,
+        "title": "Principal Accounting Officer and Senior VP of Corporate Finance & Development",
+        "yearBorn": 1976,
+        "fiscalYear": 2025,
+        "totalPay": 719698,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Mr. Brady  Brewer",
+        "age": 52,
+        "title": "Chief Executive Officer of Starbucks International",
+        "yearBorn": 1973,
+        "fiscalYear": 2025,
+        "totalPay": 1300465,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Ms. Sara  Kelly",
+        "age": 45,
+        "title": "Executive VP & Chief Partner Officer",
+        "yearBorn": 1980,
+        "fiscalYear": 2025,
+        "totalPay": 1151889,
+        "exercisedValue": 502968,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Mr. Anand  Varadarajan",
+        "title": "EVP & CTO",
+        "fiscalYear": 2025,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Ms. Pilar  Ramos",
+        "age": 52,
+        "title": "Executive VP & Chief Legal Officer",
+        "yearBorn": 1973,
+        "fiscalYear": 2025,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Mr. Andy  Adams",
+        "title": "Senior Vice President of Global Growth & Concepts",
+        "fiscalYear": 2025,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      },
+      {
+        "maxAge": 1,
+        "name": "Ms. Janet  Landers",
+        "title": "Senior Vice President of Business Technology",
+        "fiscalYear": 2025,
+        "exercisedValue": 0,
+        "unexercisedValue": 0
+      }
+    ],
+    "auditRisk": 8,
+    "boardRisk": 5,
+    "compensationRisk": 9,
+    "shareHolderRightsRisk": 2,
+    "overallRisk": 7,
+    "governanceEpochDate": 1793491200,
+    "compensationAsOfEpochDate": 1767139200,
+    "irWebsite": "http://investor.starbucks.com/phoenix.zhtml?c=99518&p=irol-IRHome",
+    "executiveTeam": [],
+    "maxAge": 86400,
+    "priceHint": 2,
+    "previousClose": 106.16,
+    "open": 103.52,
+    "dayLow": 102.685,
+    "dayHigh": 106.61,
+    "regularMarketPreviousClose": 106.16,
+    "regularMarketOpen": 103.52,
+    "regularMarketDayLow": 102.685,
+    "regularMarketDayHigh": 106.61,
+    "dividendRate": 2.52,
+    "dividendYield": 2.39,
+    "exDividendDate": 1794528000,
+    "payoutRatio": 1.4277,
+    "fiveYearAvgDividendYield": 2.32,
+    "beta": 1.012,
+    "trailingPE": 47.696835,
+    "forwardPE": 28.274836,
+    "volume": 7780387,
+    "regularMarketVolume": 7780387,
+    "averageVolume": 7739070,
+    "averageVolume10days": 9303280,
+    "averageDailyVolume10Day": 9303280,
+    "bid": 99.16,
+    "ask": 111.3,
+    "bidSize": 1,
+    "askSize": 1,
+    "marketCap": 120177942528,
+    "nonDilutedMarketCap": 120177941000,
+    "fiftyTwoWeekLow": 81.97,
+    "fiftyTwoWeekHigh": 111.5,
+    "allTimeHigh": 126.32,
+    "allTimeLow": 0.320313,
+    "fulldayPrice": 105.41,
+    "fulldayChange": -0.640007,
+    "fulldayChangePercent": -0.60287017,
+    "priceToSalesTrailing12Months": 3.1700351,
+    "fiftyDayAverage": 99.1454,
+    "twoHundredDayAverage": 100.13875,
+    "trailingAnnualDividendRate": 2.49,
+    "trailingAnnualDividendYield": 0.023455162,
+    "currency": "USD",
+    "tradeable": false,
+    "enterpriseValue": 138734632960,
+    "profitMargins": 0.06665,
+    "floatShares": 1137774196,
+    "sharesOutstanding": 1140100000,
+    "sharesShort": 43675215,
+    "sharesShortPriorMonth": 39883349,
+    "sharesShortPreviousMonthDate": 1789430400,
+    "dateShortInterest": 1792022400,
+    "sharesPercentSharesOut": 0.0383,
+    "heldPercentInsiders": 0.00127,
+    "heldPercentInstitutions": 0.87160003,
+    "shortRatio": 4.65,
+    "shortPercentOfFloat": 0.042600002,
+    "impliedSharesOutstanding": 1140100000,
+    "bookValue": -6.727,
+    "lastFiscalYearEnd": 1790467200,
+    "nextFiscalYearEnd": 1822003200,
+    "mostRecentQuarter": 1790467200,
+    "earningsQuarterlyGrowth": 4.084,
+    "netIncomeToCommon": 2526700032,
+    "trailingEps": 2.21,
+    "forwardEps": 3.72805,
+    "pegRatio": 1.14,
+    "lastSplitFactor": "2:1",
+    "lastSplitDate": 1428537600,
+    "enterpriseToRevenue": 3.66,
+    "enterpriseToEbitda": 24.197,
+    "52WeekChange": 0.2459811,
+    "SandP52WeekChange": 0.079683185,
+    "lastDividendValue": 0.62,
+    "lastDividendDate": 1786665600,
+    "quoteType": "EQUITY",
+    "currentPrice": 105.41,
+    "targetHighPrice": 141.0,
+    "targetLowPrice": 82.0,
+    "targetMeanPrice": 110.75862,
+    "targetMedianPrice": 110.0,
+    "recommendationMean": 2.37143,
+    "recommendationKey": "buy",
+    "numberOfAnalystOpinions": 29,
+    "totalCash": 3864199936,
+    "totalCashPerShare": 3.389,
+    "ebitda": 5733600256,
+    "totalDebt": 22413600768,
+    "quickRatio": 0.498,
+    "currentRatio": 0.759,
+    "totalRevenue": 37910601728,
+    "revenuePerShare": 33.156,
+    "returnOnAssets": 0.08564,
+    "grossProfits": 8503900160,
+    "freeCashflow": 3186162432,
+    "operatingCashflow": 4988400128,
+    "earningsGrowth": 4.054,
+    "revenueGrowth": -0.045,
+    "grossMargins": 0.22431,
+    "ebitdaMargins": 0.15123999,
+    "operatingMargins": 0.12761,
+    "financialCurrency": "USD",
+    "symbol": "SBUX",
+    "language": "en-US",
+    "region": "US",
+    "typeDisp": "Equity",
+    "quoteSourceName": "Nasdaq Real Time Price",
+    "triggerable": true,
+    "customPriceAlertConfidence": "HIGH",
+    "hasPrePostMarketData": true,
+    "firstTradeDateMilliseconds": 709565400000,
+    "postMarketChangePercent": 0.104347765,
+    "postMarketPrice": 105.52,
+    "postMarketChange": 0.10999298,
+    "regularMarketChange": -0.75,
+    "regularMarketChangePercent": -0.706481,
+    "regularMarketPrice": 105.41,
+    "regularMarketDayRange": "102.685 - 106.61",
+    "fullExchangeName": "NasdaqGS",
+    "averageDailyVolume3Month": 7739070,
+    "fiftyTwoWeekLowChange": 23.440002,
+    "fiftyTwoWeekLowChangePercent": 0.2859583,
+    "fiftyTwoWeekRange": "81.97 - 111.5",
+    "fiftyTwoWeekHighChange": -6.0899963,
+    "fiftyTwoWeekHighChangePercent": -0.054618802,
+    "fiftyTwoWeekChangePercent": 24.59811,
+    "dividendDate": 1795737600,
+    "earningsTimestamp": 1793304000,
+    "earningsTimestampStart": 1801083600,
+    "earningsTimestampEnd": 1801083600,
+    "earningsCallTimestampStart": 1793304900,
+    "earningsCallTimestampEnd": 1793304900,
+    "isEarningsDateEstimate": true,
+    "epsTrailingTwelveMonths": 2.21,
+    "epsForward": 3.72805,
+    "epsCurrentYear": 3.2153,
+    "priceEpsCurrentYear": 32.78388,
+    "fiftyDayAverageChange": 6.2646027,
+    "fiftyDayAverageChangePercent": 0.06318601,
+    "twoHundredDayAverageChange": 5.2712555,
+    "twoHundredDayAverageChangePercent": 0.052639518,
+    "priceToBook": -15.669689,
+    "sourceInterval": 15,
+    "exchangeDataDelayedBy": 15,
+    "corporateActions": [
+      {
+        "header": "Dividend",
+        "message": "SBUX announced a cash dividend of $0.63 with an ex-date of Nov. 13, 2026",
+        "meta": {
+          "eventType": "DIVIDEND",
+          "dateEpochMs": 1794546000000,
+          "amount": "0.63"
+        }
+      }
+    ],
+    "postMarketTime": 1794007156,
+    "regularMarketTime": 1793998801,
+    "exchange": "NMS",
+    "messageBoardId": "finmb_34745",
+    "exchangeTimezoneName": "America/New_York",
+    "exchangeTimezoneShortName": "EST",
+    "gmtOffSetMilliseconds": -18000000,
+    "market": "us_market",
+    "esgPopulated": false,
+    "marketState": "CLOSED",
+    "averageAnalystRating": "2.4 - Buy",
+    "cryptoTradeable": false,
+    "shortName": "Starbucks Corporation",
+    "longName": "Starbucks Corporation",
+    "displayName": "Starbucks",
+    "trailingPegRatio": 1.1373
+  },
+  "search_fallback": {
+    "explains": [],
+    "count": 5,
+    "quotes": [
+      {
+        "exchange": "NMS",
+        "shortname": "Starbucks Corporation",
+        "quoteType": "EQUITY",
+        "symbol": "SBUX",
+        "index": "quotes",
+        "score": 18109500.0,
+        "typeDisp": "Equity",
+        "longname": "Starbucks Corporation",
+        "exchDisp": "NASDAQ",
+        "sector": "Consumer Cyclical",
+        "sectorDisp": "Consumer Cyclical",
+        "industry": "Restaurants",
+        "industryDisp": "Restaurants",
+        "dispSecIndFlag": true,
+        "isYahooFinance": true
+      },
+      {
+        "exchange": "MEX",
+        "shortname": "STARBUCKS CORP",
+        "quoteType": "EQUITY",
+        "symbol": "SBUX.MX",
+        "index": "quotes",
+        "score": 20028.0,
+        "typeDisp": "Equity",
+        "longname": "Starbucks Corporation",
+        "exchDisp": "Mexico",
+        "sector": "Consumer Cyclical",
+        "sectorDisp": "Consumer Cyclical",
+        "industry": "Restaurants",
+        "industryDisp": "Restaurants",
+        "isYahooFinance": true
+      },
+      {
+        "exchange": "OPR",
+        "shortname": "SBUX Jan 2027 90.000 put",
+        "quoteType": "OPTION",
+        "symbol": "SBUX270115P00090000",
+        "index": "quotes",
+        "score": 20009.0,
+        "typeDisp": "Option",
+        "longname": "SBUX Jan 2027 90.000 put",
+        "exchDisp": "OPR",
+        "isYahooFinance": true
+      },
+      {
+        "exchange": "OPR",
+        "shortname": "SBUX Nov 2026 117.000 call",
+        "quoteType": "OPTION",
+        "symbol": "SBUX261106C00117000",
+        "index": "quotes",
+        "score": 20008.0,
+        "typeDisp": "Option",
+        "longname": "SBUX Nov 2026 117.000 call",
+        "exchDisp": "OPR",
+        "isYahooFinance": true
+      },
+      {
+        "exchange": "OPR",
+        "shortname": "SBUX Nov 2026 110.000 put",
+        "quoteType": "OPTION",
+        "symbol": "SBUX261106P00110000",
+        "index": "quotes",
+        "score": 20008.0,
+        "typeDisp": "Option",
+        "longname": "SBUX Nov 2026 110.000 put",
+        "exchDisp": "OPR",
+        "isYahooFinance": true
+      }
+    ],
+    "news": [],
+    "nav": [],
+    "lists": [],
+    "researchReports": [],
+    "screenerFieldResults": [],
+    "totalTime": 30,
+    "timeTakenForQuotes": 423,
+    "timeTakenForNews": 0,
+    "timeTakenForAlgowatchlist": 400,
+    "timeTakenForPredefinedScreener": 400,
+    "timeTakenForCrunchbase": 0,
+    "timeTakenForNav": 400,
+    "timeTakenForResearchReports": 0,
+    "timeTakenForQuestions": 0,
+    "timeTakenForScreenerField": 0,
+    "timeTakenForCulturalAssets": 0,
+    "timeTakenForSearchLists": 0
+  },
+  "timeseries_fallback": {
+    "timeseries": {
+      "result": [
+        {
+          "meta": {
+            "symbol": [
+              "SBUX"
+            ],
+            "type": [
+              "annualTotalRevenue"
+            ]
+          },
+          "timestamp": [
+            1664496000,
+            1696032000,
+            1727654400,
+            1759190400
+          ],
+          "annualTotalRevenue": [
+            {
+              "dataId": 20100,
+              "asOfDate": "2022-09-30",
+              "periodType": "12M",
+              "currencyCode": "USD",
+              "reportedValue": {
+                "raw": 32250300000.0,
+                "fmt": "32.25B"
+              }
+            },
+            {
+              "dataId": 20100,
+              "asOfDate": "2023-09-30",
+              "periodType": "12M",
+              "currencyCode": "USD",
+              "reportedValue": {
+                "raw": 35975600000.0,
+                "fmt": "35.98B"
+              }
+            },
+            {
+              "dataId": 20100,
+              "asOfDate": "2024-09-30",
+              "periodType": "12M",
+              "currencyCode": "USD",
+              "reportedValue": {
+                "raw": 36176200000.0,
+                "fmt": "36.18B"
+              }
+            },
+            {
+              "dataId": 20100,
+              "asOfDate": "2025-09-30",
+              "periodType": "12M",
+              "currencyCode": "USD",
+              "reportedValue": {
+                "raw": 37184400000.0,
+                "fmt": "37.18B"
+              }
+            }
+          ]
+        }
+      ],
+      "error": null
+    }
+  },
+  "hist_1y": {
+    "index": [
+      "2025-11-07T00:00:00-05:00",
+      "2025-11-10T00:00:00-05:00",
+      "2025-11-11T00:00:00-05:00",
+      "2025-11-12T00:00:00-05:00",
+      "2025-11-13T00:00:00-05:00",
+      "2025-11-14T00:00:00-05:00",
+      "2025-11-17T00:00:00-05:00",
+      "2025-11-18T00:00:00-05:00",
+      "2025-11-19T00:00:00-05:00",
+      "2025-11-20T00:00:00-05:00",
+      "2025-11-21T00:00:00-05:00",
+      "2025-11-24T00:00:00-05:00",
+      "2025-11-25T00:00:00-05:00",
+      "2025-11-26T00:00:00-05:00",
+      "2025-11-28T00:00:00-05:00",
+      "2025-12-01T00:00:00-05:00",
+      "2025-12-02T00:00:00-05:00",
+      "2025-12-03T00:00:00-05:00",
+      "2025-12-04T00:00:00-05:00",
+      "2025-12-05T00:00:00-05:00",
+      "2025-12-08T00:00:00-05:00",
+      "2025-12-09T00:00:00-05:00",
+      "2025-12-10T00:00:00-05:00",
+      "2025-12-11T00:00:00-05:00",
+      "2025-12-12T00:00:00-05:00",
+      "2025-12-15T00:00:00-05:00",
+      "2025-12-16T00:00:00-05:00",
+      "2025-12-17T00:00:00-05:00",
+      "2025-12-18T00:00:00-05:00",
+      "2025-12-19T00:00:00-05:00",
+      "2025-12-22T00:00:00-05:00",
+      "2025-12-23T00:00:00-05:00",
+      "2025-12-24T00:00:00-05:00",
+      "2025-12-26T00:00:00-05:00",
+      "2025-12-29T00:00:00-05:00",
+      "2025-12-30T00:00:00-05:00",
+      "2025-12-31T00:00:00-05:00",
+      "2026-01-02T00:00:00-05:00",
+      "2026-01-05T00:00:00-05:00",
+      "2026-01-06T00:00:00-05:00",
+      "2026-01-07T00:00:00-05:00",
+      "2026-01-08T00:00:00-05:00",
+      "2026-01-09T00:00:00-05:00",
+      "2026-01-12T00:00:00-05:00",
+      "2026-01-13T00:00:00-05:00",
+      "2026-01-14T00:00:00-05:00",
+      "2026-01-15T00:00:00-05:00",
+      "2026-01-16T00:00:00-05:00",
+      "2026-01-20T00:00:00-05:00",
+      "2026-01-21T00:00:00-05:00",
+      "2026-01-22T00:00:00-05:00",
+      "2026-01-23T00:00:00-05:00",
+      "2026-01-26T00:00:00-05:00",
+      "2026-01-27T00:00:00-05:00",
+      "2026-01-28T00:00:00-05:00",
+      "2026-01-29T00:00:00-05:00",
+      "2026-01-30T00:00:00-05:00",
+      "2026-02-02T00:00:00-05:00",
+      "2026-02-03T00:00:00-05:00",
+      "2026-02-04T00:00:00-05:00",
+      "2026-02-05T00:00:00-05:00",
+      "2026-02-06T00:00:00-05:00",
+      "2026-02-09T00:00:00-05:00",
+      "2026-02-10T00:00:00-05:00",
+      "2026-02-11T00:00:00-05:00",
+      "2026-02-12T00:00:00-05:00",
+      "2026-02-13T00:00:00-05:00",
+      "2026-02-17T00:00:00-05:00",
+      "2026-02-18T00:00:00-05:00",
+      "2026-02-19T00:00:00-05:00",
+      "2026-02-20T00:00:00-05:00",
+      "2026-02-23T00:00:00-05:00",
+      "2026-02-24T00:00:00-05:00",
+      "2026-02-25T00:00:00-05:00",
+      "2026-02-26T00:00:00-05:00",
+      "2026-02-27T00:00:00-05:00",
+      "2026-03-02T00:00:00-05:00",
+      "2026-03-03T00:00:00-05:00",
+      "2026-03-04T00:00:00-05:00",
+      "2026-03-05T00:00:00-05:00",
+      "2026-03-06T00:00:00-05:00",
+      "2026-03-09T00:00:00-04:00",
+      "2026-03-10T00:00:00-04:00",
+      "2026-03-11T00:00:00-04:00",
+      "2026-03-12T00:00:00-04:00",
+      "2026-03-13T00:00:00-04:00",
+      "2026-03-16T00:00:00-04:00",
+      "2026-03-17T00:00:00-04:00",
+      "2026-03-18T00:00:00-04:00",
+      "2026-03-19T00:00:00-04:00",
+      "2026-03-20T00:00:00-04:00",
+      "2026-03-23T00:00:00-04:00",
+      "2026-03-24T00:00:00-04:00",
+      "2026-03-25T00:00:00-04:00",
+      "2026-03-26T00:00:00-04:00",
+      "2026-03-27T00:00:00-04:00",
+      "2026-03-30T00:00:00-04:00",
+      "2026-03-31T00:00:00-04:00",
+      "2026-04-01T00:00:00-04:00",
+      "2026-04-02T00:00:00-04:00",
+      "2026-04-06T00:00:00-04:00",
+      "2026-04-07T00:00:00-04:00",
+      "2026-04-08T00:00:00-04:00",
+      "2026-04-09T00:00:00-04:00",
+      "2026-04-10T00:00:00-04:00",
+      "2026-04-13T00:00:00-04:00",
+      "2026-04-14T00:00:00-04:00",
+      "2026-04-15T00:00:00-04:00",
+      "2026-04-16T00:00:00-04:00",
+      "2026-04-17T00:00:00-04:00",
+      "2026-04-20T00:00:00-04:00",
+      "2026-04-21T00:00:00-04:00",
+      "2026-04-22T00:00:00-04:00",
+      "2026-04-23T00:00:00-04:00",
+      "2026-04-24T00:00:00-04:00",
+      "2026-04-27T00:00:00-04:00",
+      "2026-04-28T00:00:00-04:00",
+      "2026-04-29T00:00:00-04:00",
+      "2026-04-30T00:00:00-04:00",
+      "2026-05-01T00:00:00-04:00",
+      "2026-05-04T00:00:00-04:00",
+      "2026-05-05T00:00:00-04:00",
+      "2026-05-06T00:00:00-04:00",
+      "2026-05-07T00:00:00-04:00",
+      "2026-05-08T00:00:00-04:00",
+      "2026-05-11T00:00:00-04:00",
+      "2026-05-12T00:00:00-04:00",
+      "2026-05-13T00:00:00-04:00",
+      "2026-05-14T00:00:00-04:00",
+      "2026-05-15T00:00:00-04:00",
+      "2026-05-18T00:00:00-04:00",
+      "2026-05-19T00:00:00-04:00",
+      "2026-05-20T00:00:00-04:00",
+      "2026-05-21T00:00:00-04:00",
+      "2026-05-22T00:00:00-04:00",
+      "2026-05-26T00:00:00-04:00",
+      "2026-05-27T00:00:00-04:00",
+      "2026-05-28T00:00:00-04:00",
+      "2026-05-29T00:00:00-04:00",
+      "2026-06-01T00:00:00-04:00",
+      "2026-06-02T00:00:00-04:00",
+      "2026-06-03T00:00:00-04:00",
+      "2026-06-04T00:00:00-04:00",
+      "2026-06-05T00:00:00-04:00",
+      "2026-06-08T00:00:00-04:00",
+      "2026-06-09T00:00:00-04:00",
+      "2026-06-10T00:00:00-04:00",
+      "2026-06-11T00:00:00-04:00",
+      "2026-06-12T00:00:00-04:00",
+      "2026-06-15T00:00:00-04:00",
+      "2026-06-16T00:00:00-04:00",
+      "2026-06-17T00:00:00-04:00",
+      "2026-06-18T00:00:00-04:00",
+      "2026-06-22T00:00:00-04:00",
+      "2026-06-23T00:00:00-04:00",
+      "2026-06-24T00:00:00-04:00",
+      "2026-06-25T00:00:00-04:00",
+      "2026-06-26T00:00:00-04:00",
+      "2026-06-29T00:00:00-04:00",
+      "2026-06-30T00:00:00-04:00",
+      "2026-07-01T00:00:00-04:00",
+      "2026-07-02T00:00:00-04:00",
+      "2026-07-06T00:00:00-04:00",
+      "2026-07-07T00:00:00-04:00",
+      "2026-07-08T00:00:00-04:00",
+      "2026-07-09T00:00:00-04:00",
+      "2026-07-10T00:00:00-04:00",
+      "2026-07-13T00:00:00-04:00",
+      "2026-07-14T00:00:00-04:00",
+      "2026-07-15T00:00:00-04:00",
+      "2026-07-16T00:00:00-04:00",
+      "2026-07-17T00:00:00-04:00",
+      "2026-07-20T00:00:00-04:00",
+      "2026-07-21T00:00:00-04:00",
+      "2026-07-22T00:00:00-04:00",
+      "2026-07-23T00:00:00-04:00",
+      "2026-07-24T00:00:00-04:00",
+      "2026-07-27T00:00:00-04:00",
+      "2026-07-28T00:00:00-04:00",
+      "2026-07-29T00:00:00-04:00",
+      "2026-07-30T00:00:00-04:00",
+      "2026-07-31T00:00:00-04:00",
+      "2026-08-03T00:00:00-04:00",
+      "2026-08-04T00:00:00-04:00",
+      "2026-08-05T00:00:00-04:00",
+      "2026-08-06T00:00:00-04:00",
+      "2026-08-07T00:00:00-04:00",
+      "2026-08-10T00:00:00-04:00",
+      "2026-08-11T00:00:00-04:00",
+      "2026-08-12T00:00:00-04:00",
+      "2026-08-13T00:00:00-04:00",
+      "2026-08-14T00:00:00-04:00",
+      "2026-08-17T00:00:00-04:00",
+      "2026-08-18T00:00:00-04:00",
+      "2026-08-19T00:00:00-04:00",
+      "2026-08-20T00:00:00-04:00",
+      "2026-08-21T00:00:00-04:00",
+      "2026-08-24T00:00:00-04:00",
+      "2026-08-25T00:00:00-04:00",
+      "2026-08-26T00:00:00-04:00",
+      "2026-08-27T00:00:00-04:00",
+      "2026-08-28T00:00:00-04:00",
+      "2026-08-31T00:00:00-04:00",
+      "2026-09-01T00:00:00-04:00",
+      "2026-09-02T00:00:00-04:00",
+      "2026-09-03T00:00:00-04:00",
+      "2026-09-04T00:00:00-04:00",
+      "2026-09-08T00:00:00-04:00",
+      "2026-09-09T00:00:00-04:00",
+      "2026-09-10T00:00:00-04:00",
+      "2026-09-11T00:00:00-04:00",
+      "2026-09-14T00:00:00-04:00",
+      "2026-09-15T00:00:00-04:00",
+      "2026-09-16T00:00:00-04:00",
+      "2026-09-17T00:00:00-04:00",
+      "2026-09-18T00:00:00-04:00",
+      "2026-09-21T00:00:00-04:00",
+      "2026-09-22T00:00:00-04:00",
+      "2026-09-23T00:00:00-04:00",
+      "2026-09-24T00:00:00-04:00",
+      "2026-09-25T00:00:00-04:00",
+      "2026-09-28T00:00:00-04:00",
+      "2026-09-29T00:00:00-04:00",
+      "2026-09-30T00:00:00-04:00",
+      "2026-10-01T00:00:00-04:00",
+      "2026-10-02T00:00:00-04:00",
+      "2026-10-05T00:00:00-04:00",
+      "2026-10-06T00:00:00-04:00",
+      "2026-10-07T00:00:00-04:00",
+      "2026-10-08T00:00:00-04:00",
+      "2026-10-09T00:00:00-04:00",
+      "2026-10-12T00:00:00-04:00",
+      "2026-10-13T00:00:00-04:00",
+      "2026-10-14T00:00:00-04:00",
+      "2026-10-15T00:00:00-04:00",
+      "2026-10-16T00:00:00-04:00",
+      "2026-10-19T00:00:00-04:00",
+      "2026-10-20T00:00:00-04:00",
+      "2026-10-21T00:00:00-04:00",
+      "2026-10-22T00:00:00-04:00",
+      "2026-10-23T00:00:00-04:00",
+      "2026-10-26T00:00:00-04:00",
+      "2026-10-27T00:00:00-04:00",
+      "2026-10-28T00:00:00-04:00",
+      "2026-10-29T00:00:00-04:00",
+      "2026-10-30T00:00:00-04:00",
+      "2026-11-02T00:00:00-05:00",
+      "2026-11-03T00:00:00-05:00",
+      "2026-11-04T00:00:00-05:00",
+      "2026-11-05T00:00:00-05:00",
+      "2026-11-06T00:00:00-05:00"
+    ],
+    "columns": [
+      "Open",
+      "High",
+      "Low",
+      "Close",
+      "Volume"
+    ],
+    "data": [
+      [
+        80.29104595000376,
+        83.81121522103271,
+        79.72548433757505,
+        83.440673828125,
+        15009900.0
+      ],
+      [
+        83.9184804772412,
+        84.00624478569765,
+        81.9389961899768,
+        82.49481201171875,
+        10507600.0
+      ],
+      [
+        82.86536162806361,
+        84.87409822376381,
+        82.78735056193774,
+        84.26952362060547,
+        9575800.0
+      ],
+      [
+        85.44941120049435,
+        86.84382735847308,
+        84.96185320734857,
+        85.088623046875,
+        11975800.0
+      ],
+      [
+        84.60106881432371,
+        85.1178791197038,
+        84.04525297501279,
+        84.28903198242188,
+        10507700.0
+      ],
+      [
+        84.08277325718153,
+        84.95689563009728,
+        82.501494022291,
+        83.267578125,
+        13434600.0
+      ],
+      [
+        83.67026235699757,
+        85.30064502618879,
+        81.96129754958618,
+        82.197021484375,
+        8547200.0
+      ],
+      [
+        82.11845624908798,
+        82.34434901253158,
+        80.87110797109591,
+        81.84345245361328,
+        7189400.0
+      ],
+      [
+        81.77470437531541,
+        82.88454330123784,
+        81.54880411065051,
+        82.18721008300781,
+        6195100.0
+      ],
+      [
+        82.53096082779953,
+        83.70955814100712,
+        81.0675435111904,
+        81.1461181640625,
+        8966300.0
+      ],
+      [
+        81.0478914700454,
+        85.03546870259422,
+        81.0478914700454,
+        83.82740783691406,
+        10227700.0
+      ],
+      [
+        83.7390179720964,
+        84.06312528726342,
+        81.35236732549919,
+        81.85326385498047,
+        10805800.0
+      ],
+      [
+        81.35236950730528,
+        84.48545692655325,
+        81.34254580255464,
+        84.37742614746094,
+        9265300.0
+      ],
+      [
+        83.97473812344343,
+        85.73280663949177,
+        83.97473812344343,
+        85.15332794189453,
+        7602600.0
+      ],
+      [
+        85.47744036408069,
+        85.72298052713656,
+        84.85868185076473,
+        85.55601501464844,
+        3677600.0
+      ],
+      [
+        84.67206800993199,
+        84.95689549518012,
+        83.25775428822847,
+        83.395263671875,
+        8752100.0
+      ],
+      [
+        83.5131187167131,
+        84.46581574438447,
+        82.71757098953192,
+        83.68008422851562,
+        9001900.0
+      ],
+      [
+        83.51311905963378,
+        85.93905706955229,
+        83.45419181835354,
+        85.55601501464844,
+        9303900.0
+      ],
+      [
+        85.74263039922944,
+        86.30246168734533,
+        83.2381176668055,
+        83.48365783691406,
+        10555100.0
+      ],
+      [
+        83.3952638875661,
+        84.96671941947271,
+        83.2872256172515,
+        83.60151672363281,
+        9402900.0
+      ],
+      [
+        83.61133769761055,
+        83.97473985421372,
+        81.65684000263408,
+        81.92202758789062,
+        10277600.0
+      ],
+      [
+        81.83361984617267,
+        81.84344355016849,
+        80.55680808517813,
+        80.81217193603516,
+        10322900.0
+      ],
+      [
+        80.7434288326243,
+        82.50149735400582,
+        80.5077123668773,
+        82.35417175292969,
+        10539600.0
+      ],
+      [
+        82.71756653068319,
+        83.48365059604984,
+        82.24612614791643,
+        83.22828674316406,
+        6894000.0
+      ],
+      [
+        83.59169138505851,
+        84.3970627977483,
+        83.34615122883247,
+        83.82740783691406,
+        9071500.0
+      ],
+      [
+        84.46581312146844,
+        85.9979812872141,
+        83.14972149054145,
+        83.87651824951172,
+        11718600.0
+      ],
+      [
+        84.11224055755031,
+        84.99618667369238,
+        83.20865452473458,
+        83.5622329711914,
+        7481400.0
+      ],
+      [
+        83.06132865109453,
+        84.2988532096399,
+        82.99257770302485,
+        83.68991088867188,
+        7947000.0
+      ],
+      [
+        86.1256724331027,
+        88.96411619903877,
+        85.7426303673391,
+        87.8248062133789,
+        16466100.0
+      ],
+      [
+        87.62837192720418,
+        87.66765925129408,
+        86.67567492457411,
+        86.7542495727539,
+        16986700.0
+      ],
+      [
+        86.58727927867483,
+        87.03907224079659,
+        84.50509617676157,
+        84.63277435302734,
+        7161600.0
+      ],
+      [
+        84.48545384160336,
+        84.60331581443383,
+        81.89255038566046,
+        82.3639907836914,
+        9511300.0
+      ],
+      [
+        82.3443445085783,
+        83.11043610258707,
+        81.9809498672738,
+        83.06132507324219,
+        3462700.0
+      ],
+      [
+        83.07115262814486,
+        83.64080762446878,
+        82.9140033215901,
+        83.5622329711914,
+        5046200.0
+      ],
+      [
+        83.60151065896524,
+        85.24171701724265,
+        83.46400877822884,
+        84.0434799194336,
+        5352400.0
+      ],
+      [
+        83.71937093658228,
+        84.22027496158903,
+        83.5327655102394,
+        83.72919464111328,
+        4540500.0
+      ],
+      [
+        83.59168679623856,
+        83.66043773647608,
+        82.61934992908193,
+        82.7077407836914,
+        5293400.0
+      ],
+      [
+        82.71757080113683,
+        83.44436758102098,
+        81.5389735300179,
+        82.47203063964844,
+        11334900.0
+      ],
+      [
+        82.01041417671286,
+        85.69351660979878,
+        81.91219961048878,
+        85.01582336425781,
+        9894300.0
+      ],
+      [
+        85.01582261081799,
+        89.02303982089197,
+        84.81939348011068,
+        87.86408996582031,
+        11351100.0
+      ],
+      [
+        87.43193752440949,
+        87.78551595689596,
+        84.92743236980317,
+        85.14350891113281,
+        9547000.0
+      ],
+      [
+        84.32831356798904,
+        87.69712487962428,
+        84.08277340677158,
+        86.60692596435547,
+        8140100.0
+      ],
+      [
+        86.77388207787655,
+        87.51050248175206,
+        85.24171403566837,
+        87.29442596435547,
+        7593200.0
+      ],
+      [
+        86.82300298696687,
+        88.62035877544275,
+        86.03727146939424,
+        88.35517120361328,
+        7289500.0
+      ],
+      [
+        88.08999067153408,
+        88.98375296221249,
+        87.87391413064955,
+        88.94446563720703,
+        5561900.0
+      ],
+      [
+        88.64982625208955,
+        89.88734333015262,
+        88.54178797639163,
+        89.5239486694336,
+        8373200.0
+      ],
+      [
+        90.42753042559411,
+        92.49006628463313,
+        90.0052010478578,
+        91.6159439086914,
+        10001700.0
+      ],
+      [
+        91.69451785667168,
+        91.99898525690911,
+        90.5748553276729,
+        91.33111572265625,
+        8958200.0
+      ],
+      [
+        90.12306707814311,
+        92.1364919981343,
+        89.16054630419404,
+        91.98917388916016,
+        13555200.0
+      ],
+      [
+        92.14630753933476,
+        94.7981381720065,
+        92.05791668178136,
+        94.70974731445312,
+        17118100.0
+      ],
+      [
+        94.74903507063519,
+        96.05531047791243,
+        93.16775589199237,
+        94.12045288085938,
+        14150800.0
+      ],
+      [
+        95.36779704906837,
+        96.143704857148,
+        94.05170538267657,
+        95.87852478027344,
+        11759800.0
+      ],
+      [
+        95.47583276480097,
+        96.22227693251027,
+        94.08116648580291,
+        94.61153411865234,
+        14106700.0
+      ],
+      [
+        94.06152419188635,
+        94.92583037832328,
+        93.54098023503207,
+        94.01242065429688,
+        16403600.0
+      ],
+      [
+        100.47503633382463,
+        102.95007784623897,
+        93.40347523938611,
+        93.46240997314453,
+        25961600.0
+      ],
+      [
+        95.03386578599765,
+        95.171367676368,
+        90.95789762441379,
+        92.20523834228516,
+        16602900.0
+      ],
+      [
+        91.06593739743855,
+        91.54719402167758,
+        89.37661986696062,
+        90.3096694946289,
+        10748000.0
+      ],
+      [
+        90.21144782665347,
+        90.95789196600767,
+        89.00339450879565,
+        90.05430603027344,
+        8675100.0
+      ],
+      [
+        89.98555983567293,
+        92.71596519474556,
+        89.66144502859974,
+        91.3802261352539,
+        8361300.0
+      ],
+      [
+        92.04809780466825,
+        95.37762182634734,
+        91.85166117765272,
+        95.24011993408203,
+        9077100.0
+      ],
+      [
+        95.13207844485935,
+        95.71154961505044,
+        93.65883751188295,
+        94.35617065429688,
+        6776700.0
+      ],
+      [
+        94.58207277655112,
+        97.80355848183939,
+        94.28742158677602,
+        97.67587280273438,
+        8067100.0
+      ],
+      [
+        97.26336745227931,
+        98.19642456078192,
+        96.50710705285734,
+        97.21426391601562,
+        7150600.0
+      ],
+      [
+        97.21426810752351,
+        97.89195388619355,
+        95.71155596187539,
+        95.79013061523438,
+        8543500.0
+      ],
+      [
+        95.99638197076098,
+        97.54819763071048,
+        95.59369999180444,
+        97.35176849365234,
+        6949100.0
+      ],
+      [
+        98.21606529992012,
+        99.39465508620272,
+        94.71957577309612,
+        95.03386688232422,
+        9537300.0
+      ],
+      [
+        94.75708265075961,
+        95.80488439945296,
+        92.5230829861429,
+        92.71089935302734,
+        8949000.0
+      ],
+      [
+        93.8081279132904,
+        94.41111015104559,
+        92.54285618213672,
+        94.29248809814453,
+        8660000.0
+      ],
+      [
+        93.94652398140207,
+        95.54788788518589,
+        93.17549943048894,
+        94.65824127197266,
+        6068100.0
+      ],
+      [
+        94.282603369835,
+        94.83616542209494,
+        93.66974160208181,
+        94.6977767944336,
+        5676700.0
+      ],
+      [
+        94.11455808288947,
+        96.65498858259934,
+        93.80812720888075,
+        96.36832427978516,
+        8788300.0
+      ],
+      [
+        95.0338596401353,
+        96.06189481445713,
+        92.4736625316874,
+        93.68950653076172,
+        7696700.0
+      ],
+      [
+        93.72905420127098,
+        95.62696195303867,
+        92.92837601822228,
+        95.39961242675781,
+        6537300.0
+      ],
+      [
+        96.15085843087529,
+        97.07015863412045,
+        94.79662576808352,
+        96.80326843261719,
+        6294100.0
+      ],
+      [
+        97.23821003521722,
+        98.65175752065672,
+        96.71430159718338,
+        96.95154571533203,
+        6246100.0
+      ],
+      [
+        95.29087841937861,
+        97.29752119746546,
+        95.00421408799262,
+        96.8922348022461,
+        7286900.0
+      ],
+      [
+        94.6088138359486,
+        95.9927077341715,
+        94.40123088245741,
+        95.64673614501953,
+        7250600.0
+      ],
+      [
+        93.82789738636136,
+        95.9729286700957,
+        93.31388355778915,
+        95.5676498413086,
+        7197200.0
+      ],
+      [
+        96.22993770389795,
+        97.0503899457924,
+        94.74719595948777,
+        96.03224182128906,
+        6233400.0
+      ],
+      [
+        96.00259117699312,
+        97.79176385754215,
+        95.82466186046895,
+        97.55452728271484,
+        9608100.0
+      ],
+      [
+        95.95316647671848,
+        98.07843128547954,
+        94.46053758196791,
+        97.85107421875,
+        10826700.0
+      ],
+      [
+        97.11958487512439,
+        99.2250754505657,
+        95.70603743481932,
+        98.6220932006836,
+        9376800.0
+      ],
+      [
+        98.22670179831063,
+        99.97633375601404,
+        97.1294722930745,
+        99.61058807373047,
+        8005800.0
+      ],
+      [
+        99.83794817427028,
+        100.52001181768847,
+        98.51336911549765,
+        100.27288818359375,
+        8815800.0
+      ],
+      [
+        99.85771367867515,
+        101.26138163694776,
+        98.74071757949497,
+        99.02738189697266,
+        12248300.0
+      ],
+      [
+        99.48209401054918,
+        100.05542267741329,
+        97.72257486334529,
+        98.00923919677734,
+        9400400.0
+      ],
+      [
+        98.08831520440336,
+        98.75060472731597,
+        96.25959429668578,
+        96.69453430175781,
+        6871000.0
+      ],
+      [
+        97.31728305124453,
+        97.64348805475572,
+        96.30902195320918,
+        96.4474105834961,
+        5382700.0
+      ],
+      [
+        95.08328691281814,
+        95.81477071996879,
+        91.49504710611224,
+        91.59390258789062,
+        7598400.0
+      ],
+      [
+        91.08977209307865,
+        95.1524851988858,
+        90.53621003013643,
+        94.72743225097656,
+        10524500.0
+      ],
+      [
+        93.87732332306466,
+        95.24144301011188,
+        91.15896346395002,
+        91.48516845703125,
+        13961900.0
+      ],
+      [
+        92.73066839120347,
+        93.92674585390472,
+        92.51319839041875,
+        92.75044250488281,
+        7438300.0
+      ],
+      [
+        92.2364220326626,
+        92.51319929395918,
+        90.73391366778921,
+        90.9217300415039,
+        6262800.0
+      ],
+      [
+        91.26769996808535,
+        92.45389036408673,
+        90.81299339823101,
+        91.63343811035156,
+        7007500.0
+      ],
+      [
+        91.24792659668198,
+        91.69275365501119,
+        89.68611098895481,
+        90.17047119140625,
+        6134000.0
+      ],
+      [
+        89.70588162529573,
+        89.90357752132256,
+        84.61513311564741,
+        85.81121063232422,
+        12433600.0
+      ],
+      [
+        85.40592632430072,
+        86.84912738957696,
+        85.22799701260284,
+        85.72224426269531,
+        7422100.0
+      ],
+      [
+        86.98751671245383,
+        89.06335367113265,
+        86.4537287730882,
+        88.55921936035156,
+        9564200.0
+      ],
+      [
+        89.21163518940311,
+        89.9826597494786,
+        88.45049768670721,
+        89.38956451416016,
+        8044500.0
+      ],
+      [
+        88.7668120193143,
+        90.17047244522641,
+        87.14568158963262,
+        89.33025360107422,
+        7340000.0
+      ],
+      [
+        88.96450407646975,
+        93.729047215345,
+        88.78657476665224,
+        93.68950653076172,
+        7236700.0
+      ],
+      [
+        93.45227346533639,
+        94.25295161869914,
+        92.76032277163219,
+        94.11456298828125,
+        6205600.0
+      ],
+      [
+        96.37821705419664,
+        97.0009658955655,
+        94.89547525336285,
+        96.091552734375,
+        8232300.0
+      ],
+      [
+        95.88397487054354,
+        96.7835085640466,
+        95.07340961144685,
+        95.80489349365234,
+        5320500.0
+      ],
+      [
+        95.88397049177608,
+        96.16074775664036,
+        94.95478320977615,
+        95.48857116699219,
+        5356400.0
+      ],
+      [
+        95.48857181451537,
+        96.54626067905612,
+        94.35180157615859,
+        96.35845184326172,
+        5249200.0
+      ],
+      [
+        96.75384331799697,
+        97.86095992301648,
+        96.43752536536495,
+        97.3370590209961,
+        4995500.0
+      ],
+      [
+        97.35682518891993,
+        98.0388888352288,
+        96.6747690842259,
+        97.20854949951172,
+        5211600.0
+      ],
+      [
+        97.21843783294908,
+        98.00923649243204,
+        96.64510918190467,
+        97.22832489013672,
+        5645500.0
+      ],
+      [
+        97.93014897888351,
+        100.26299658233474,
+        97.77199378187069,
+        98.84944915771484,
+        8133400.0
+      ],
+      [
+        97.86095881021228,
+        98.58256313793142,
+        97.16901565345265,
+        97.81153106689453,
+        6581800.0
+      ],
+      [
+        97.86096466435892,
+        98.01912741914532,
+        95.7356997820119,
+        96.67477416992188,
+        4564200.0
+      ],
+      [
+        96.95154252839406,
+        98.51336565093337,
+        96.4474082209183,
+        98.37496948242188,
+        5730100.0
+      ],
+      [
+        98.81980547827622,
+        99.65013731481946,
+        98.05866041982969,
+        98.3947525024414,
+        4515300.0
+      ],
+      [
+        98.24646914886976,
+        98.36509120553796,
+        96.87246237765868,
+        97.53475189208984,
+        6092500.0
+      ],
+      [
+        97.6039517868211,
+        98.35520977210953,
+        96.71430516498152,
+        96.76373291015625,
+        5311600.0
+      ],
+      [
+        97.34694936136215,
+        97.54464526031937,
+        95.34029903303222,
+        96.16075134277344,
+        10383500.0
+      ],
+      [
+        100.82644754563462,
+        106.03581068384841,
+        98.92853975476326,
+        104.28617858886719,
+        25449200.0
+      ],
+      [
+        104.3356035542166,
+        104.73099534389979,
+        102.63539170876501,
+        104.11813354492188,
+        9485900.0
+      ],
+      [
+        104.4838685299995,
+        106.28292826821091,
+        104.21697832591079,
+        104.68157196044922,
+        6362300.0
+      ],
+      [
+        104.58272799474703,
+        105.45260049697477,
+        103.48549842425628,
+        103.76227569580078,
+        5487700.0
+      ],
+      [
+        103.55468330271579,
+        104.84960865152495,
+        103.14939694802979,
+        103.73261260986328,
+        6458500.0
+      ],
+      [
+        103.54480434230378,
+        106.31259210509246,
+        103.19883275735891,
+        105.21536254882812,
+        8665700.0
+      ],
+      [
+        104.7309984156399,
+        104.87927411192747,
+        101.75563514044775,
+        103.0604476928711,
+        9179300.0
+      ],
+      [
+        103.2185982161151,
+        104.21697981470811,
+        103.05055595404332,
+        103.72273254394531,
+        4538300.0
+      ],
+      [
+        103.74249541746673,
+        106.79694736351229,
+        103.74249541746673,
+        104.52340698242188,
+        6499500.0
+      ],
+      [
+        104.35537051782742,
+        105.92708079167895,
+        103.1395188893153,
+        105.35375213623047,
+        6366000.0
+      ],
+      [
+        105.54156041237488,
+        106.80683977885039,
+        104.25652201470743,
+        104.73099517822266,
+        8638900.0
+      ],
+      [
+        106.88591070888798,
+        107.62728160565948,
+        105.12639165387532,
+        105.17581939697266,
+        9941400.0
+      ],
+      [
+        105.14598882545822,
+        107.26382019572907,
+        104.40027259265355,
+        106.20987701416016,
+        6463900.0
+      ],
+      [
+        106.1800518540421,
+        107.49251214847195,
+        105.23547338742299,
+        105.99113464355469,
+        6587800.0
+      ],
+      [
+        104.93719369752951,
+        106.94565283305177,
+        104.50964940225947,
+        105.77239227294922,
+        5265800.0
+      ],
+      [
+        105.77239104214412,
+        106.84622427160379,
+        104.80793772293735,
+        105.89170837402344,
+        6632500.0
+      ],
+      [
+        105.25536230706942,
+        105.55365183780751,
+        103.02815859123014,
+        103.53524017333984,
+        8342800.0
+      ],
+      [
+        103.44576085673924,
+        103.70427795179941,
+        101.80518356187832,
+        102.52107238769531,
+        9095700.0
+      ],
+      [
+        102.49124340791361,
+        103.37615941933215,
+        100.22426721750128,
+        100.8407211303711,
+        9099100.0
+      ],
+      [
+        101.19866610812218,
+        102.18300944143874,
+        99.55808882871592,
+        101.51683807373047,
+        8901400.0
+      ],
+      [
+        101.1588885718506,
+        101.66597772413685,
+        99.79671846851406,
+        100.17454528808594,
+        6261500.0
+      ],
+      [
+        99.92597829515815,
+        100.3336401562614,
+        98.01694650056339,
+        98.59363555908203,
+        8206600.0
+      ],
+      [
+        97.6888303563728,
+        97.7783126666516,
+        95.04401970502285,
+        95.95877075195312,
+        8191500.0
+      ],
+      [
+        95.25282205600244,
+        97.34082596624515,
+        94.85510521933294,
+        94.9644775390625,
+        9546600.0
+      ],
+      [
+        94.93465377081897,
+        97.63911167583618,
+        94.67613667912555,
+        95.3423080444336,
+        8541800.0
+      ],
+      [
+        97.23145646409057,
+        97.67888317717322,
+        93.2741855825727,
+        93.60230255126953,
+        7524400.0
+      ],
+      [
+        93.75144684588217,
+        95.44173395993228,
+        93.10515791904493,
+        94.74573516845703,
+        7623300.0
+      ],
+      [
+        94.29830192354228,
+        95.22299037728293,
+        93.93042009500995,
+        94.2784194946289,
+        7306400.0
+      ],
+      [
+        94.6065363114621,
+        97.87774583419579,
+        94.42756410826087,
+        96.85363006591797,
+        10619700.0
+      ],
+      [
+        97.02265471768419,
+        98.9913413154577,
+        96.34653836618814,
+        98.19591522216797,
+        8724700.0
+      ],
+      [
+        98.39477148340725,
+        101.97420792721113,
+        98.3251716042656,
+        101.69580841064453,
+        10434800.0
+      ],
+      [
+        102.19295233411157,
+        103.09775834666566,
+        101.21855402839563,
+        102.45146942138672,
+        5305500.0
+      ],
+      [
+        102.89889975830386,
+        103.0182170918255,
+        100.83078574465569,
+        101.00975036621094,
+        7054400.0
+      ],
+      [
+        101.1787804199623,
+        101.97420651545224,
+        99.8862025842917,
+        101.09923553466797,
+        6646100.0
+      ],
+      [
+        99.96575149574453,
+        101.22849436092386,
+        98.1263195676816,
+        99.24986267089844,
+        6932300.0
+      ],
+      [
+        99.98562912683434,
+        100.94014498555097,
+        98.96151339047643,
+        100.07511901855469,
+        10603900.0
+      ],
+      [
+        100.07512421786107,
+        101.21855734064619,
+        99.3890628270264,
+        99.5779800415039,
+        5731000.0
+      ],
+      [
+        99.88620529278825,
+        100.75123887573015,
+        98.68311731690548,
+        100.47283935546875,
+        6001600.0
+      ],
+      [
+        100.66174616210228,
+        104.06221794015043,
+        100.66174616210228,
+        102.93866729736328,
+        6989500.0
+      ],
+      [
+        102.51112306560857,
+        103.69432857991312,
+        102.15317866776547,
+        102.57078552246094,
+        6853500.0
+      ],
+      [
+        102.84918535065916,
+        104.32072780335845,
+        102.12335154563391,
+        104.00255584716797,
+        17150800.0
+      ],
+      [
+        104.21135342580763,
+        104.36049818672643,
+        102.62049367624822,
+        103.46563720703125,
+        6788800.0
+      ],
+      [
+        103.38610019963662,
+        103.98267165917173,
+        101.54666078616162,
+        101.6063232421875,
+        7140000.0
+      ],
+      [
+        101.85489812266495,
+        103.16735840413723,
+        100.82083735759316,
+        102.79946899414062,
+        7464100.0
+      ],
+      [
+        103.40598397131986,
+        105.14598850929879,
+        102.59066786267101,
+        103.6744384765625,
+        7950200.0
+      ],
+      [
+        103.26678370417393,
+        103.85341016145448,
+        99.5183125557034,
+        101.52677917480469,
+        7404200.0
+      ],
+      [
+        102.97843892244994,
+        105.14598771977494,
+        102.30232257505084,
+        103.0182113647461,
+        5556600.0
+      ],
+      [
+        103.69433268384259,
+        103.70427769134787,
+        101.26826668818204,
+        103.2767333984375,
+        7084100.0
+      ],
+      [
+        103.05798533303941,
+        106.83627637730683,
+        102.6204960471215,
+        105.8022232055664,
+        7012700.0
+      ],
+      [
+        105.69285503091335,
+        106.94565289476586,
+        104.94713876565051,
+        105.40451049804688,
+        4686900.0
+      ],
+      [
+        105.73261749161969,
+        107.6217668379383,
+        105.34484564934279,
+        106.7269058227539,
+        6278500.0
+      ],
+      [
+        106.99536863730886,
+        107.86040222208761,
+        105.54370857442193,
+        105.56359100341797,
+        5153200.0
+      ],
+      [
+        105.7425589195302,
+        106.796509673212,
+        104.1119267185331,
+        104.5096435546875,
+        4786100.0
+      ],
+      [
+        105.39456387525078,
+        108.08908436214062,
+        104.93719214986389,
+        107.75102996826172,
+        6233800.0
+      ],
+      [
+        108.32771077983858,
+        108.60611788499558,
+        104.479819788403,
+        104.8874740600586,
+        7633400.0
+      ],
+      [
+        105.11616313538622,
+        106.04085158285164,
+        102.63044231809394,
+        104.21135711669922,
+        6163000.0
+      ],
+      [
+        104.45992527699262,
+        104.88746954494955,
+        103.32643723372404,
+        103.85340881347656,
+        5996000.0
+      ],
+      [
+        103.43581063255102,
+        105.11616028696854,
+        102.32221259150363,
+        103.38610076904297,
+        5599800.0
+      ],
+      [
+        102.19295436760999,
+        102.84918831317785,
+        101.3478107958055,
+        102.62049865722656,
+        6981400.0
+      ],
+      [
+        103.29661461908582,
+        104.55936505385058,
+        102.5310159381338,
+        102.66027069091797,
+        6397200.0
+      ],
+      [
+        103.21706558117364,
+        105.02666997647628,
+        102.95855608600019,
+        103.0579833984375,
+        5517500.0
+      ],
+      [
+        105.22553409223262,
+        105.46416116356595,
+        102.07364195741846,
+        102.51112365722656,
+        7055200.0
+      ],
+      [
+        103.07787216223039,
+        104.31079518685061,
+        102.5409555390864,
+        103.5451889038086,
+        12546300.0
+      ],
+      [
+        106.60759243184711,
+        107.84050779625748,
+        103.03809350053065,
+        105.24541473388672,
+        23417700.0
+      ],
+      [
+        105.97125482161236,
+        107.5422322449635,
+        103.9926155310372,
+        104.64884948730469,
+        12393200.0
+      ],
+      [
+        107.0848494700767,
+        107.74108340516814,
+        102.70998691273866,
+        102.77958679199219,
+        8830000.0
+      ],
+      [
+        102.47135093567887,
+        105.05650661372731,
+        101.21855312522281,
+        104.37044525146484,
+        9530900.0
+      ],
+      [
+        105.3846167603635,
+        105.81216104077791,
+        103.69432965313516,
+        105.39456176757812,
+        7857400.0
+      ],
+      [
+        105.53376263320975,
+        105.68290739972336,
+        103.09775926148657,
+        104.55936431884766,
+        6029500.0
+      ],
+      [
+        103.43581686575152,
+        106.239709737212,
+        103.07787244932523,
+        104.97696685791016,
+        6378200.0
+      ],
+      [
+        104.87753775660822,
+        105.30508204752772,
+        103.6843871935264,
+        104.05227661132812,
+        4947400.0
+      ],
+      [
+        103.96278495521112,
+        106.27947857574647,
+        103.53524067153214,
+        106.05079650878906,
+        5013300.0
+      ],
+      [
+        106.29936864897284,
+        107.94988332667393,
+        105.27524530038205,
+        107.8703384399414,
+        3924100.0
+      ],
+      [
+        108.54645420942255,
+        109.87880450451249,
+        107.83056540439725,
+        107.93000030517578,
+        5190000.0
+      ],
+      [
+        107.62000274658203,
+        108.81999969482422,
+        107.47000122070312,
+        107.69000244140625,
+        3499100.0
+      ],
+      [
+        106.45999908447266,
+        108.33000183105469,
+        106.41000366210938,
+        107.91999816894531,
+        5935300.0
+      ],
+      [
+        109.06999969482422,
+        109.2300033569336,
+        105.91999816894531,
+        106.01000213623047,
+        5351000.0
+      ],
+      [
+        106.66999816894531,
+        108.23999786376953,
+        104.58999633789062,
+        104.9800033569336,
+        6815500.0
+      ],
+      [
+        104.37999725341797,
+        105.73999786376953,
+        102.97000122070312,
+        103.98999786376953,
+        7583100.0
+      ],
+      [
+        104.51000213623047,
+        107.41000366210938,
+        103.37000274658203,
+        107.08000183105469,
+        5550000.0
+      ],
+      [
+        107.22000122070312,
+        107.80999755859375,
+        105.68000030517578,
+        107.48999786376953,
+        6781200.0
+      ],
+      [
+        106.8499984741211,
+        107.13999938964844,
+        105.36000061035156,
+        105.76000213623047,
+        5785200.0
+      ],
+      [
+        106.12999725341797,
+        108.58000183105469,
+        105.41999816894531,
+        108.48999786376953,
+        6049100.0
+      ],
+      [
+        108.56999969482422,
+        108.73999786376953,
+        106.7699966430664,
+        107.26000213623047,
+        6418200.0
+      ],
+      [
+        107.79000091552734,
+        108.69999694824219,
+        107.26000213623047,
+        107.8499984741211,
+        4832200.0
+      ],
+      [
+        107.5199966430664,
+        107.7300033569336,
+        106.01000213623047,
+        106.25,
+        7211300.0
+      ],
+      [
+        106.12000274658203,
+        107.18000030517578,
+        105.38999938964844,
+        106.1500015258789,
+        4628400.0
+      ],
+      [
+        106.18000030517578,
+        107.9000015258789,
+        105.62999725341797,
+        106.72000122070312,
+        5204200.0
+      ],
+      [
+        107.31999969482422,
+        107.56999969482422,
+        105.22000122070312,
+        105.81999969482422,
+        4217700.0
+      ],
+      [
+        105.5999984741211,
+        106.30000305175781,
+        104.36000061035156,
+        104.47000122070312,
+        4600800.0
+      ],
+      [
+        104.68000030517578,
+        104.76000213623047,
+        101.75,
+        102.01000213623047,
+        6257600.0
+      ],
+      [
+        100.63999938964844,
+        101.08000183105469,
+        99.69000244140625,
+        100.04000091552734,
+        5929100.0
+      ],
+      [
+        100.37000274658203,
+        101.66999816894531,
+        98.77999877929688,
+        99.22000122070312,
+        6980100.0
+      ],
+      [
+        100.27999877929688,
+        100.41000366210938,
+        98.45999908447266,
+        98.73999786376953,
+        5570200.0
+      ],
+      [
+        98.79000091552734,
+        99.87999725341797,
+        98.19999694824219,
+        99.06999969482422,
+        5814700.0
+      ],
+      [
+        98.9000015258789,
+        98.9000015258789,
+        96.04000091552734,
+        96.58000183105469,
+        6798600.0
+      ],
+      [
+        97.38999938964844,
+        98.33999633789062,
+        96.06999969482422,
+        97.33999633789062,
+        9300900.0
+      ],
+      [
+        98.11000061035156,
+        98.68000030517578,
+        96.30000305175781,
+        96.66999816894531,
+        6640300.0
+      ],
+      [
+        96.4000015258789,
+        96.55999755859375,
+        95.11000061035156,
+        95.83000183105469,
+        13095200.0
+      ],
+      [
+        95.12999725341797,
+        96.44000244140625,
+        93.62999725341797,
+        94.9000015258789,
+        7181200.0
+      ],
+      [
+        95.91999816894531,
+        96.08000183105469,
+        94.62999725341797,
+        95.11000061035156,
+        8284200.0
+      ],
+      [
+        95.0199966430664,
+        95.5,
+        93.1500015258789,
+        94.13999938964844,
+        8252400.0
+      ],
+      [
+        93.9000015258789,
+        94.5,
+        92.76000213623047,
+        93.6500015258789,
+        7230500.0
+      ],
+      [
+        94.0999984741211,
+        94.91999816894531,
+        93.52999877929688,
+        94.86000061035156,
+        7282400.0
+      ],
+      [
+        94.26000213623047,
+        96.19999694824219,
+        93.77999877929688,
+        95.2699966430664,
+        7418900.0
+      ],
+      [
+        95.02999877929688,
+        95.88999938964844,
+        94.33999633789062,
+        95.43000030517578,
+        6927100.0
+      ],
+      [
+        95.55000305175781,
+        95.88999938964844,
+        93.94999694824219,
+        93.95999908447266,
+        5744500.0
+      ],
+      [
+        94.04000091552734,
+        94.98999786376953,
+        93.7699966430664,
+        94.87999725341797,
+        5146300.0
+      ],
+      [
+        95.08000183105469,
+        95.29000091552734,
+        94.2699966430664,
+        94.70999908447266,
+        6366300.0
+      ],
+      [
+        94.76000213623047,
+        95.0,
+        93.55000305175781,
+        94.43000030517578,
+        8822700.0
+      ],
+      [
+        94.05000305175781,
+        96.7300033569336,
+        93.80999755859375,
+        96.11000061035156,
+        6261400.0
+      ],
+      [
+        96.22000122070312,
+        96.27999877929688,
+        93.19000244140625,
+        93.58000183105469,
+        9423700.0
+      ],
+      [
+        93.0,
+        94.16999816894531,
+        87.3499984741211,
+        93.20999908447266,
+        30310600.0
+      ],
+      [
+        93.0,
+        93.48999786376953,
+        90.69000244140625,
+        90.75,
+        12763400.0
+      ],
+      [
+        91.20999908447266,
+        92.44000244140625,
+        90.70999908447266,
+        92.29000091552734,
+        10975200.0
+      ],
+      [
+        92.33000183105469,
+        92.69999694824219,
+        90.5199966430664,
+        92.0,
+        9750400.0
+      ],
+      [
+        92.0,
+        93.41999816894531,
+        91.30999755859375,
+        93.25,
+        6784400.0
+      ],
+      [
+        94.81999969482422,
+        97.01000213623047,
+        94.80999755859375,
+        96.87999725341797,
+        15377700.0
+      ],
+      [
+        97.37000274658203,
+        97.9800033569336,
+        96.4800033569336,
+        97.5199966430664,
+        9373600.0
+      ],
+      [
+        97.52999877929688,
+        98.4000015258789,
+        96.66000366210938,
+        97.87000274658203,
+        7067800.0
+      ],
+      [
+        98.23999786376953,
+        100.33000183105469,
+        98.19000244140625,
+        99.37000274658203,
+        8333200.0
+      ],
+      [
+        98.94999694824219,
+        99.19000244140625,
+        97.91999816894531,
+        99.08000183105469,
+        5758400.0
+      ],
+      [
+        99.16999816894531,
+        102.02999877929688,
+        98.62999725341797,
+        101.91000366210938,
+        9589700.0
+      ],
+      [
+        101.37999725341797,
+        102.19999694824219,
+        100.43000030517578,
+        100.80000305175781,
+        5917900.0
+      ],
+      [
+        101.1500015258789,
+        103.4000015258789,
+        101.04000091552734,
+        102.69000244140625,
+        6332300.0
+      ],
+      [
+        102.5199966430664,
+        103.13999938964844,
+        101.37000274658203,
+        103.04000091552734,
+        5667300.0
+      ],
+      [
+        103.08999633789062,
+        104.44999694824219,
+        102.54000091552734,
+        103.19999694824219,
+        7601600.0
+      ],
+      [
+        105.12999725341797,
+        105.76000213623047,
+        103.08000183105469,
+        105.51000213623047,
+        11122900.0
+      ],
+      [
+        105.70999908447266,
+        106.25,
+        102.23999786376953,
+        103.66999816894531,
+        14217600.0
+      ],
+      [
+        104.41000366210938,
+        105.05999755859375,
+        102.29000091552734,
+        104.4000015258789,
+        9907800.0
+      ],
+      [
+        104.20999908447266,
+        104.87000274658203,
+        102.61000061035156,
+        104.7699966430664,
+        6690600.0
+      ],
+      [
+        106.31999969482422,
+        109.81999969482422,
+        105.87999725341797,
+        109.69999694824219,
+        10192700.0
+      ],
+      [
+        110.12000274658203,
+        111.5,
+        106.02999877929688,
+        106.16000366210938,
+        13519400.0
+      ],
+      [
+        103.5199966430664,
+        106.62000274658203,
+        102.69000244140625,
+        105.41000366210938,
+        7780600.0
+      ]
+    ]
+  },
+  "hist_2y": {
+    "index": [
+      "2024-11-04T00:00:00-05:00",
+      "2024-11-11T00:00:00-05:00",
+      "2024-11-18T00:00:00-05:00",
+      "2024-11-25T00:00:00-05:00",
+      "2024-12-02T00:00:00-05:00",
+      "2024-12-09T00:00:00-05:00",
+      "2024-12-16T00:00:00-05:00",
+      "2024-12-23T00:00:00-05:00",
+      "2024-12-30T00:00:00-05:00",
+      "2025-01-06T00:00:00-05:00",
+      "2025-01-13T00:00:00-05:00",
+      "2025-01-20T00:00:00-05:00",
+      "2025-01-27T00:00:00-05:00",
+      "2025-02-03T00:00:00-05:00",
+      "2025-02-10T00:00:00-05:00",
+      "2025-02-17T00:00:00-05:00",
+      "2025-02-24T00:00:00-05:00",
+      "2025-03-03T00:00:00-05:00",
+      "2025-03-10T00:00:00-04:00",
+      "2025-03-17T00:00:00-04:00",
+      "2025-03-24T00:00:00-04:00",
+      "2025-03-31T00:00:00-04:00",
+      "2025-04-07T00:00:00-04:00",
+      "2025-04-14T00:00:00-04:00",
+      "2025-04-21T00:00:00-04:00",
+      "2025-04-28T00:00:00-04:00",
+      "2025-05-05T00:00:00-04:00",
+      "2025-05-12T00:00:00-04:00",
+      "2025-05-19T00:00:00-04:00",
+      "2025-05-26T00:00:00-04:00",
+      "2025-06-02T00:00:00-04:00",
+      "2025-06-09T00:00:00-04:00",
+      "2025-06-16T00:00:00-04:00",
+      "2025-06-23T00:00:00-04:00",
+      "2025-06-30T00:00:00-04:00",
+      "2025-07-07T00:00:00-04:00",
+      "2025-07-14T00:00:00-04:00",
+      "2025-07-21T00:00:00-04:00",
+      "2025-07-28T00:00:00-04:00",
+      "2025-08-04T00:00:00-04:00",
+      "2025-08-11T00:00:00-04:00",
+      "2025-08-18T00:00:00-04:00",
+      "2025-08-25T00:00:00-04:00",
+      "2025-09-01T00:00:00-04:00",
+      "2025-09-08T00:00:00-04:00",
+      "2025-09-15T00:00:00-04:00",
+      "2025-09-22T00:00:00-04:00",
+      "2025-09-29T00:00:00-04:00",
+      "2025-10-06T00:00:00-04:00",
+      "2025-10-13T00:00:00-04:00",
+      "2025-10-20T00:00:00-04:00",
+      "2025-10-27T00:00:00-04:00",
+      "2025-11-03T00:00:00-05:00",
+      "2025-11-10T00:00:00-05:00",
+      "2025-11-17T00:00:00-05:00",
+      "2025-11-24T00:00:00-05:00",
+      "2025-12-01T00:00:00-05:00",
+      "2025-12-08T00:00:00-05:00",
+      "2025-12-15T00:00:00-05:00",
+      "2025-12-22T00:00:00-05:00",
+      "2025-12-29T00:00:00-05:00",
+      "2026-01-05T00:00:00-05:00",
+      "2026-01-12T00:00:00-05:00",
+      "2026-01-19T00:00:00-05:00",
+      "2026-01-26T00:00:00-05:00",
+      "2026-02-02T00:00:00-05:00",
+      "2026-02-09T00:00:00-05:00",
+      "2026-02-16T00:00:00-05:00",
+      "2026-02-23T00:00:00-05:00",
+      "2026-03-02T00:00:00-05:00",
+      "2026-03-09T00:00:00-04:00",
+      "2026-03-16T00:00:00-04:00",
+      "2026-03-23T00:00:00-04:00",
+      "2026-03-30T00:00:00-04:00",
+      "2026-04-06T00:00:00-04:00",
+      "2026-04-13T00:00:00-04:00",
+      "2026-04-20T00:00:00-04:00",
+      "2026-04-27T00:00:00-04:00",
+      "2026-05-04T00:00:00-04:00",
+      "2026-05-11T00:00:00-04:00",
+      "2026-05-18T00:00:00-04:00",
+      "2026-05-25T00:00:00-04:00",
+      "2026-06-01T00:00:00-04:00",
+      "2026-06-08T00:00:00-04:00",
+      "2026-06-15T00:00:00-04:00",
+      "2026-06-22T00:00:00-04:00",
+      "2026-06-29T00:00:00-04:00",
+      "2026-07-06T00:00:00-04:00",
+      "2026-07-13T00:00:00-04:00",
+      "2026-07-20T00:00:00-04:00",
+      "2026-07-27T00:00:00-04:00",
+      "2026-08-03T00:00:00-04:00",
+      "2026-08-10T00:00:00-04:00",
+      "2026-08-17T00:00:00-04:00",
+      "2026-08-24T00:00:00-04:00",
+      "2026-08-31T00:00:00-04:00",
+      "2026-09-07T00:00:00-04:00",
+      "2026-09-14T00:00:00-04:00",
+      "2026-09-21T00:00:00-04:00",
+      "2026-09-28T00:00:00-04:00",
+      "2026-10-05T00:00:00-04:00",
+      "2026-10-12T00:00:00-04:00",
+      "2026-10-19T00:00:00-04:00",
+      "2026-10-26T00:00:00-04:00",
+      "2026-11-02T00:00:00-05:00"
+    ],
+    "columns": [
+      "Open",
+      "High",
+      "Low",
+      "Close",
+      "Volume"
+    ],
+    "data": [
+      [
+        92.20662964967218,
+        93.40473781581288,
+        90.12420476048375,
+        92.75814056396484,
+        22022700.0
+      ],
+      [
+        93.76241606076725,
+        97.0249689397003,
+        92.06895522736568,
+        94.16425323486328,
+        42129400.0
+      ],
+      [
+        94.1834069929699,
+        98.12525143940911,
+        92.9109151131553,
+        98.0678482055664,
+        37069300.0
+      ],
+      [
+        98.47924197438714,
+        98.85237754369813,
+        96.12561480661988,
+        98.0295639038086,
+        23675000.0
+      ],
+      [
+        97.58944819152639,
+        97.79036676774611,
+        94.18338743362104,
+        95.78117370605469,
+        32847600.0
+      ],
+      [
+        95.74291828588599,
+        96.22129801296636,
+        92.74826382218117,
+        93.20750427246094,
+        35758200.0
+      ],
+      [
+        92.75782584752,
+        92.80566673986445,
+        83.30504510018511,
+        84.16613006591797,
+        72924500.0
+      ],
+      [
+        83.71644782503122,
+        89.1699735064067,
+        82.56833946037165,
+        88.26105499267578,
+        32364800.0
+      ],
+      [
+        87.34257683736433,
+        89.09344849842732,
+        85.95527116350466,
+        88.57679748535156,
+        26231000.0
+      ],
+      [
+        88.06013639383511,
+        90.41376365103373,
+        87.88791940918667,
+        88.26105499267578,
+        28200400.0
+      ],
+      [
+        88.28019261496794,
+        91.71496288971302,
+        87.4286772751625,
+        91.01652526855469,
+        32783100.0
+      ],
+      [
+        91.2844156218708,
+        94.7287479176076,
+        91.2844156218708,
+        94.53739166259766,
+        31340900.0
+      ],
+      [
+        94.25993013446498,
+        105.56882562154111,
+        93.85809295003209,
+        103.02384948730469,
+        99320600.0
+      ],
+      [
+        101.14859979226173,
+        107.75024077645088,
+        100.95724354229571,
+        107.34839630126953,
+        56313500.0
+      ],
+      [
+        108.29658047524813,
+        109.15271734641841,
+        106.19952438495048,
+        108.2677230834961,
+        39462200.0
+      ],
+      [
+        107.54626186289022,
+        110.3166816332466,
+        107.37311016854838,
+        107.49816131591797,
+        31851500.0
+      ],
+      [
+        108.06571107765122,
+        111.67303197627677,
+        107.6328355054614,
+        111.4036865234375,
+        52068800.0
+      ],
+      [
+        111.62494172601873,
+        112.99091218111172,
+        99.5043446532425,
+        102.42868041992188,
+        61593800.0
+      ],
+      [
+        101.70721504829358,
+        101.96693892767308,
+        92.28008002310868,
+        94.37713623046875,
+        53463200.0
+      ],
+      [
+        93.99235018636455,
+        95.89701880409923,
+        92.62637980042568,
+        93.37670135498047,
+        39856600.0
+      ],
+      [
+        94.30017795139753,
+        96.1182671178897,
+        91.16421155951186,
+        94.0115966796875,
+        42018600.0
+      ],
+      [
+        92.94383133810206,
+        95.95473931306269,
+        78.20672279681827,
+        78.97628021240234,
+        63404800.0
+      ],
+      [
+        75.63830950062324,
+        85.7388090236856,
+        73.25267181841323,
+        82.1795883178711,
+        99571100.0
+      ],
+      [
+        83.03571038781251,
+        83.46858592536744,
+        76.85035768830205,
+        78.39910125732422,
+        38837400.0
+      ],
+      [
+        77.30247617415817,
+        82.47777615350893,
+        75.15731962788699,
+        80.62120819091797,
+        42716100.0
+      ],
+      [
+        81.12143190662036,
+        81.83327448949007,
+        72.62739210204091,
+        81.46773529052734,
+        96584900.0
+      ],
+      [
+        80.8039944961949,
+        80.88095244281666,
+        77.14857276191202,
+        77.2447738647461,
+        49266700.0
+      ],
+      [
+        81.03378891664359,
+        85.03461760229821,
+        81.0240996042559,
+        82.89373779296875,
+        68348100.0
+      ],
+      [
+        81.8087619794254,
+        83.45559767962149,
+        79.92944191367742,
+        81.76033020019531,
+        45282700.0
+      ],
+      [
+        82.7581170683581,
+        84.86024702109344,
+        80.5881767103984,
+        81.32440185546875,
+        40953600.0
+      ],
+      [
+        80.67535422861744,
+        87.07862210215224,
+        80.58817259383083,
+        86.83644104003906,
+        42536500.0
+      ],
+      [
+        86.29394142827155,
+        92.91032856173646,
+        86.29394142827155,
+        90.34320831298828,
+        44147100.0
+      ],
+      [
+        91.04071458809086,
+        91.4766375745461,
+        87.95048165098007,
+        90.20761108398438,
+        28570300.0
+      ],
+      [
+        90.28509284638662,
+        90.90507574561492,
+        87.48548048840219,
+        89.22918701171875,
+        53899700.0
+      ],
+      [
+        89.52949337261262,
+        92.8619071562253,
+        88.23140642574644,
+        91.48632049560547,
+        31411300.0
+      ],
+      [
+        91.2150765242497,
+        94.82841374270937,
+        90.06229233207368,
+        91.9706802368164,
+        33872700.0
+      ],
+      [
+        90.75008344301496,
+        91.50568713725119,
+        87.73735058671886,
+        90.8663330078125,
+        35514900.0
+      ],
+      [
+        91.35069965369374,
+        95.10934707981951,
+        89.42293307647047,
+        91.4669418334961,
+        43606700.0
+      ],
+      [
+        91.96099104707646,
+        95.79713809419457,
+        82.81623199084785,
+        84.14338684082031,
+        108838600.0
+      ],
+      [
+        84.35650546719401,
+        89.32605797356884,
+        84.22088466988173,
+        89.23887634277344,
+        45291000.0
+      ],
+      [
+        89.74967412812991,
+        92.48974760353211,
+        88.12123225539489,
+        88.34550476074219,
+        43530300.0
+      ],
+      [
+        88.06272213250135,
+        91.25135556625807,
+        85.91746994356508,
+        86.18074798583984,
+        33300700.0
+      ],
+      [
+        86.0247280564532,
+        86.3660171421461,
+        83.44066936841703,
+        85.99547576904297,
+        42227400.0
+      ],
+      [
+        85.65418678843953,
+        87.75068769885253,
+        82.94336546966845,
+        83.30416107177734,
+        36513600.0
+      ],
+      [
+        83.37241551936194,
+        83.37241551936194,
+        79.1794138683014,
+        79.86199951171875,
+        48000300.0
+      ],
+      [
+        80.03752691665937,
+        83.09939070882362,
+        79.94001679987642,
+        82.455810546875,
+        49042000.0
+      ],
+      [
+        82.1340274913068,
+        84.03550079739452,
+        80.82736812645948,
+        81.31492614746094,
+        41937200.0
+      ],
+      [
+        81.56844816716224,
+        85.08861723228517,
+        81.47093806310542,
+        84.26951599121094,
+        44048200.0
+      ],
+      [
+        84.14276717451631,
+        84.14276717451631,
+        76.4588551662263,
+        76.50760650634766,
+        57670000.0
+      ],
+      [
+        76.88789374842088,
+        83.80146993436614,
+        76.55635788528238,
+        83.23590087890625,
+        46736300.0
+      ],
+      [
+        83.5576905783021,
+        84.67906800194126,
+        81.56845308941716,
+        83.9477310180664,
+        31638600.0
+      ],
+      [
+        84.13300117679464,
+        85.36164933059686,
+        78.22380102679557,
+        78.85762786865234,
+        64527400.0
+      ],
+      [
+        78.91614350712197,
+        83.81122288430767,
+        76.04929989285762,
+        83.44068145751953,
+        70688600.0
+      ],
+      [
+        84.52474254927024,
+        87.47122447863778,
+        82.501494022291,
+        83.267578125,
+        56001500.0
+      ],
+      [
+        83.67027364853323,
+        85.30065653774913,
+        80.87110961816292,
+        83.8274154663086,
+        41125700.0
+      ],
+      [
+        83.73901930669327,
+        85.7328042317803,
+        81.34254491741488,
+        85.55601501464844,
+        31351300.0
+      ],
+      [
+        84.67207595601742,
+        86.30246637079598,
+        82.71757819400835,
+        83.60152435302734,
+        47015900.0
+      ],
+      [
+        83.61133891023732,
+        84.39707047898891,
+        80.50771494958087,
+        83.8274154663086,
+        47105600.0
+      ],
+      [
+        84.46582095237437,
+        88.96411879683265,
+        82.99257988925156,
+        86.75425720214844,
+        60599800.0
+      ],
+      [
+        86.58728968274811,
+        87.03908269915597,
+        81.8925553088583,
+        83.5622329711914,
+        25181800.0
+      ],
+      [
+        83.60151688115326,
+        85.24172336150589,
+        81.5389735300179,
+        82.47203063964844,
+        26521200.0
+      ],
+      [
+        82.0104121323858,
+        89.02303839070977,
+        81.91219756860998,
+        87.29443359375,
+        46525700.0
+      ],
+      [
+        86.82300198641765,
+        92.49006557641002,
+        86.03727047789981,
+        91.33111572265625,
+        40184500.0
+      ],
+      [
+        90.1230628060452,
+        96.143704857148,
+        89.16054207772245,
+        95.87852478027344,
+        56583900.0
+      ],
+      [
+        95.47582858735807,
+        102.95007116185133,
+        89.37661231639046,
+        90.30966186523438,
+        83822800.0
+      ],
+      [
+        90.21145342577282,
+        97.80355848183939,
+        89.00340003293522,
+        97.67587280273438,
+        40957300.0
+      ],
+      [
+        97.89061643752221,
+        100.0356478526974,
+        92.52309060008157,
+        92.71090698242188,
+        41129500.0
+      ],
+      [
+        93.80813463558675,
+        96.65499623468882,
+        92.5428628137636,
+        96.36833190917969,
+        29193100.0
+      ],
+      [
+        95.03386023548241,
+        98.65175371056502,
+        92.47366311099593,
+        96.89222717285156,
+        34061100.0
+      ],
+      [
+        94.6088132740424,
+        98.07843128547954,
+        93.31388781592949,
+        97.85107421875,
+        41116000.0
+      ],
+      [
+        97.11958500557374,
+        101.26137939012045,
+        95.70603756337002,
+        98.00923156738281,
+        47847100.0
+      ],
+      [
+        98.08831198010886,
+        98.75060148125112,
+        90.53620710595594,
+        91.48516845703125,
+        44338500.0
+      ],
+      [
+        92.7306725758732,
+        93.92675009255001,
+        84.61513311564741,
+        85.81121063232422,
+        39276200.0
+      ],
+      [
+        85.40592910109076,
+        90.17047244522641,
+        85.2279997836079,
+        89.33025360107422,
+        32370800.0
+      ],
+      [
+        88.96450870370977,
+        97.00096660829688,
+        88.78657938463776,
+        95.48857116699219,
+        32351500.0
+      ],
+      [
+        95.48857374802465,
+        100.26300432082965,
+        94.35180348664989,
+        98.84945678710938,
+        29235200.0
+      ],
+      [
+        97.86096454662746,
+        99.65013734370852,
+        95.73569966683725,
+        97.53475952148438,
+        27483900.0
+      ],
+      [
+        97.60394752425861,
+        106.28292826821091,
+        95.34029415150876,
+        104.68157196044922,
+        56992500.0
+      ],
+      [
+        104.58272551005393,
+        106.31259095772371,
+        101.75563051796154,
+        103.72273254394531,
+        34329500.0
+      ],
+      [
+        104.35055514280612,
+        108.25810850613529,
+        103.7440386665929,
+        106.20987701416016,
+        37909700.0
+      ],
+      [
+        106.18005381956809,
+        107.49251413829322,
+        101.80518356187832,
+        102.52107238769531,
+        35924600.0
+      ],
+      [
+        102.49124403616749,
+        103.37616005301041,
+        98.01694650056339,
+        98.59363555908203,
+        32468600.0
+      ],
+      [
+        97.68882769298048,
+        97.77831000081963,
+        93.10515791904493,
+        94.74573516845703,
+        41427600.0
+      ],
+      [
+        94.29830064444057,
+        103.09775834666566,
+        93.93041882089834,
+        102.45146942138672,
+        42391100.0
+      ],
+      [
+        102.89889415236418,
+        103.0182114793854,
+        98.12631485878102,
+        100.07511901855469,
+        31236700.0
+      ],
+      [
+        100.0751200517713,
+        104.32072780335845,
+        98.68311489875626,
+        104.00255584716797,
+        42726400.0
+      ],
+      [
+        104.21135507286556,
+        105.14598850929879,
+        100.82083588920041,
+        103.6744384765625,
+        29343100.0
+      ],
+      [
+        103.26678902046312,
+        106.94565289476586,
+        99.5183176790171,
+        105.40451049804688,
+        31744500.0
+      ],
+      [
+        105.73261762542865,
+        108.60611788499558,
+        104.1119303745233,
+        104.8874740600586,
+        30085000.0
+      ],
+      [
+        105.11616409454297,
+        106.04085255044593,
+        101.34781039084451,
+        102.66027069091797,
+        31137400.0
+      ],
+      [
+        103.21707182695245,
+        107.84051420032479,
+        102.07364628600696,
+        104.64884948730469,
+        60929900.0
+      ],
+      [
+        107.08485332595589,
+        107.74108728467681,
+        101.2185580712523,
+        104.97696685791016,
+        38626000.0
+      ],
+      [
+        105.4800033569336,
+        110.51000213623047,
+        104.12999725341797,
+        107.69000244140625,
+        22573900.0
+      ],
+      [
+        106.45999908447266,
+        109.2300033569336,
+        102.97000122070312,
+        107.08000183105469,
+        31234900.0
+      ],
+      [
+        107.22000122070312,
+        108.73999786376953,
+        105.36000061035156,
+        107.8499984741211,
+        29865900.0
+      ],
+      [
+        107.5199966430664,
+        107.9000015258789,
+        104.36000061035156,
+        104.47000122070312,
+        25862400.0
+      ],
+      [
+        104.68000030517578,
+        104.76000213623047,
+        98.45999908447266,
+        98.73999786376953,
+        24737000.0
+      ],
+      [
+        98.79000091552734,
+        99.87999725341797,
+        95.11000061035156,
+        95.83000183105469,
+        41649700.0
+      ],
+      [
+        95.12999725341797,
+        96.44000244140625,
+        92.76000213623047,
+        94.86000061035156,
+        38230700.0
+      ],
+      [
+        94.26000213623047,
+        96.19999694824219,
+        93.7699966430664,
+        94.70999908447266,
+        31603100.0
+      ],
+      [
+        94.76000213623047,
+        96.7300033569336,
+        87.3499984741211,
+        90.75,
+        67581800.0
+      ],
+      [
+        91.20999908447266,
+        97.9800033569336,
+        90.5199966430664,
+        97.5199966430664,
+        52261300.0
+      ],
+      [
+        97.52999877929688,
+        102.19999694824219,
+        96.66000366210938,
+        100.80000305175781,
+        36667000.0
+      ],
+      [
+        101.1500015258789,
+        106.25,
+        101.04000091552734,
+        103.66999816894531,
+        44941700.0
+      ],
+      [
+        104.41000366210938,
+        111.5,
+        102.29000091552734,
+        105.41000366210938,
+        55871487.0
+      ]
+    ]
+  }
+}

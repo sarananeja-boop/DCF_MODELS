@@ -1,6 +1,7 @@
 import React from 'react';
 import { FiCpu, FiCheckCircle, FiAlertTriangle, FiDownload } from 'react-icons/fi';
 import AIReportRenderer from './AIReportRenderer';
+import { MODEL_VERSION } from '../version';
 
 const formatCurrency = (value, symbol, compact) => {
   if (value == null || isNaN(value)) return 'N/A';
@@ -127,10 +128,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const isPositive = dcfUpside >= 0;
 
   // Simply Wall St-style Fair Value Scale
-  const p5 = monte_carlo?.stats?.p5 || impliedPrice * 0.65;
-  const p25 = monte_carlo?.stats?.p25 || impliedPrice * 0.82;
-  const p75 = monte_carlo?.stats?.p75 || impliedPrice * 1.18;
-  const p95 = monte_carlo?.stats?.p95 || impliedPrice * 1.45;
+  const p5 = monte_carlo?.stats?.p5 ?? impliedPrice * 0.65;
+  const p25 = monte_carlo?.stats?.p25 ?? impliedPrice * 0.82;
+  const p75 = monte_carlo?.stats?.p75 ?? impliedPrice * 1.18;
+  const p95 = monte_carlo?.stats?.p95 ?? impliedPrice * 1.45;
   const exitImpliedPrice = validation?.exit_implied_price ?? diagnostics?.exit_implied_price;
   const justifiedPrice = dcf_result?.justified_price ?? validation?.justified_price;
 
@@ -777,6 +778,17 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
                     : formatPercent(wacc_details?.pretax_cost_of_debt)}
                 </span>
               </div>
+              {!isEquityModel && (
+                <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                  <span className="text-[#a6b0c3]">Effective Tax Rate / Usable Shield</span>
+                  <span className="font-display font-bold tabular-nums text-[#f4eedf]">
+                    {formatPercent(wacc_details?.effective_tax_rate ?? data?.macro_assumptions?.corporate_tax_rate)}
+                    {wacc_details?.tax_shield_capped ? (
+                      <span className="text-[10px] text-[#e3b23c] ml-1">(EBIT-capped)</span>
+                    ) : null}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                 <span className="text-[#a6b0c3]">Synthetic Credit Rating</span>
                 <span className="font-display font-bold text-[#e3b23c]">
@@ -1004,7 +1016,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
       <div className="bg-[#0d121a] rounded-2xl p-4 border border-white/[0.06] text-xs text-[#818ea4] flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-4">
           <span>
-            <strong className="text-[#a6b0c3]">Model Engine:</strong> {metadata?.model_version ? `ValuationLabs v${metadata.model_version}` : 'ValuationLabs v2.4.0'}
+            <strong className="text-[#a6b0c3]">Model Engine:</strong> {metadata?.model_version ? `ValuationLabs v${metadata.model_version}` : `ValuationLabs v${MODEL_VERSION}`}
           </span>
           <span className="text-white/10">|</span>
           <span>

@@ -12,6 +12,7 @@
     "@vercel/analytics": "^2.0.1",
     "axios": "^1.7.2",
     "html2pdf.js": "^0.14.0",
+    "lightweight-charts": "^5.2.1",
     "plotly.js": "^2.33.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

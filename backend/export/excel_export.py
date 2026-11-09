@@ -21,6 +21,7 @@ from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+from engine import MODEL_VERSION
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference, Series
 from openpyxl.chart.shapes import GraphicalProperties
@@ -239,7 +240,7 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         ("Exchange Market", company.get("market")),
         ("Reporting Currency", currency),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
-        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
+        ("Model Engine Version", data.get("metadata", {}).get("model_version", f"v{MODEL_VERSION}")),
         ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
         ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
@@ -361,6 +362,101 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         val_cell.fill = fill or PatternFill(fill_type=None)
         val_cell.border = THIN_BORDER
         val_cell.alignment = ALIGN_RIGHT
+        if fmt:
+            val_cell.number_format = fmt
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
+        r += 1
+
+    # Section 4: Model Assumption Status (Defaults vs. User Overrides)
+    r += 1
+    _set_banner(ws, r, 2, 5, "Model Assumption Status (Defaults vs. User Overrides)")
+    r += 1
+
+    diag = data.get("diagnostics", {})
+    def_g = float(diag.get("default_growth", historicals.get("rev_cagr", 0.08)) or 0.0)
+    def_m = float(diag.get("default_margin", historicals.get("avg_ebit_margin", 0.15)) or 0.0)
+    def_w = float(diag.get("default_wacc", wacc_data.get("wacc", 0.10)) or 0.0)
+    def_t = float(macro.get("terminal_growth_rate", macro.get("terminal_growth", 0.05 if company.get("market") == "IN" else 0.025)) or 0.0)
+
+    ov_g = overrides.get("revenue_growth")
+    ov_m = overrides.get("ebit_margin")
+    ov_w = overrides.get("wacc")
+    ov_t = overrides.get("terminal_growth")
+
+    app_g = float(ov_g) if ov_g is not None else def_g
+    app_m = float(ov_m) if ov_m is not None else def_m
+    app_w = float(ov_w) if ov_w is not None else wacc_val
+    app_t = float(ov_t) if ov_t is not None else term_g
+    has_user_overrides = any(x is not None for x in (ov_g, ov_m, ov_w, ov_t))
+
+    override_rows = [
+        ("Assumption Override Status", "Custom User Overrides Applied" if has_user_overrides else "100% Model Baseline Defaults", None),
+        ("Year-1 Revenue Growth (Default vs. Applied)", f"Default: {def_g*100:.1f}% | Applied: {app_g*100:.1f}% ({'Edited' if ov_g is not None else 'Default'})", None),
+        ("Target Operating Margin (Default vs. Applied)", f"Default: {def_m*100:.1f}% | Applied: {app_m*100:.1f}% ({'Edited' if ov_m is not None else 'Default'})", None),
+        ("Discount Rate / WACC (Default vs. Applied)", f"Default: {def_w*100:.1f}% | Applied: {app_w*100:.1f}% ({'Edited' if ov_w is not None else 'Default'})", None),
+        ("Terminal Growth Rate (Default vs. Applied)", f"Default: {def_t*100:.1f}% | Applied: {app_t*100:.1f}% ({'Edited' if ov_t is not None else 'Default'})", None),
+    ]
+
+    for label, val, fmt in override_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA_BOLD if label == "Assumption Override Status" and has_user_overrides else FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
+        if fmt:
+            val_cell.number_format = fmt
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
+        r += 1
+
+    # Section 5: Monte Carlo Simulation & Reproducibility Configuration
+    r += 1
+    _set_banner(ws, r, 2, 5, "Monte Carlo Simulation & Reproducibility Configuration")
+    r += 1
+
+    mc_obj = data.get("monte_carlo", {})
+    valid_sims = int(mc_obj.get("valid_simulations") or mc_obj.get("actual_iterations") or 10000)
+    total_sims = int(mc_obj.get("total_simulations") or valid_sims)
+    rejected_sims = max(0, total_sims - valid_sims)
+    zero_sims = int(mc_obj.get("zero_price_simulations") or 0)
+    corr_gm = float(mc_obj.get("hist_corr_gm", mc_obj.get("inputs", {}).get("hist_corr_gm", 0.0)) or 0.0)
+
+    mc_config_rows = [
+        ("Retained Valid Simulations", valid_sims, INT_FMT),
+        ("Candidate Draws Sampled", total_sims, INT_FMT),
+        ("Rejected Draws (WACC <= g + 0.50% / Kd <= 0)", rejected_sims, INT_FMT),
+        ("Equity Wipeout Draws (Floored at 0.00)", zero_sims, INT_FMT),
+        ("Cholesky Growth-Margin Correlation (ρ)", corr_gm, NUM_2DEC_FMT),
+        ("Random Seed & Reproducibility Policy", "Deterministic Cholesky (Seed = 42)", None),
+    ]
+
+    for label, val, fmt in mc_config_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
         if fmt:
             val_cell.number_format = fmt
 
@@ -2023,7 +2119,7 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
         ("Industry", company.get("industry") or ("Banking / NBFC" if is_fin else "Corporate")),
         ("Reporting Currency", currency),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
-        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
+        ("Model Engine Version", data.get("metadata", {}).get("model_version", f"v{MODEL_VERSION}")),
         ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
         ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
@@ -2156,6 +2252,103 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
         if fmt:
             val_cell.number_format = fmt
         val_cell.alignment = ALIGN_RIGHT if isinstance(val, (int, float)) else ALIGN_LEFT
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
+        ws.row_dimensions[r].height = 19
+        r += 1
+
+    # Section 4: Model Assumption Status (Defaults vs. User Overrides)
+    r += 1
+    _set_banner(ws, r, 2, 5, "Model Assumption Status (Defaults vs. User Overrides)")
+    r += 1
+
+    overrides = data.get("overrides_applied", {})
+    historicals = data.get("historicals", {})
+    def_g = float(diagnostics.get("default_growth", historicals.get("ni_cagr", 0.08)) or 0.0)
+    def_m = float(diagnostics.get("default_margin", historicals.get("avg_roe", 0.14)) or 0.0)
+    def_w = float(diagnostics.get("default_wacc", ke_val) or 0.0)
+    def_t = float(macro.get("terminal_growth_rate", macro.get("terminal_growth", g_val)) or 0.0)
+
+    ov_g = overrides.get("revenue_growth")
+    ov_m = overrides.get("ebit_margin")
+    ov_w = overrides.get("wacc")
+    ov_t = overrides.get("terminal_growth")
+
+    app_g = float(ov_g) if ov_g is not None else def_g
+    app_m = float(ov_m) if ov_m is not None else def_m
+    app_w = float(ov_w) if ov_w is not None else ke_val
+    app_t = float(ov_t) if ov_t is not None else g_val
+    has_user_overrides = any(x is not None for x in (ov_g, ov_m, ov_w, ov_t))
+
+    override_rows = [
+        ("Assumption Override Status", "Custom User Overrides Applied" if has_user_overrides else "100% Model Baseline Defaults", None),
+        ("Year-1 Net Income Growth (Default vs. Applied)", f"Default: {def_g*100:.1f}% | Applied: {app_g*100:.1f}% ({'Edited' if ov_g is not None else 'Default'})", None),
+        ("Target ROE (Default vs. Applied)", f"Default: {def_m*100:.1f}% | Applied: {app_m*100:.1f}% ({'Edited' if ov_m is not None else 'Default'})", None),
+        ("Cost of Equity Ke (Default vs. Applied)", f"Default: {def_w*100:.1f}% | Applied: {app_w*100:.1f}% ({'Edited' if ov_w is not None else 'Default'})", None),
+        ("Terminal Growth Rate (Default vs. Applied)", f"Default: {def_t*100:.1f}% | Applied: {app_t*100:.1f}% ({'Edited' if ov_t is not None else 'Default'})", None),
+    ]
+
+    for label, val, fmt in override_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA_BOLD if label == "Assumption Override Status" and has_user_overrides else FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
+        if fmt:
+            val_cell.number_format = fmt
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
+        ws.row_dimensions[r].height = 19
+        r += 1
+
+    # Section 5: Monte Carlo Simulation & Reproducibility Configuration
+    r += 1
+    _set_banner(ws, r, 2, 5, "Monte Carlo Simulation & Reproducibility Configuration")
+    r += 1
+
+    valid_sims = int(mc.get("valid_simulations") or mc.get("actual_iterations") or 10000)
+    total_sims = int(mc.get("total_simulations") or valid_sims)
+    rejected_sims = max(0, total_sims - valid_sims)
+    zero_sims = int(mc.get("zero_price_simulations") or 0)
+    corr_gm = float(mc.get("hist_corr_gm", mc.get("inputs", {}).get("hist_corr_gm", 0.0)) or 0.0)
+
+    mc_config_rows = [
+        ("Retained Valid Simulations", valid_sims, INT_FMT),
+        ("Candidate Draws Sampled", total_sims, INT_FMT),
+        ("Rejected Draws (Ke <= g + 0.50%)", rejected_sims, INT_FMT),
+        ("Equity Wipeout Draws (Floored at 0.00)", zero_sims, INT_FMT),
+        ("Cholesky Growth-ROE Correlation (ρ)", corr_gm, NUM_2DEC_FMT),
+        ("Random Seed & Reproducibility Policy", "Deterministic Cholesky (Seed = 42)", None),
+    ]
+
+    for label, val, fmt in mc_config_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
+        if fmt:
+            val_cell.number_format = fmt
 
         for c in (4, 5):
             ec = ws.cell(row=r, column=c)
