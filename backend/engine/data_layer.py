@@ -887,6 +887,9 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     if clean_sym == "ADANIENT":
         sector = "Industrials"
         industry = "Infrastructure & Conglomerates"
+    elif clean_sym == "OFSS":
+        sector = "Technology"
+        industry = "Software - Infrastructure"
 
     # Deterministic sector/industry fallback when Yahoo endpoints are rate-limited on cloud IPs
     if not sector:
@@ -965,12 +968,16 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
         is_financial = True
     elif any(kw in ind_lower for kw in ["bank", "credit services", "insurance", "mortgage finance", "consumer finance", "specialty finance", "capital markets"]):
         is_financial = True
-    # 3. Company Name or Symbol Keywords
-    elif any(kw in name_lower for kw in [
-        "bank", "housing finance", "finance", "financial", "financ", "credit",
-        "development agency", "energy development agency", "insurance",
-        "finvest", "leasing", "fincorp", "fino"
-    ]) or any(kw in clean_sym.lower() for kw in ["financ", "bank", "hsgfin", "fincorp", "finvest"]):
+    # 3. Company Name or Symbol Keywords (ONLY when sector is missing or explicitly Financial/Banking)
+    # Technology/software companies (e.g. OFSS), healthcare, or industrials must NEVER be classified as banks
+    # just because their corporate name contains 'financial'.
+    elif (not sector or any(k in sec_lower for k in ["financial", "banking"])) and (
+        any(kw in name_lower for kw in [
+            "bank", "housing finance", "finance", "financial", "financ", "credit",
+            "development agency", "energy development agency", "insurance",
+            "finvest", "leasing", "fincorp", "fino"
+        ]) or any(kw in clean_sym.lower() for kw in ["financ", "bank", "hsgfin", "fincorp", "finvest"])
+    ):
         is_financial = True
     # 4. Financial Statement Structural Signals (ONLY when sector/industry metadata is missing from Yahoo Finance)
     elif not sector and not industry and ("Net Interest Income" in income_stmt.columns or "Interest Income" in income_stmt.columns):
@@ -1283,6 +1290,14 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     else:
         avg_ebitda_growth = avg_rev_growth
 
+    # For newly listed companies or sparse filing histories (n_years <= 2),
+    # incorporate live trailing-12-month (TTM) quarterly YoY growth rate from Yahoo info
+    info_dict = stock_data.get("info") or {}
+    live_rev_growth = info_dict.get("revenueGrowth")
+    if len(rev_growth) <= 1 and live_rev_growth is not None and not np.isnan(live_rev_growth) and live_rev_growth > 0:
+        avg_rev_growth = float(0.70 * float(live_rev_growth) + 0.30 * avg_rev_growth)
+        avg_ebitda_growth = avg_rev_growth
+
     # Banking specific ratio calculations (ROE, Payout, Net Income growth)
     # Use Tangible Book Value (excluding non-earning M&A Goodwill > 10% of equity, e.g. HDFCBANK merger goodwill)
     # because RBI / Basel Tier-1 regulatory capital (CET1) deducts goodwill & intangibles.
@@ -1336,6 +1351,12 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     else:
         avg_ni_growth = avg_rev_growth
         std_ni_growth = std_rev_growth
+
+    # For newly listed companies or sparse filing histories (n_years <= 2),
+    # incorporate live trailing quarterly earnings growth from Yahoo info
+    live_earnings_growth = info_dict.get("earningsGrowth")
+    if len(valid_ni) <= 2 and live_earnings_growth is not None and not np.isnan(live_earnings_growth) and live_earnings_growth > 0:
+        avg_ni_growth = float(0.70 * float(live_earnings_growth) + 0.30 * avg_ni_growth)
 
     avg_capex_pct = float(np.mean(capex / np.where(revenue != 0, revenue, 1.0)))
     avg_dna_pct = float(np.mean(dna / np.where(revenue != 0, revenue, 1.0)))
@@ -1654,7 +1675,16 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         "latest_sbc_pct": latest_sbc_pct,
         # Snapshot values
         "n_years": n_years,
-        "last_revenue": float(revenue[-1]),
+        "last_revenue": float(
+            info_dict["totalRevenue"]
+            if (
+                info_dict.get("totalRevenue")
+                and float(info_dict["totalRevenue"]) > 0
+                and len(revenue) <= 2
+                and float(info_dict["totalRevenue"]) > float(revenue[-1]) * 1.10
+            )
+            else float(revenue[-1])
+        ),
         "total_debt": total_debt,
         "raw_total_debt": raw_total_debt,
         "lease_obligations": lease_obligations,
