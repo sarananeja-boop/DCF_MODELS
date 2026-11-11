@@ -82,25 +82,29 @@ export default function AssumptionSliders({
   };
 
   const handleGrowthChange = (val) => {
-    const clamped = Math.max(-20, Math.min(50, val));
+    let clamped = Math.max(-20, Math.min(50, val));
+    if (Math.abs(clamped - appliedGrowth) <= 0.08) clamped = appliedGrowth;
     setGrowth(clamped);
     notifyParent(clamped, margin, wacc, tgr);
   };
 
   const handleMarginChange = (val) => {
-    const clamped = Math.max(isEquityModel ? 2 : -60, Math.min(isFinancial ? 40 : isEquityModel ? 60 : 65, val));
+    let clamped = Math.max(isEquityModel ? 2 : -60, Math.min(isFinancial ? 40 : isEquityModel ? 60 : 65, val));
+    if (Math.abs(clamped - appliedMargin) <= 0.08) clamped = appliedMargin;
     setMargin(clamped);
     notifyParent(growth, clamped, wacc, tgr);
   };
 
   const handleWaccChange = (val) => {
-    const clamped = Math.max(4, Math.min(25, val));
+    let clamped = Math.max(4, Math.min(25, val));
+    if (Math.abs(clamped - appliedWacc) <= 0.08) clamped = appliedWacc;
     setWacc(clamped);
     notifyParent(growth, margin, clamped, tgr);
   };
 
   const handleTgrChange = (val) => {
-    const clamped = Math.max(0.5, Math.min(maxTgr, val));
+    let clamped = Math.max(0.5, Math.min(maxTgr, val));
+    if (Math.abs(clamped - appliedTgr) <= 0.08) clamped = appliedTgr;
     setTgr(clamped);
     notifyParent(growth, margin, wacc, clamped);
   };
@@ -151,10 +155,10 @@ export default function AssumptionSliders({
     Math.abs(tgr - defaultTgr) > 0.05 ||
     (data.overrides_applied && Object.keys(data.overrides_applied).length > 0);
 
-  // Instant client-side DCF preview when dragging sliders
+  // Instant client-side DCF preview when dragging sliders (mirroring dcf_engine.py & bank_engine.py)
   const livePreview = useMemo(() => {
     const dcf = data.dcf_result;
-    if (!dcf || !dcf.implied_price) return null;
+    if (!dcf || dcf.implied_price == null) return null;
 
     const isDirty =
       Math.abs(growth - appliedGrowth) > 0.05 ||
@@ -171,39 +175,183 @@ export default function AssumptionSliders({
     }
 
     const gNew = growth / 100;
-    const gOld = appliedGrowth / 100;
-    const mNew = Math.max(0.01, margin / 100);
-    const mOld = Math.max(0.01, appliedMargin / 100);
+    const mNew = margin / 100;
     const wNew = Math.max(0.04, wacc / 100);
-    const tNew = Math.min(wNew - 0.01, tgr / 100);
+    const tNew = Math.max(0.005, tgr / 100);
+    const years = dcf.projected_revenue?.length || 5;
+    const shares = data.market_data?.shares_outstanding || 1;
+    const market = data.company?.market || 'US';
 
-    const years = dcf.projected_ufcf?.length || 5;
-    const baseUfcfList = dcf.projected_ufcf || [];
-    const marginRatio = mNew / mOld;
+    if (isEquityModel) {
+      // Bank / Corporate DDM Engine mirroring bank_engine.py
+      const hist = data.historicals || {};
+      const diag = data.diagnostics || {};
+      const niHist = hist.net_income || [];
+      const validNi = niHist.filter((x) => x > 0);
+      const baseNi = validNi.length > 0 ? validNi[validNi.length - 1] : (hist.revenue?.[hist.revenue.length - 1] || 1e9) * 0.15;
 
-    let pvUfcf = 0;
-    let lastUfcf = 0;
-    for (let i = 0; i < years; i++) {
-      const yearIdx = i + 1;
-      const fadeWeight = i / Math.max(1, years - 1);
-      const stepGNew = gNew * (1 - fadeWeight * 0.5) + tNew * (fadeWeight * 0.5);
-      const stepGOld = gOld * (1 - fadeWeight * 0.5) + (appliedTgr / 100) * (fadeWeight * 0.5);
-      const growthCompoundRatio = Math.pow((1 + stepGNew) / Math.max(0.5, 1 + stepGOld), yearIdx);
-      const simUfcf = (baseUfcfList[i] || 0) * growthCompoundRatio * marginRatio;
-      const midYearPeriod = i + 0.5;
-      pvUfcf += simUfcf / Math.pow(1 + wNew, midYearPeriod);
-      if (i === years - 1) lastUfcf = simUfcf;
+      const bveHist = hist.book_value || [];
+      const validBve = bveHist.filter((x) => x > 0);
+      const baseBve = validBve.length > 0 ? validBve[validBve.length - 1] : baseNi / 0.14;
+
+      const currRoe = Number(diag.current_ebit_margin ?? hist.avg_roe ?? 0.14);
+      const targetRoe = Math.max(0.05, Math.min(0.35, mNew));
+      let baseRoe = Math.max(0.05, Math.min(0.35, currRoe));
+      if (baseRoe < targetRoe * 0.90) baseRoe = targetRoe;
+
+      const ke = wNew;
+      const termG = Math.min(tNew, market === 'IN' ? 0.055 : 0.025);
+      const stG = Math.max(-0.05, Math.min(0.35, gNew));
+
+      let gSched;
+      if (stG > termG + 0.06) {
+        gSched = Array.from({ length: years }, (_, i) => {
+          const step = i / years;
+          return stG - (stG - termG) * Math.pow(step, 1.35);
+        });
+      } else {
+        gSched = Array.from({ length: years }, (_, i) => stG + (termG - stG) * (i / Math.max(1, years - 1)));
+      }
+
+      const roeSched = Array.from({ length: years }, (_, i) => baseRoe + (targetRoe - baseRoe) * (i / Math.max(1, years - 1)));
+
+      let curNi = baseNi;
+      let curBve = baseBve;
+      let pvFcfe = 0;
+      let lastNi = 0;
+
+      for (let i = 0; i < years; i++) {
+        const yrG = gSched[i];
+        const yrGNext = i + 1 < years ? gSched[i + 1] : termG;
+        const roe = roeSched[i];
+        curNi = curNi * (1 + yrG);
+
+        const marginalRoe = Math.max(roe, targetRoe, yrG * 0.95);
+        const retentionB = marginalRoe > 0 ? Math.min(0.85, Math.max(0.05, yrGNext / marginalRoe)) : 0.50;
+        const reinvested = curNi * retentionB;
+        const fcfe = curNi * (1 - retentionB);
+        curBve += reinvested;
+
+        pvFcfe += fcfe / Math.pow(1 + ke, i + 0.5);
+        if (i === years - 1) lastNi = curNi;
+      }
+
+      const spread = ke - termG;
+      let tv = 0;
+      if (spread < 0.020) {
+        const effTermG = Math.max(0.01, ke - 0.020);
+        const termRoe = roeSched[years - 1];
+        const termRet = termRoe > 0 ? Math.min(0.95, Math.max(0.05, effTermG / termRoe)) : 0.50;
+        const termNi = lastNi * (1 + effTermG);
+        const termFcfe = termNi * (1 - termRet);
+        tv = termFcfe / 0.020;
+      } else {
+        const termRoe = roeSched[years - 1];
+        const termRet = termRoe > 0 ? Math.min(0.95, Math.max(0.05, termG / termRoe)) : 0.50;
+        const termNi = lastNi * (1 + termG);
+        const termFcfe = termNi * (1 - termRet);
+        tv = termFcfe / spread;
+      }
+
+      const pvTv = tv / Math.pow(1 + ke, years - 0.5);
+      const eqVal = pvFcfe + pvTv;
+      const simPrice = Math.max(0, eqVal / shares);
+
+      return {
+        isDirty: true,
+        price: simPrice,
+        upside: (simPrice / currentPrice) - 1,
+      };
     }
 
-    const tv = (lastUfcf * (1 + tNew)) / Math.max(0.015, wNew - tNew);
-    const pvTv = tv / Math.pow(1 + wNew, years);
+    // Standard FCFF Engine mirroring dcf_engine.py
+    const hist = data.historicals || {};
+    const diag = data.diagnostics || {};
+    const revHist = hist.revenue || [];
+    const lastRev = revHist.length > 0 ? revHist[revHist.length - 1] : (dcf.projected_revenue?.[0] / (1 + (diag.default_growth || 0.10))) || 1;
+    const taxRate = dcf.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21);
+    const nwcRatio = dcf.normalized_nwc_to_revenue || 0;
+
+    const baseRev = dcf.projected_revenue || [];
+    const baseDna = dcf.projected_dna || [];
+    const baseCapex = dcf.projected_capex || [];
+    const isExtractive = Boolean(dcf.is_extractive || diag.is_extractive);
+    const isCyclical = Boolean(dcf.is_cyclical || diag.is_cyclical);
+
+    let gSched;
+    if (!isExtractive && !isCyclical && gNew > tNew + 0.10) {
+      gSched = Array.from({ length: years }, (_, i) => {
+        const step = i / years;
+        return gNew - (gNew - tNew) * Math.pow(step, 1.35);
+      });
+    } else {
+      gSched = Array.from({ length: years }, (_, i) => gNew + (tNew - gNew) * (i / Math.max(1, years - 1)));
+    }
+
+    const currM = diag.current_ebit_margin;
+    let mSched;
+    if (currM != null && Math.abs(currM - mNew) > 0.005) {
+      mSched = Array.from({ length: years }, (_, i) => currM + (mNew - currM) * ((i + 1) / years));
+    } else {
+      mSched = Array.from({ length: years }, () => mNew);
+    }
+
+    const dnaPct = (baseRev[0] && baseDna[0]) ? baseDna[0] / baseRev[0] : (hist.avg_dna_pct || 0.04);
+    const capexPcts = Array.from({ length: years }, (_, i) => {
+      return (baseRev[i] && baseCapex[i]) ? baseCapex[i] / baseRev[i] : (hist.avg_capex_pct || 0.06);
+    });
+
+    let curRev = lastRev;
+    let pvUfcf = 0;
+    const projRev = [];
+    for (let yr = 0; yr < years; yr++) {
+      const nextRev = curRev * (1 + gSched[yr]);
+      const marginVal = mSched[yr];
+      const nopat = nextRev * marginVal * (1 - taxRate);
+      const dnaAdd = nextRev * dnaPct;
+      const capexSub = nextRev * capexPcts[yr];
+      const deltaNwc = nwcRatio * (nextRev - curRev);
+      const ufcf = nopat + dnaAdd - capexSub - deltaNwc;
+
+      pvUfcf += ufcf / Math.pow(1 + wNew, yr + 0.5);
+      projRev.push(nextRev);
+      curRev = nextRev;
+    }
+
+    const maxGAllowed = isExtractive ? 0.025 : (market === 'IN' ? 0.050 : 0.025);
+    const clampedT = Math.min(tNew, maxGAllowed);
+    const minSpread = 0.025;
+    const effT = (wNew - clampedT < minSpread) ? Math.max(0.01, wNew - minSpread) : clampedT;
+
+    // Terminal Reinvestment Rate: scale backend calibrated rate proportionally with terminal growth
+    const baseTgr = dcf.terminal_growth || (market === 'IN' ? 0.050 : 0.025);
+    const baseReinv = dcf.terminal_reinv_rate ?? 0.30;
+    const termReinvRate = Math.min(0.80, Math.max(0.06, baseReinv * (effT / Math.max(0.01, baseTgr))));
+
+    const termNopat = projRev[years - 1] * (1 + effT) * mSched[years - 1] * (1 - taxRate);
+    const termUfcf = termNopat * (1 - termReinvRate);
+
+    // Institutional Exit Multiple Cross-Check for Cyclicals/Extractives
+    const benchMult = dcf.benchmark_exit_multiple || 10.0;
+    const termEbitda = projRev[years - 1] * (1 + effT) * (mSched[years - 1] + dnaPct);
+    const exitTv = termEbitda > 0 ? termEbitda * benchMult : 0;
+
+    const spread = wNew - effT;
+    const gordonTv = termUfcf / Math.max(0.005, spread);
+    let tv = gordonTv;
+    if (isExtractive && exitTv > 0 && gordonTv > exitTv) {
+      tv = 0.35 * gordonTv + 0.65 * exitTv;
+    } else if (isCyclical && exitTv > 0 && gordonTv > exitTv) {
+      tv = 0.45 * gordonTv + 0.55 * exitTv;
+    }
+
+    // Mid-year discount factor for TV matches backend discount_factors[-1] = (1 + w)^4.5
+    const pvTv = tv / Math.pow(1 + wNew, years - 0.5);
     const simEv = pvUfcf + pvTv;
 
     const totalDebt = data.wacc?.total_debt || 0;
     const totalCash = data.wacc?.total_cash ?? data.company?.total_cash ?? 0;
-    const shares = data.market_data?.shares_outstanding || 1;
-
-    const simEq = isEquityModel ? simEv : Math.max(0, simEv - totalDebt + totalCash);
+    const simEq = Math.max(0, simEv - totalDebt + totalCash);
     const simPrice = Math.max(0, simEq / shares);
 
     return {
@@ -337,7 +485,7 @@ export default function AssumptionSliders({
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
-                step="0.5"
+                step="0.1"
                 value={growth.toFixed(1)}
                 onChange={(e) => handleGrowthChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-12 text-[#f4eedf] font-display font-bold tabular-nums text-sm focus:outline-none"
@@ -349,7 +497,7 @@ export default function AssumptionSliders({
             type="range"
             min="-10"
             max="40"
-            step="0.5"
+            step="0.1"
             value={growth}
             onChange={(e) => handleGrowthChange(parseFloat(e.target.value))}
             className="w-full warm-slider cursor-pointer"
@@ -373,7 +521,7 @@ export default function AssumptionSliders({
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
                 type="number"
-                step="0.5"
+                step="0.1"
                 value={margin.toFixed(1)}
                 onChange={(e) => handleMarginChange(parseFloat(e.target.value) || 0)}
                 className="bg-transparent text-right w-12 text-[#f4eedf] font-display font-bold tabular-nums text-sm focus:outline-none"
@@ -385,7 +533,7 @@ export default function AssumptionSliders({
             type="range"
             min={isEquityModel ? '5' : '-30'}
             max={isFinancial ? '35' : isEquityModel ? '50' : '60'}
-            step="0.5"
+            step="0.1"
             value={margin}
             onChange={(e) => handleMarginChange(parseFloat(e.target.value))}
             className="w-full warm-slider cursor-pointer"
