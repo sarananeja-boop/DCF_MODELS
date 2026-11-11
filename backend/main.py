@@ -40,6 +40,7 @@ from engine.sensitivity import (
 )
 from engine.validators import validate_valuation, validate_bank_valuation, generate_verdict
 from engine.trend_analysis import compute_trends
+from engine.reverse_dcf import calculate_reverse_dcf
 from engine.bank_engine import (
     compute_bank_cost_of_equity,
     run_bank_valuation,
@@ -903,6 +904,23 @@ def analyze(req: AnalyzeRequest):
 
         is_equity_model = bool(is_financial or use_corporate_ddm)
 
+        reverse_dcf_result = calculate_reverse_dcf(
+            current_price=float(current_price),
+            model_fair_value=float(dcf_result.get("implied_price", 0.0)),
+            base_start_growth=float(start_growth),
+            base_target_margin=float(target_margin),
+            discount_rate=float(discount_rate),
+            metrics=metrics,
+            stock_data=stock_data,
+            wacc_data=wacc_data if not is_equity_model else None,
+            terminal_growth=terminal_growth,
+            projection_years=projection_years,
+            current_margin=current_margin,
+            tax_rate=tax_rate,
+            market_profile=market_profile,
+            is_equity_model=is_equity_model,
+        )
+
         response = {
             "company": {
                 "ticker": ticker,
@@ -912,6 +930,16 @@ def analyze(req: AnalyzeRequest):
                 "symbol": market_profile.get("symbol", "$"),
                 "sector": stock_data.get("sector"),
                 "industry": stock_data.get("industry"),
+                "description": (
+                    stock_data.get("description")
+                    or stock_data.get("info", {}).get("longBusinessSummary")
+                    or stock_data.get("info", {}).get("description")
+                    or ""
+                ),
+                "city": stock_data.get("city") or stock_data.get("info", {}).get("city", ""),
+                "country": stock_data.get("country") or stock_data.get("info", {}).get("country", ""),
+                "website": stock_data.get("website") or stock_data.get("info", {}).get("website", ""),
+                "employees": stock_data.get("employees") or stock_data.get("info", {}).get("fullTimeEmployees"),
                 "is_financial": is_financial,
                 "is_equity_model": is_equity_model,
                 "is_capital_light_financial": stock_data.get("is_capital_light_financial", False),
@@ -929,6 +957,9 @@ def analyze(req: AnalyzeRequest):
                 "beta_clamped": stock_data.get("beta_clamped", False),
                 "beta_note": stock_data.get("beta_note", ""),
                 "is_illiquid": stock_data.get("is_illiquid", False),
+                "trailing_pe": stock_data.get("info", {}).get("trailingPE"),
+                "forward_pe": stock_data.get("info", {}).get("forwardPE"),
+                "price_to_sales": stock_data.get("info", {}).get("priceToSalesTrailing12Months"),
             },
             "macro": {
                 "risk_free_rate": market_profile.get("risk_free_rate"),
@@ -1027,6 +1058,7 @@ def analyze(req: AnalyzeRequest):
             "trends": trends,
             "validation": validation,
             "verdict": verdict,
+            "reverse_dcf": reverse_dcf_result,
             "diagnostics": {
                 "is_financial": is_financial,
                 "is_equity_model": is_equity_model,
