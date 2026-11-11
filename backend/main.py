@@ -42,6 +42,7 @@ from engine.sensitivity import (
 )
 from engine.validators import validate_valuation, validate_bank_valuation, generate_verdict
 from engine.trend_analysis import compute_trends
+from engine.reverse_dcf import calculate_reverse_dcf
 from engine.bank_engine import (
     compute_bank_cost_of_equity,
     run_bank_valuation,
@@ -918,6 +919,23 @@ def analyze(req: AnalyzeRequest):
 
         is_equity_model = bool(is_financial or use_corporate_ddm)
 
+        reverse_dcf_result = calculate_reverse_dcf(
+            current_price=float(current_price),
+            model_fair_value=float(dcf_result.get("implied_price", 0.0)),
+            base_start_growth=float(start_growth),
+            base_target_margin=float(target_margin),
+            discount_rate=float(discount_rate),
+            metrics=metrics,
+            stock_data=stock_data,
+            wacc_data=wacc_data if not is_equity_model else None,
+            terminal_growth=terminal_growth,
+            projection_years=projection_years,
+            current_margin=current_margin,
+            tax_rate=tax_rate,
+            market_profile=market_profile,
+            is_equity_model=is_equity_model,
+        )
+
         response = {
             "company": {
                 "ticker": ticker,
@@ -927,6 +945,16 @@ def analyze(req: AnalyzeRequest):
                 "symbol": market_profile.get("symbol", "$"),
                 "sector": stock_data.get("sector"),
                 "industry": stock_data.get("industry"),
+                "description": (
+                    stock_data.get("description")
+                    or stock_data.get("info", {}).get("longBusinessSummary")
+                    or stock_data.get("info", {}).get("description")
+                    or ""
+                ),
+                "city": stock_data.get("city") or stock_data.get("info", {}).get("city", ""),
+                "country": stock_data.get("country") or stock_data.get("info", {}).get("country", ""),
+                "website": stock_data.get("website") or stock_data.get("info", {}).get("website", ""),
+                "employees": stock_data.get("employees") or stock_data.get("info", {}).get("fullTimeEmployees"),
                 "is_financial": is_financial,
                 "is_equity_model": is_equity_model,
                 "is_capital_light_financial": stock_data.get("is_capital_light_financial", False),
@@ -944,6 +972,9 @@ def analyze(req: AnalyzeRequest):
                 "beta_clamped": stock_data.get("beta_clamped", False),
                 "beta_note": stock_data.get("beta_note", ""),
                 "is_illiquid": stock_data.get("is_illiquid", False),
+                "trailing_pe": stock_data.get("info", {}).get("trailingPE"),
+                "forward_pe": stock_data.get("info", {}).get("forwardPE"),
+                "price_to_sales": stock_data.get("info", {}).get("priceToSalesTrailing12Months"),
             },
             "macro": {
                 "risk_free_rate": market_profile.get("risk_free_rate"),
@@ -1042,6 +1073,7 @@ def analyze(req: AnalyzeRequest):
             "trends": trends,
             "validation": validation,
             "verdict": verdict,
+            "reverse_dcf": reverse_dcf_result,
             "diagnostics": {
                 "is_financial": is_financial,
                 "is_equity_model": is_equity_model,
@@ -1654,6 +1686,59 @@ def get_technical_score(
     except Exception as exc:
         logger.exception("GET /api/technical/score failed for %s", symbol)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/technical/backtest")
+def get_technical_backtest(
+    symbol: str = Query(..., min_length=1, description="Ticker symbol (e.g. RELIANCE.NS or AAPL)"),
+    market: str = Query("auto", description="'IN', 'US', or 'auto'"),
+    period: str = Query("10y", description="Historical lookback: '10y' or '5y'"),
+    cost_bps: Optional[float] = Query(
+        None,
+        ge=0.0,
+        le=500.0,
+        description="Round-trip transaction cost in bps (defaults to 10 bps US / 30 bps IN)",
+    ),
+):
+    """
+    Phase 3 TA v0.3 Per-Stock Signal Backtester across 10 frozen canonical signals
+    and 4 holding horizons (5, 10, 20, 60 trading days = 40 tests) with 20-bar
+    de-clustering, 70/30 chronological IS/OOS split, Wilson 95% win-rate CIs,
+    event-block bootstrap 95% CIs, and Benjamini-Hochberg FDR q-values.
+    """
+    _check_ta_enabled()
+    from engine.market_history import build_technical_response_envelope, fetch_market_history
+    from engine.ta_backtester import TA_BACKTEST_VERSION, run_per_stock_backtest
+    from engine.ta_composite import TA_SCORE_VERSION
+
+    try:
+        bundle = fetch_market_history(
+            symbol=symbol.strip(),
+            market=market,
+            period=period,
+            force_refresh=False,
+        )
+        bt_payload = run_per_stock_backtest(
+            bundle=bundle,
+            round_trip_cost_bps=cost_bps,
+        )
+        envelope = build_technical_response_envelope(
+            bundle=bundle,
+            payload={"backtest": bt_payload},
+            score_model=TA_SCORE_VERSION,
+            signal_defs=TA_BACKTEST_VERSION,
+            params={
+                "period": bundle.period_requested,
+                "round_trip_cost_bps": bt_payload["round_trip_cost_bps"],
+            },
+        )
+        return _numpy_to_python(envelope)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("GET /api/technical/backtest failed for %s", symbol)
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 

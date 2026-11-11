@@ -202,3 +202,49 @@ One vote per concept across **6 fixed-weight pillars** (16 total indicators):
 - **Rows**: Live Fundamental Valuation Outlook (`Bullish` [incl. Strongly Bullish], `Neutral`, `Bearish` [incl. Strongly Bearish], plus a greyed `Valuation Unreliable / Distressed` row that activates only when DCF is flagged distressed).
 - **Columns**: Completed-weekly Weinstein Stage 1 (`Basing`), Stage 2 (`Advancing`), Stage 3 (`Topping`), Stage 4 (`Declining`).
 - Strictly descriptive, non-prescriptive cell classification (e.g., `"Bullish Valuation · Stage 4 Declining — Possible Value Trap · Trend Unconfirmed"`).
+
+---
+
+## 14. Per-Stock Signal Backtester (`ta-backtest-v0.3`)
+
+### 14.1 Zero Look-Ahead Execution Contract
+- **Signal Observation**: Every signal rule is evaluated strictly on confirmed daily bar close $t$ using data up to and including index $t$ (`ohlc_tr[:t+1]`).
+- **Entry Fill**: Next trading session's total-return open:
+  $$\text{Entry}(t) = \text{Open}_{\text{tr}}[t + 1]$$
+- **Exit Fill**: Total-return close after $h \in \{5, 10, 20, 60\}$ trading days:
+  $$\text{Exit}(t, h) = \text{Close}_{\text{tr}}[t + h]$$
+- **Unfinished Horizons**: Any signal trigger where $t + h \ge N$ is excluded from completed trade statistics and surfaced separately in `pending_signals`.
+- **Transaction Costs**: Default round-trip friction is `10 bps` (`0.10%`, `US`) and `30 bps` (`0.30%`, `IN`), user-editable in `[0, 500]` bps. Both Gross and Net returns are reported:
+  $$R_{\text{gross}}(t, h) = d \cdot \left(\frac{\text{Close}_{\text{tr}}[t + h]}{\text{Open}_{\text{tr}}[t + 1]} - 1\right), \quad R_{\text{net}}(t, h) = R_{\text{gross}}(t, h) - \frac{\text{cost\_bps}}{10000}$$
+
+### 14.2 20-Bar Causal De-Clustering & 70/30 Chronological Sample Split
+- **De-Clustering**: Consecutive triggers within a 20-trading-day cooldown window are suppressed causally ($t_{\text{next}} - t_{\text{last\_accepted}} \ge 20$). Both raw trigger counts (`n_raw`) and de-clustered trigger counts (`n_declustered`) are reported.
+- **Sample Split**: The historical bar index is split chronologically at $\lfloor 0.70 \cdot N \rfloor$:
+  - **In-Sample (`IS`)**: First 70% of daily bars ($t < \lfloor 0.70 \cdot N \rfloor$).
+  - **Out-of-Sample (`OOS`)**: Final 30% of daily bars ($t \ge \lfloor 0.70 \cdot N \rfloor$).
+  - Signal parameters are canonical and frozen; no parameter optimization is performed.
+
+### 14.3 The 10 Frozen Signal Definitions ($\times 4\text{ Horizons} = 40\text{ Tests}$)
+1. **`rsi_oversold_recovery`** (`Long +1`): Wilder $\text{RSI}(14)_{t-1} \le 30$ and $\text{RSI}(14)_t > 30$.
+2. **`rsi_70_continuation`** (`Long +1`): Wilder $\text{RSI}(14)_{t-1} < 70$ and $\text{RSI}(14)_t \ge 70$ (momentum breakout continuation hypothesis).
+3. **`rsi_70_reversal`** (`Inverse -1`): Wilder $\text{RSI}(14)_{t-1} \ge 70$ and $\text{RSI}(14)_t < 70$ (overbought mean-reversion hypothesis).
+4. **`macd_bull_cross_below_zero`** (`Long +1`): $\text{MACD}(12,26,9)_{t-1} \le \text{Signal}_{t-1}$, $\text{MACD}_t > \text{Signal}_t$, and $\text{MACD}_t < 0$.
+5. **`golden_cross_50_200`** (`Long +1`): $\text{SMA}_{50, t-1} \le \text{SMA}_{200, t-1}$ and $\text{SMA}_{50, t} > \text{SMA}_{200, t}$.
+6. **`supertrend_bull_flip`** (`Long +1`): Causal $\text{Supertrend}(10, 3.0)$ direction flips from $-1$ at $t-1$ to $+1$ at $t$.
+7. **`ttm_squeeze_bull_release`** (`Long +1`): Bollinger $(20, 2.0)$ exits Keltner $(\text{EMA}_{20} \pm 1.5 \cdot \text{ATR}_{14})$ compression at bar $t$ with positive midline momentum.
+8. **`dma_50_200_pullback`** (`Long +1`): In an uptrend ($C_t > \text{SMA}_{200, t}$ and $\text{SMA}_{50, t} > \text{SMA}_{200, t}$), $L_t$ tests within $1\%$ of $\text{SMA}_{50, t}$ (or $\text{SMA}_{200, t}$) and $C_t$ closes back above the tested moving average.
+9. **`breakout_52w_high_vol`** (`Long +1`): $C_t > \max_{s \in [t-252, t-1]} H_s$ on $\text{Volume}_t \ge 1.5 \times \text{SMA}_{20}(\text{Volume})_t$.
+10. **`bollinger_lower_reentry`** (`Long +1`): $C_{t-1} < \text{BB}_{\text{lower}}(20, 2.0)_{t-1}$ and $C_t \ge \text{BB}_{\text{lower}}(20, 2.0)_t$.
+
+### 14.4 Statistical Inference, Multiple-Testing Control & Labeling
+- **Excess Returns**: Reported both against unconditional $h$-day stock drift ($\bar{R}_{\text{uncond}}(h)$) and against matched $[t+1, t+h]$ benchmark returns (`^NSEI` / `^GSPC`).
+- **Win Rate CI**: Exact Wilson score 95% confidence interval on net win proportion.
+- **Bootstrap Inference**: Moving-block bootstrap ($B = 1000$, block length $\lceil h / 20 \rceil$) 95% confidence interval and two-sided $p$-value on in-sample net excess return.
+- **False Discovery Rate**: Benjamini–Hochberg (`BH-FDR`) step-up adjusted $q$-values across all $M = 40$ tests jointly.
+- **Path Excursions**: Median and P90 Maximum Adverse Excursion (`MAE` $\le 0$) and Maximum Favorable Excursion (`MFE` $\ge 0$) over $[t+1, t+h]$.
+- **Non-Promotional Classification Rules**:
+  - `N_IS < 15`: `"Insufficient evidence"`
+  - `net_excess_is > 0`, 95% bootstrap CI excludes $0$, $q < 0.10$, **and** `net_excess_oos > 0` (matching positive sign out-of-sample): `"Historically favourable"`
+  - Otherwise: `"No reliable edge"`
+  - Promotional words (`"buy"`, `"sell"`, `"profitable"`) are strictly banned. Every backtest view includes an explicit survivorship-bias and single-security look-back disclosure.
+

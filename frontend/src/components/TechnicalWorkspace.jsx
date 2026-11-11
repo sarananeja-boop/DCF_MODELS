@@ -141,7 +141,16 @@ const TechnicalWorkspace = ({ ticker, market, analysisData, onSwitchToFundamenta
   const [showCorpActions, setShowCorpActions] = useState(true);
   const [activeSubPane, setActiveSubPane] = useState('rsi'); // 'rsi' | 'macd' | 'atr'
   const [showMinerviniModal, setShowMinerviniModal] = useState(false);
-  const [activeTaTab, setActiveTaTab] = useState('chart'); // 'chart' | 'matrix' | 'regime'
+  const [activeTaTab, setActiveTaTab] = useState('chart'); // 'chart' | 'matrix' | 'regime' | 'backtest'
+
+  // Phase 3 Signal Backtester State
+  const [btData, setBtData] = useState(null);
+  const [btLoading, setBtLoading] = useState(false);
+  const [btError, setBtError] = useState(null);
+  const [btCostInput, setBtCostInput] = useState('');
+  const [btHorizonFilter, setBtHorizonFilter] = useState('all'); // 'all' | 5 | 10 | 20 | 60
+  const [btLabelFilter, setBtLabelFilter] = useState('all'); // 'all' | 'Historically favourable' | 'No reliable edge' | 'Insufficient evidence'
+  const [expandedTestId, setExpandedTestId] = useState(null);
 
   // Position Calculator State
   const [posCapital, setPosCapital] = useState(100000);
@@ -214,8 +223,50 @@ const TechnicalWorkspace = ({ ticker, market, analysisData, onSwitchToFundamenta
 
   useEffect(() => {
     fetchTechnicalChart(timeframe);
+    // Reset cached backtest when symbol/market changes so it re-fetches cleanly
+    setBtData(null);
+    setBtCostInput('');
+    setExpandedTestId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSymbol, activeMarket, timeframe, activeFairValue, activeVerdict]);
+
+  // Fetch `/api/technical/backtest` lazily when the Backtester tab is opened or cost_bps is updated
+  const fetchTechnicalBacktest = async (overrideCostBps = null) => {
+    if (!activeSymbol) return;
+    setBtLoading(true);
+    setBtError(null);
+    try {
+      const params = {
+        symbol: activeSymbol,
+        market: activeMarket,
+        period: '10y',
+      };
+      if (overrideCostBps !== null && overrideCostBps !== '' && !Number.isNaN(Number(overrideCostBps))) {
+        params.cost_bps = Math.max(0, Math.min(500, Number(overrideCostBps)));
+      }
+      const resp = await axios.get('/api/technical/backtest', { params });
+      const btPayload = resp.data?.backtest || null;
+      setBtData(btPayload);
+      if (btPayload?.round_trip_cost_bps != null) {
+        setBtCostInput(String(btPayload.round_trip_cost_bps));
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.detail ||
+        err.message ||
+        'Failed to run per-stock signal backtest.';
+      setBtError(msg);
+    } finally {
+      setBtLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTaTab === 'backtest' && !btData && !btLoading) {
+      fetchTechnicalBacktest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTaTab, activeSymbol, activeMarket]);
 
   // Update stop price automatically when user switches stop method preset
   const handleStopMethodChange = (method) => {
@@ -1111,6 +1162,7 @@ const TechnicalWorkspace = ({ ticker, market, analysisData, onSwitchToFundamenta
             { id: 'chart', label: 'Price Chart & Position Sizing', icon: <FiTrendingUp className="w-3.5 h-3.5" /> },
             { id: 'matrix', label: 'Indicator Matrix (D / W / M)', icon: <FiSliders className="w-3.5 h-3.5" /> },
             { id: 'regime', label: 'Regime, RS & Confluence Matrix', icon: <FiLayers className="w-3.5 h-3.5" /> },
+            { id: 'backtest', label: 'Signal Backtester (40 Tests)', icon: <FiTarget className="w-3.5 h-3.5" /> },
           ].map((tab) => {
             const isActive = activeTaTab === tab.id;
             return (
@@ -2379,6 +2431,747 @@ const TechnicalWorkspace = ({ ticker, market, analysisData, onSwitchToFundamenta
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =====================================================================
+          PHASE 3 TAB 4: PER-STOCK SIGNAL BACKTESTER (10 SIGNALS x 4 HORIZONS = 40 TESTS)
+         ===================================================================== */}
+      {activeTaTab === 'backtest' && (() => {
+        if (btLoading && !btData) {
+          return (
+            <div className="bg-[#141b26] rounded-2xl p-8 border border-[#f4eedf]/10 text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#e3b23c]/15 text-[#e3b23c] animate-pulse">
+                <FiTarget className="w-5 h-5" />
+              </div>
+              <div className="font-display font-bold text-base text-[#f4eedf]">
+                Running 40 Walk-Forward Signal Tests for {activeSymbol}...
+              </div>
+              <p className="text-xs text-[#a6b0c3]">
+                Evaluating 10 frozen canonical signals across 5D, 10D, 20D &amp; 60D horizons with 20-bar de-clustering, 1,000-iteration event-block bootstrap CIs &amp; Benjamini–Hochberg FDR...
+              </p>
+            </div>
+          );
+        }
+
+        if (btError && !btData) {
+          return (
+            <div className="bg-[#2c1618] border border-[#e07a5f]/50 rounded-2xl p-6 text-[#f4eedf] space-y-3">
+              <div className="flex items-center gap-2 font-display font-bold text-base text-[#e07a5f]">
+                <FiAlertTriangle className="w-5 h-5" />
+                <span>Per-Stock Signal Backtest Failed</span>
+              </div>
+              <p className="text-xs sm:text-sm text-[#f4eedf]/85">{btError}</p>
+              <button
+                type="button"
+                onClick={() => fetchTechnicalBacktest(btCostInput)}
+                className="px-4 py-2 rounded-xl bg-[#e3b23c] text-[#0f141c] text-xs font-bold cursor-pointer"
+              >
+                Retry Backtest
+              </button>
+            </div>
+          );
+        }
+
+        const bt = btData || {};
+        const tests = bt.tests || [];
+        const signals = bt.signals || [];
+        const split = bt.sample_split || {};
+        const counts = bt.summary_counts || {};
+        const pendingList = bt.pending_signals || [];
+
+        const getLabelStyle = (label) => {
+          if (label === 'Historically favourable') {
+            return 'bg-[#34b38a]/15 text-[#34b38a] border-[#34b38a]/35';
+          }
+          if (label === 'Insufficient evidence') {
+            return 'bg-[#e3b23c]/15 text-[#e3b23c] border-[#e3b23c]/35';
+          }
+          return 'bg-white/[0.06] text-[#c5cedd] border-white/[0.12]';
+        };
+
+        const filteredTests = tests.filter((c) => {
+          if (btHorizonFilter !== 'all' && Number(c.horizon_days) !== Number(btHorizonFilter)) {
+            return false;
+          }
+          if (btLabelFilter !== 'all' && c.label !== btLabelFilter) {
+            return false;
+          }
+          return true;
+        });
+
+        const cellLookup = {};
+        tests.forEach((c) => {
+          cellLookup[`${c.signal_id}_${c.horizon_days}`] = c;
+        });
+
+        return (
+          <div className="space-y-4">
+            {/* 1. Survivorship-Bias & Look-Back Disclosure Banner */}
+            <div className="bg-[#121824] border border-[#e3b23c]/30 rounded-xl px-4 py-3 text-xs text-[#c5cedd] flex items-start gap-2.5">
+              <FiShield className="w-4 h-4 text-[#e3b23c] shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-[#f4eedf]">
+                    Survivorship-Bias &amp; Single-Security Look-Back Disclosure
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#e3b23c]/15 text-[#e3b23c] font-mono text-[10px] font-bold">
+                    {bt.version || 'ta-backtest-v0.3'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#a6b0c3] leading-relaxed">
+                  {bt.disclosure}
+                </p>
+                {bt.coverage_note && (
+                  <p className="text-[11px] text-[#e3b23c] font-medium pt-0.5">
+                    Note: {bt.coverage_note}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Top 4 Summary Cards: FDR Counts | 70/30 Split | Execution Contract | Editable Friction */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {/* Card A: 40-Test Classification Summary */}
+              <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                    40-Test Multiple-Testing Gate
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#5b8fd9]/15 text-[#8ab4f8] text-[10px] font-mono font-bold">
+                    BH-FDR q &lt; 0.10
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 my-1">
+                  <div className="bg-[#0d121a] rounded-xl p-2.5 border border-[#34b38a]/25 text-center">
+                    <div className="font-display text-lg font-bold text-[#34b38a]">
+                      {counts.historically_favourable ?? 0}
+                    </div>
+                    <div className="text-[10px] text-[#a6b0c3] leading-tight mt-0.5">
+                      Historically Favourable
+                    </div>
+                  </div>
+                  <div className="bg-[#0d121a] rounded-xl p-2.5 border border-white/[0.08] text-center">
+                    <div className="font-display text-lg font-bold text-[#f4eedf]">
+                      {counts.no_reliable_edge ?? 0}
+                    </div>
+                    <div className="text-[10px] text-[#a6b0c3] leading-tight mt-0.5">
+                      No Reliable Edge
+                    </div>
+                  </div>
+                  <div className="bg-[#0d121a] rounded-xl p-2.5 border border-[#e3b23c]/25 text-center">
+                    <div className="font-display text-lg font-bold text-[#e3b23c]">
+                      {counts.insufficient_evidence ?? 0}
+                    </div>
+                    <div className="text-[10px] text-[#a6b0c3] leading-tight mt-0.5">
+                      Insufficient (N_IS &lt; 15)
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[11px] text-[#818ea4] mt-2">
+                  Requires Net IS Excess &gt; 0, 95% CI &gt; 0, q &lt; 0.10 &amp; OOS &gt; 0.
+                </div>
+              </div>
+
+              {/* Card B: Chronological 70 / 30 In-Sample / Out-of-Sample Split */}
+              <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                    Chronological 70 / 30 Split
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-white/[0.06] text-[#f4eedf] text-[10px] font-mono">
+                    {bt.observations || 0} Daily Bars
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="bg-[#0d121a] rounded-xl px-3 py-2 border border-white/[0.06] flex items-center justify-between">
+                    <span className="text-[#a6b0c3]">In-Sample (70%):</span>
+                    <span className="text-[#f4eedf] font-bold">
+                      {split.is_start_date || '—'} → {split.is_end_date || '—'} ({split.is_observations || 0})
+                    </span>
+                  </div>
+                  <div className="bg-[#0d121a] rounded-xl px-3 py-2 border border-white/[0.06] flex items-center justify-between">
+                    <span className="text-[#a6b0c3]">Out-of-Sample (30%):</span>
+                    <span className="text-[#8ab4f8] font-bold">
+                      {split.oos_start_date || '—'} → {split.oos_end_date || '—'} ({split.oos_observations || 0})
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-[#818ea4] mt-2">
+                  Parameters are canonical and frozen across IS &amp; OOS.
+                </div>
+              </div>
+
+              {/* Card C: Zero Look-Ahead Execution & De-Clustering Contract */}
+              <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                    Execution &amp; De-Clustering
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#34b38a]/15 text-[#34b38a] text-[10px] font-mono font-bold">
+                    Zero Look-Ahead
+                  </span>
+                </div>
+                <div className="space-y-1 text-xs text-[#c5cedd]">
+                  <div className="flex justify-between">
+                    <span className="text-[#a6b0c3]">Signal Evaluation:</span>
+                    <span className="font-mono text-[#f4eedf]">Confirmed Close[t]</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#a6b0c3]">Entry / Exit Fill:</span>
+                    <span className="font-mono text-[#e3b23c]">Open_tr[t+1] → Close_tr[t+h]</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#a6b0c3]">Event De-Clustering:</span>
+                    <span className="font-mono text-[#f4eedf]">{bt.decluster_cooldown_bars || 20}-Bar Cooldown</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#a6b0c3]">Price Series Basis:</span>
+                    <span className="font-mono text-[#34b38a]">Total-Return (ohlc_tr)</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-[#818ea4] mt-2">
+                  Both raw and de-clustered trigger counts are reported below.
+                </div>
+              </div>
+
+              {/* Card D: Editable Round-Trip Transaction Cost (bps) */}
+              <div className="bg-[#141b26] rounded-2xl p-4 border border-[#f4eedf]/10 shadow-lg flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3]">
+                    Round-Trip Friction (bps)
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#e3b23c]/15 text-[#e3b23c] text-[10px] font-mono font-bold">
+                    Active: {bt.round_trip_cost_bps ?? (bt.market === 'IN' ? 30 : 10)} bps
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 my-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="5"
+                    value={btCostInput}
+                    onChange={(e) => setBtCostInput(e.target.value)}
+                    className="w-full bg-[#0d121a] border border-white/[0.12] rounded-xl px-3 py-1.5 text-sm font-mono text-[#f4eedf] focus:outline-none focus:border-[#e3b23c]"
+                    placeholder="e.g. 10 or 30"
+                  />
+                  <button
+                    type="button"
+                    disabled={btLoading}
+                    onClick={() => fetchTechnicalBacktest(btCostInput)}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#e3b23c] text-[#0f141c] text-xs font-bold hover:bg-[#e3b23c]/90 transition cursor-pointer shrink-0"
+                  >
+                    {btLoading ? '...' : 'Apply'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                  {[
+                    { label: '0 bps (Gross)', val: 0 },
+                    { label: '10 bps (US)', val: 10 },
+                    { label: '30 bps (IN)', val: 30 },
+                    { label: '50 bps', val: 50 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => {
+                        setBtCostInput(String(preset.val));
+                        fetchTechnicalBacktest(preset.val);
+                      }}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer border transition ${
+                        Number(bt.round_trip_cost_bps) === preset.val
+                          ? 'bg-[#e3b23c]/20 text-[#e3b23c] border-[#e3b23c]/40 font-bold'
+                          : 'bg-[#0d121a] text-[#a6b0c3] border-white/[0.08] hover:text-[#f4eedf]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Active / Pending Signals Strip (if any triggered within last 60 sessions) */}
+            {pendingList.length > 0 && (
+              <div className="bg-[#141b26] rounded-2xl p-4 border border-[#8ab4f8]/30 shadow-lg space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#8ab4f8] uppercase tracking-wider">
+                    <FiClock className="w-4 h-4" />
+                    <span>
+                      Recently Triggered Signals with Unfinished Holding Horizons ({pendingList.length} Excluded from Completed Stats)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#a6b0c3]">
+                    Excluded from completed statistics until Close_tr[t + h] is observed
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+                  {pendingList.slice(0, 6).map((p, idx) => (
+                    <div
+                      key={`${p.signal_id}_${p.signal_date}_${idx}`}
+                      className="bg-[#0d121a] rounded-xl p-3 border border-white/[0.07] flex items-center justify-between gap-2"
+                    >
+                      <div>
+                        <div className="font-bold text-[#f4eedf]">{p.signal_name}</div>
+                        <div className="text-[11px] text-[#a6b0c3] font-mono mt-0.5">
+                          Signal: {p.signal_date} ({p.bars_elapsed}d ago)
+                        </div>
+                      </div>
+                      <div className="text-right font-mono shrink-0">
+                        <span className="px-2 py-0.5 rounded bg-[#5b8fd9]/15 text-[#8ab4f8] text-[10px] font-bold">
+                          Pending: {p.pending_horizons.map((h) => `${h}D`).join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. 10 x 4 Signal x Horizon Overview Heatmap Matrix */}
+            <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
+                <div>
+                  <h3 className="font-display font-bold text-base text-[#f4eedf]">
+                    10 Frozen Signals × 4 Horizons Matrix (40 Hypothesis Tests)
+                  </h3>
+                  <p className="text-xs text-[#a6b0c3]">
+                    Click any horizon cell to inspect its trade-by-trade event dates below. All tests use de-clustered triggers (20-bar window).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-mono text-[#a6b0c3]">
+                  <span>Benchmark: <strong className="text-[#8ab4f8]">{bt.benchmark}</strong></span>
+                  <span>·</span>
+                  <span>Costs: <strong className="text-[#e3b23c]">{bt.round_trip_cost_bps} bps</strong></span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] text-[#a6b0c3] text-[10px] uppercase tracking-wider">
+                      <th className="py-2.5 pr-3">Frozen Signal Definition</th>
+                      <th className="py-2.5 px-2 text-center">Direction</th>
+                      <th className="py-2.5 px-2 text-right">Triggers (De-clust / Raw)</th>
+                      {[5, 10, 20, 60].map((h) => (
+                        <th key={h} className="py-2.5 px-2 text-center min-w-[145px]">
+                          {h}-Day Horizon (t+1 → t+{h})
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.06]">
+                    {signals.map((sig) => (
+                      <tr key={sig.id} className="hover:bg-white/[0.02] transition">
+                        <td className="py-3 pr-3">
+                          <div className="font-bold text-[#f4eedf]">{sig.name}</div>
+                          <div className="text-[11px] text-[#818ea4] line-clamp-1" title={sig.rule_summary}>
+                            {sig.rule_summary}
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-center font-mono text-[11px]">
+                          <span
+                            className={`px-2 py-0.5 rounded border ${
+                              sig.direction > 0
+                                ? 'bg-[#34b38a]/10 text-[#34b38a] border-[#34b38a]/30'
+                                : 'bg-[#e07a5f]/10 text-[#e07a5f] border-[#e07a5f]/30'
+                            }`}
+                          >
+                            {sig.direction_label}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 text-right font-mono tabular-nums text-[#c5cedd]">
+                          <div className="font-bold text-[#f4eedf]">
+                            {sig.n_declustered_triggers} <span className="text-[#818ea4] font-normal">/ {sig.n_raw_triggers}</span>
+                          </div>
+                          <div className="text-[10px] text-[#818ea4]">
+                            IS: {sig.n_declustered_is} · OOS: {sig.n_declustered_oos}
+                          </div>
+                        </td>
+                        {[5, 10, 20, 60].map((h) => {
+                          const cell = cellLookup[`${sig.id}_${h}`];
+                          if (!cell) return <td key={h} className="py-3 px-2 text-center">—</td>;
+                          const isEx = cell.in_sample?.net_excess_vs_drift_pct;
+                          const oosEx = cell.out_of_sample?.net_excess_vs_drift_pct;
+                          const isSelected = expandedTestId === cell.test_id;
+                          return (
+                            <td key={h} className="py-2 px-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedTestId(isSelected ? null : cell.test_id)
+                                }
+                                title={cell.label_reason}
+                                className={`w-full text-left p-2 rounded-xl border transition cursor-pointer ${
+                                  isSelected
+                                    ? 'ring-2 ring-[#e3b23c] bg-[#1a2333] border-[#e3b23c]/50'
+                                    : 'bg-[#0d121a] border-white/[0.07] hover:border-white/[0.20]'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1 mb-1">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold border truncate ${getLabelStyle(
+                                      cell.label
+                                    )}`}
+                                  >
+                                    {cell.label}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-[#818ea4]">
+                                    q={cell.q_value_fdr != null ? cell.q_value_fdr.toFixed(2) : '1.00'}
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline justify-between font-mono text-[11px] tabular-nums">
+                                  <span className="text-[#a6b0c3]">IS Ex:</span>
+                                  <span
+                                    className={`font-bold ${
+                                      isEx == null
+                                        ? 'text-[#818ea4]'
+                                        : isEx > 0
+                                        ? 'text-[#34b38a]'
+                                        : 'text-[#e07a5f]'
+                                    }`}
+                                  >
+                                    {isEx != null ? `${isEx >= 0 ? '+' : ''}${isEx.toFixed(2)}%` : 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline justify-between font-mono text-[10px] tabular-nums text-[#818ea4]">
+                                  <span>OOS Ex:</span>
+                                  <span
+                                    className={
+                                      oosEx == null
+                                        ? 'text-[#818ea4]'
+                                        : oosEx > 0
+                                        ? 'text-[#34b38a]'
+                                        : 'text-[#e07a5f]'
+                                    }
+                                  >
+                                    {oosEx != null ? `${oosEx >= 0 ? '+' : ''}${oosEx.toFixed(2)}%` : '—'}
+                                  </span>
+                                </div>
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 5. Detailed 40-Test Statistical Table with Filters & Expandable Event Dates */}
+            <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
+                <div>
+                  <h3 className="font-display font-bold text-base text-[#f4eedf]">
+                    Detailed Walk-Forward Test Ledger ({filteredTests.length} of {tests.length} Tests)
+                  </h3>
+                  <p className="text-xs text-[#a6b0c3]">
+                    Gross vs Net returns, Excess vs Unconditional Drift &amp; Benchmark, Wilson 95% Win-Rate CIs, Event-Block Bootstrap CIs, BH-FDR q-values, and MAE/MFE
+                  </p>
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-xl bg-[#0d121a] p-1 border border-white/[0.08]">
+                    {[
+                      { id: 'all', label: 'All Horizons' },
+                      { id: 5, label: '5D' },
+                      { id: 10, label: '10D' },
+                      { id: 20, label: '20D' },
+                      { id: 60, label: '60D' },
+                    ].map((hOpt) => (
+                      <button
+                        key={hOpt.id}
+                        type="button"
+                        onClick={() => setBtHorizonFilter(hOpt.id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          String(btHorizonFilter) === String(hOpt.id)
+                            ? 'bg-[#e3b23c] text-[#0f141c]'
+                            : 'text-[#a6b0c3] hover:text-[#f4eedf]'
+                        }`}
+                      >
+                        {hOpt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <select
+                    value={btLabelFilter}
+                    onChange={(e) => setBtLabelFilter(e.target.value)}
+                    className="bg-[#0d121a] border border-white/[0.12] rounded-xl px-3 py-1.5 text-xs font-bold text-[#f4eedf] focus:outline-none focus:border-[#e3b23c]"
+                  >
+                    <option value="all">All Classifications (40)</option>
+                    <option value="Historically favourable">Historically favourable</option>
+                    <option value="No reliable edge">No reliable edge</option>
+                    <option value="Insufficient evidence">Insufficient evidence</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse font-mono tabular-nums">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] text-[#a6b0c3] text-[10px] uppercase tracking-wider font-sans">
+                      <th className="py-2.5 pr-3">Signal &amp; Horizon</th>
+                      <th className="py-2.5 px-2 text-right">IS / OOS (Raw)</th>
+                      <th className="py-2.5 px-2 text-right">IS Gross / Net</th>
+                      <th className="py-2.5 px-2 text-right">IS Net Excess (Drift / Bench)</th>
+                      <th className="py-2.5 px-2 text-right">95% Bootstrap CI &amp; FDR q</th>
+                      <th className="py-2.5 px-2 text-right">Net Win % (Wilson 95% CI)</th>
+                      <th className="py-2.5 px-2 text-right">OOS (30%) Net Excess</th>
+                      <th className="py-2.5 px-2 text-right">Median MAE / MFE</th>
+                      <th className="py-2.5 px-2 text-center">Classification</th>
+                      <th className="py-2.5 pl-2 text-right">Events</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.06]">
+                    {filteredTests.map((cell) => {
+                      const isS = cell.in_sample || {};
+                      const oosS = cell.out_of_sample || {};
+                      const cnt = cell.counts || {};
+                      const ci = isS.bootstrap_95_ci_pct || [null, null];
+                      const wci = isS.wilson_95_ci_pct || [null, null];
+                      const isExpanded = expandedTestId === cell.test_id;
+
+                      return (
+                        <React.Fragment key={cell.test_id}>
+                          <tr className="hover:bg-white/[0.02] transition">
+                            <td className="py-3 pr-3 font-sans">
+                              <div className="font-bold text-[#f4eedf]">
+                                {cell.signal_name}{' '}
+                                <span className="px-1.5 py-0.5 rounded bg-[#e3b23c]/15 text-[#e3b23c] font-mono text-[10px]">
+                                  {cell.horizon_days}D
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-[#818ea4]">{cell.direction_label}</div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div className="text-[#f4eedf] font-bold">
+                                {cnt.n_is} / {cnt.n_oos}
+                              </div>
+                              <div className="text-[10px] text-[#818ea4]">
+                                raw: {cnt.n_raw_is}/{cnt.n_raw_oos}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div className="text-[#c5cedd]">
+                                {isS.mean_gross_return_pct != null
+                                  ? `${isS.mean_gross_return_pct >= 0 ? '+' : ''}${isS.mean_gross_return_pct.toFixed(2)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div
+                                className={`font-bold ${
+                                  (isS.mean_net_return_pct || 0) >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                                }`}
+                              >
+                                {isS.mean_net_return_pct != null
+                                  ? `${isS.mean_net_return_pct >= 0 ? '+' : ''}${isS.mean_net_return_pct.toFixed(2)}%`
+                                  : 'N/A'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div
+                                className={`font-bold ${
+                                  (isS.net_excess_vs_drift_pct || 0) > 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                                }`}
+                              >
+                                {isS.net_excess_vs_drift_pct != null
+                                  ? `${isS.net_excess_vs_drift_pct >= 0 ? '+' : ''}${isS.net_excess_vs_drift_pct.toFixed(2)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div className="text-[10px] text-[#a6b0c3]">
+                                vs Bench:{' '}
+                                {isS.net_excess_vs_benchmark_pct != null
+                                  ? `${isS.net_excess_vs_benchmark_pct >= 0 ? '+' : ''}${isS.net_excess_vs_benchmark_pct.toFixed(2)}%`
+                                  : '—'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div className="text-[#c5cedd]">
+                                {ci[0] != null && ci[1] != null
+                                  ? `[${ci[0].toFixed(2)}%, ${ci[1].toFixed(2)}%]`
+                                  : 'N/A'}
+                              </div>
+                              <div className="text-[10px] text-[#8ab4f8]">
+                                q = {cell.q_value_fdr != null ? cell.q_value_fdr.toFixed(3) : '1.000'} (p={isS.p_value != null ? isS.p_value.toFixed(3) : '1.000'})
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div className="text-[#f4eedf] font-bold">
+                                {isS.win_rate_net_pct != null ? `${isS.win_rate_net_pct.toFixed(1)}%` : 'N/A'}
+                              </div>
+                              <div className="text-[10px] text-[#818ea4]">
+                                {wci[0] != null && wci[1] != null
+                                  ? `[${wci[0].toFixed(1)}–${wci[1].toFixed(1)}%]`
+                                  : '—'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div
+                                className={`font-bold ${
+                                  oosS.net_excess_vs_drift_pct == null
+                                    ? 'text-[#818ea4]'
+                                    : oosS.net_excess_vs_drift_pct > 0
+                                    ? 'text-[#34b38a]'
+                                    : 'text-[#e07a5f]'
+                                }`}
+                              >
+                                {oosS.net_excess_vs_drift_pct != null
+                                  ? `${oosS.net_excess_vs_drift_pct >= 0 ? '+' : ''}${oosS.net_excess_vs_drift_pct.toFixed(2)}%`
+                                  : 'N/A'}
+                              </div>
+                              <div className="text-[10px] text-[#818ea4]">
+                                Net:{' '}
+                                {oosS.mean_net_return_pct != null
+                                  ? `${oosS.mean_net_return_pct >= 0 ? '+' : ''}${oosS.mean_net_return_pct.toFixed(2)}%`
+                                  : '—'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-right">
+                              <div className="text-[#e07a5f]">
+                                {isS.median_mae_pct != null ? `${isS.median_mae_pct.toFixed(2)}%` : '—'}
+                              </div>
+                              <div className="text-[#34b38a] text-[10px]">
+                                +{isS.median_mfe_pct != null ? `${isS.median_mfe_pct.toFixed(2)}%` : '—'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-2 text-center font-sans">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold border ${getLabelStyle(
+                                  cell.label
+                                )}`}
+                                title={cell.label_reason}
+                              >
+                                {cell.label}
+                              </span>
+                            </td>
+
+                            <td className="py-3 pl-2 text-right font-sans">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedTestId(isExpanded ? null : cell.test_id)
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-[#0d121a] border border-white/[0.10] hover:border-[#e3b23c]/50 text-[11px] font-bold text-[#e3b23c] cursor-pointer"
+                              >
+                                {isExpanded ? 'Hide' : `Log (${cnt.n_declustered_total})`}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {/* Expandable Event-Date Audit Drawer */}
+                          {isExpanded && (
+                            <tr className="bg-[#0d121a]">
+                              <td colSpan={10} className="p-4 border-t border-white/[0.08] font-sans">
+                                <div className="space-y-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                      <div className="font-bold text-xs text-[#f4eedf]">
+                                        Reproducible De-Clustered Event Log — {cell.signal_name} ({cell.horizon_days}D Horizon)
+                                      </div>
+                                      <div className="text-[11px] text-[#a6b0c3] mt-0.5">
+                                        Gate Diagnostic: <span className="text-[#e3b23c]">{cell.label_reason}</span>
+                                      </div>
+                                    </div>
+                                    <div className="text-[11px] font-mono text-[#a6b0c3]">
+                                      Showing most recent {(cell.recent_events || []).length} of {cnt.n_declustered_total} de-clustered events
+                                    </div>
+                                  </div>
+
+                                  {(cell.recent_events || []).length > 0 ? (
+                                    <div className="overflow-x-auto max-h-[260px] overflow-y-auto rounded-xl border border-white/[0.08]">
+                                      <table className="w-full text-[11px] text-left border-collapse font-mono tabular-nums">
+                                        <thead className="bg-[#141b26] text-[#a6b0c3] uppercase text-[10px] sticky top-0">
+                                          <tr>
+                                            <th className="py-2 px-3">Signal Close (t)</th>
+                                            <th className="py-2 px-3">Entry Open (t+1)</th>
+                                            <th className="py-2 px-3">Exit Close (t+{cell.horizon_days})</th>
+                                            <th className="py-2 px-2 text-center">Split</th>
+                                            <th className="py-2 px-2 text-right">Entry_tr</th>
+                                            <th className="py-2 px-2 text-right">Exit_tr</th>
+                                            <th className="py-2 px-2 text-right">Gross %</th>
+                                            <th className="py-2 px-2 text-right">Net %</th>
+                                            <th className="py-2 px-2 text-right">vs Bench %</th>
+                                            <th className="py-2 px-3 text-right">MAE / MFE</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/[0.05]">
+                                          {[...(cell.recent_events || [])].reverse().map((ev, idx) => (
+                                            <tr key={`${ev.signal_date}_${idx}`} className="hover:bg-white/[0.02]">
+                                              <td className="py-1.5 px-3 font-bold text-[#e3b23c]">{ev.signal_date}</td>
+                                              <td className="py-1.5 px-3 text-[#c5cedd]">{ev.entry_date}</td>
+                                              <td className="py-1.5 px-3 text-[#c5cedd]">{ev.exit_date}</td>
+                                              <td className="py-1.5 px-2 text-center">
+                                                <span
+                                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                                    ev.sample === 'OOS'
+                                                      ? 'bg-[#5b8fd9]/20 text-[#8ab4f8]'
+                                                      : 'bg-white/[0.07] text-[#c5cedd]'
+                                                  }`}
+                                                >
+                                                  {ev.sample}
+                                                </span>
+                                              </td>
+                                              <td className="py-1.5 px-2 text-right text-[#c5cedd]">
+                                                {ev.entry_price_tr.toFixed(2)}
+                                              </td>
+                                              <td className="py-1.5 px-2 text-right text-[#c5cedd]">
+                                                {ev.exit_price_tr.toFixed(2)}
+                                              </td>
+                                              <td className="py-1.5 px-2 text-right text-[#c5cedd]">
+                                                {ev.gross_return_pct >= 0 ? '+' : ''}{ev.gross_return_pct.toFixed(2)}%
+                                              </td>
+                                              <td
+                                                className={`py-1.5 px-2 text-right font-bold ${
+                                                  ev.net_return_pct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                                                }`}
+                                              >
+                                                {ev.net_return_pct >= 0 ? '+' : ''}{ev.net_return_pct.toFixed(2)}%
+                                              </td>
+                                              <td
+                                                className={`py-1.5 px-2 text-right ${
+                                                  ev.net_excess_vs_benchmark_pct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                                                }`}
+                                              >
+                                                {ev.net_excess_vs_benchmark_pct >= 0 ? '+' : ''}{ev.net_excess_vs_benchmark_pct.toFixed(2)}%
+                                              </td>
+                                              <td className="py-1.5 px-3 text-right">
+                                                <span className="text-[#e07a5f]">{ev.mae_pct.toFixed(1)}%</span>
+                                                <span className="text-white/20"> / </span>
+                                                <span className="text-[#34b38a]">+{ev.mfe_pct.toFixed(1)}%</span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-[#818ea4]">
+                                      No completed historical events recorded for this signal-horizon pair.
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
