@@ -41,7 +41,7 @@ import PREVIEW_DATA from './data/previewData.json';
 const TechnicalWorkspace = React.lazy(() => import('./components/TechnicalWorkspace'));
 
 function isTaFeatureEnabled() {
-  if (import.meta.env.VITE_ENABLE_TA === 'true') return true;
+  if (import.meta.env.DEV || import.meta.env.VITE_ENABLE_TA === 'true') return true;
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
     const taParam = params.get('ta');
