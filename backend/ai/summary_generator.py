@@ -84,6 +84,31 @@ def _clean_point_labels(text: str) -> str:
     return re.sub(r'^(Point\s*\d+\s*:\s*|\d+\.\s*)', '', text.strip(), flags=re.IGNORECASE)
 
 
+def _resolve_terminal_and_macro_anchors(data: Dict[str, Any]) -> tuple:
+    """Consistently resolve sovereign macro anchors and terminal growth parameters."""
+    company = data.get("company", {})
+    ticker = company.get("ticker", "")
+    market = company.get("market") or ("IN" if str(ticker).endswith((".NS", ".BO")) else "US")
+    macro = data.get("macro", {})
+    dcf = data.get("dcf_result", {})
+    overrides = data.get("overrides_applied", {})
+
+    term_g = macro.get("terminal_growth")
+    if term_g is None:
+        term_g = dcf.get("effective_terminal_growth")
+    if term_g is None:
+        term_g = dcf.get("terminal_growth")
+    if term_g is None:
+        term_g = overrides.get("terminal_growth")
+    if term_g is None:
+        term_g = 0.050 if market == "IN" else 0.025
+
+    eff_term_g = dcf.get("effective_terminal_growth", term_g)
+    gdp_anchor = macro.get("gdp_growth", 0.065 if market == "IN" else 0.025)
+    tv_capped = bool(dcf.get("terminal_growth_capped", False))
+    return market, term_g, eff_term_g, gdp_anchor, tv_capped
+
+
 # ---------------------------------------------------------------------------
 # Prompt builder
 # ---------------------------------------------------------------------------
@@ -106,22 +131,7 @@ def _build_prompt(data: Dict[str, Any]) -> str:
 
     sym = company.get("symbol", "$")
     currency = company.get("currency", "USD")
-    market = company.get("market") or ("IN" if str(company.get("ticker", "")).endswith((".NS", ".BO")) else "US")
-
-    # Resolve modeled terminal growth and macroeconomic anchors
-    modeled_term_g = macro.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = dcf.get("effective_terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = dcf.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = overrides.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = 0.050 if market == "IN" else 0.025
-
-    eff_term_g = dcf.get("effective_terminal_growth", modeled_term_g)
-    gdp_anchor = macro.get("gdp_growth", 0.065 if market == "IN" else 0.025)
-    tv_capped = dcf.get("terminal_growth_capped", False)
+    market, modeled_term_g, eff_term_g, gdp_anchor, tv_capped = _resolve_terminal_and_macro_anchors(data)
 
     # Reverse DCF data (expectations investing)
     rev_dcf = data.get("reverse_dcf", {})
@@ -281,6 +291,7 @@ def generate_valuation_summary(analysis_data: Dict[str, Any]) -> str:
         JSON-formatted institutional equity research memorandum.
     """
 
+    market, modeled_term_g, eff_term_g, gdp_anchor, tv_capped = _resolve_terminal_and_macro_anchors(analysis_data)
     data_context = _build_prompt(analysis_data)
 
     company_name = analysis_data.get("company", {}).get("name", "the company")
@@ -300,36 +311,38 @@ Strictly adhere to the JSON schema defined in your system prompt.
 {data_context}
 """
 
-    client = _get_client()
-    for model_name in MODELS:
-        try:
-            logger.info("Generating institutional valuation summary with model: %s", model_name)
-            chat_completion = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.25,
-                max_tokens=4000,
-                top_p=0.9,
-            )
-            content = chat_completion.choices[0].message.content
-            if content and "headline_metrics" in content:
-                try:
-                    parsed = json.loads(content)
-                    if isinstance(parsed, dict) and "headline_metrics" in parsed:
-                        enriched = _enrich_and_validate_report(parsed, analysis_data)
-                        logger.info("Institutional AI research note successfully compiled with %s", model_name)
-                        return json.dumps(enriched)
-                except Exception as parse_err:
-                    logger.warning("Failed to parse LLM JSON with %s: %s", model_name, parse_err)
+    try:
+        client = _get_client()
+        for model_name in MODELS:
+            try:
+                logger.info("Generating institutional valuation summary with model: %s", model_name)
+                chat_completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.25,
+                    max_tokens=4000,
+                    top_p=0.9,
+                )
+                content = chat_completion.choices[0].message.content
+                if content and "headline_metrics" in content:
+                    try:
+                        parsed = json.loads(content)
+                        if isinstance(parsed, dict) and "headline_metrics" in parsed:
+                            enriched = _enrich_and_validate_report(parsed, analysis_data)
+                            logger.info("Institutional AI research note successfully compiled with %s", model_name)
+                            return json.dumps(enriched)
+                    except Exception as parse_err:
+                        logger.warning("Failed to parse LLM JSON with %s: %s", model_name, parse_err)
 
-                return content
-            logger.warning("Model %s returned incomplete JSON, trying next model", model_name)
-        except Exception as exc:
-            logger.warning("Groq call failed for model %s: %s", model_name, exc)
+                logger.warning("Model %s returned incomplete JSON, trying next model", model_name)
+            except Exception as exc:
+                logger.warning("Groq call failed for model %s: %s", model_name, exc)
+    except Exception as client_err:
+        logger.warning("Groq client initialization or connectivity failed: %s", client_err)
 
     logger.error("All AI models failed or unavailable, building algorithmic institutional memorandum fallback")
     return _build_fallback(analysis_data)
@@ -490,22 +503,9 @@ def _enrich_and_validate_report(report: dict, analysis_data: dict) -> dict:
     # -----------------------------------------------------------------------
     # Enforce terminal growth and macro anchor fidelity across all text fields
     # -----------------------------------------------------------------------
-    market = company.get("market") or ("IN" if str(company.get("ticker", "")).endswith((".NS", ".BO")) else "US")
-    macro = analysis_data.get("macro", {})
-    overrides = analysis_data.get("overrides_applied", {})
-
-    modeled_term_g = macro.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = dcf.get("effective_terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = dcf.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = overrides.get("terminal_growth")
-    if modeled_term_g is None:
-        modeled_term_g = 0.050 if market == "IN" else 0.025
-
+    market, modeled_term_g, eff_term_g, gdp_anchor, tv_capped = _resolve_terminal_and_macro_anchors(analysis_data)
     g_str = _fmt_pct(modeled_term_g)
-    gdp_str = _fmt_pct(macro.get("gdp_growth", 0.065 if market == "IN" else 0.025))
+    gdp_str = _fmt_pct(gdp_anchor)
 
     def _sanitize_macro_text(val: Any) -> Any:
         if isinstance(val, str):
@@ -560,20 +560,7 @@ def _build_fallback(data: Dict[str, Any]) -> str:
     historicals = data.get("historicals", {})
     sym = company.get("symbol", "$")
     currency = company.get("currency", "USD")
-    market = company.get("market") or ("IN" if str(ticker).endswith((".NS", ".BO")) else "US")
-    macro = data.get("macro", {})
-    overrides = data.get("overrides_applied", {})
-
-    term_g = macro.get("terminal_growth")
-    if term_g is None:
-        term_g = dcf.get("effective_terminal_growth")
-    if term_g is None:
-        term_g = dcf.get("terminal_growth")
-    if term_g is None:
-        term_g = overrides.get("terminal_growth")
-    if term_g is None:
-        term_g = 0.050 if market == "IN" else 0.025
-    gdp_anchor = macro.get("gdp_growth", 0.065 if market == "IN" else 0.025)
+    market, term_g, eff_term_g, gdp_anchor, tv_capped = _resolve_terminal_and_macro_anchors(data)
 
     # Reverse DCF
     rev_dcf = data.get("reverse_dcf", {})
