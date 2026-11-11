@@ -106,12 +106,15 @@ export default function SensitivityTab({ data }) {
   // Additional Matrix 3: Terminal Growth Rate (g) vs WACC (Terminal Value Sensitivity)
   const tvMatrix = useMemo(() => {
     const pv5 = data.dcf_result?.pv_ufcf || 0;
-    const ufcf5 = (data.dcf_result?.projected_ufcf && data.dcf_result.projected_ufcf.length) 
-      ? data.dcf_result.projected_ufcf[data.dcf_result.projected_ufcf.length - 1] 
-      : (data.dcf_result?.pv_terminal_value ? data.dcf_result.pv_terminal_value * 0.1 : 100);
     const debt = data.wacc?.total_debt || 0;
     const cash = data.wacc?.total_cash || data.historicals?.cash_and_equivalents || 0;
     const shares = data.market_data?.shares_outstanding || 1;
+
+    const baseReinv = data.dcf_result?.terminal_reinv_rate ?? 0.30;
+    const baseTgr = data.dcf_result?.terminal_growth || (data.company?.market === 'IN' ? 0.050 : 0.025);
+    const effBaseTgr = data.dcf_result?.effective_terminal_growth || baseTgr;
+    const baseTv = data.dcf_result?.terminal_value || 0;
+    const baseTerminalUfcf = baseTv > 0 ? baseTv * Math.max(0.005, baseWacc - effBaseTgr) : 0;
 
     const gSteps = [-0.015, -0.0075, 0, 0.0075, 0.015];
     const waccSteps = [-0.015, -0.0075, 0, 0.0075, 0.015];
@@ -122,10 +125,16 @@ export default function SensitivityTab({ data }) {
     const grid = wRange.map(w => {
       return gRange.map(g => {
         if (w <= g + 0.005) return null;
-        // Mid-year discount factor for year 5 = (1 + w)^4.5
-        const df5 = Math.pow(1 + w, 4.5);
-        const tvNominal = (ufcf5 * (1 + g)) / (w - g);
-        const pvTv = tvNominal / Math.pow(1 + w, 5);
+        let tvNominal;
+        if (baseTerminalUfcf > 0) {
+          const reinvRate = Math.min(0.80, Math.max(0.06, baseReinv * (g / Math.max(0.01, baseTgr))));
+          const termUfcf = baseTerminalUfcf * ((1.0 - reinvRate) / Math.max(0.01, 1.0 - baseReinv));
+          tvNominal = termUfcf / (w - g);
+        } else {
+          tvNominal = 0;
+        }
+        // Mid-year discount factor for year 5 matches backend discount_factors[-1] = (1 + w)^4.5
+        const pvTv = tvNominal / Math.pow(1 + w, 4.5);
         const ev = pv5 + pvTv;
         const eq = isEquityModel ? (pv5 + pvTv) : (ev - debt + cash);
         const p = eq / shares;
