@@ -46,12 +46,20 @@ export default function AssumptionSliders({
 
   const defaultTgr = (data.macro?.terminal_growth ?? (data.company?.market === 'IN' ? 0.055 : 0.025)) * 100;
   const isIndia = data.company?.market === 'IN';
+  const minTgr = 0.5;
   const maxTgr = isIndia ? 8.0 : 5.0;
 
   const appliedGrowth = data.overrides_applied?.revenue_growth != null ? data.overrides_applied.revenue_growth * 100 : defaultGrowth * 100;
   const appliedMargin = data.overrides_applied?.ebit_margin != null ? data.overrides_applied.ebit_margin * 100 : defaultMargin * 100;
   const appliedWacc = data.overrides_applied?.wacc != null ? data.overrides_applied.wacc * 100 : defaultWacc * 100;
   const appliedTgr = data.overrides_applied?.terminal_growth != null ? data.overrides_applied.terminal_growth * 100 : defaultTgr;
+
+  const minGrowth = Math.min(-20, Math.floor(Math.min(defaultGrowth * 100, appliedGrowth) - 5));
+  const maxGrowth = Math.max(60, Math.ceil(Math.max(defaultGrowth * 100, appliedGrowth) + 10));
+  const minMargin = Math.min(isEquityModel ? 2 : -60, Math.floor(Math.min(defaultMargin * 100, appliedMargin) - 5));
+  const maxMargin = Math.max(isFinancial ? 40 : isEquityModel ? 60 : 65, Math.ceil(Math.max(defaultMargin * 100, appliedMargin) + 5));
+  const minWacc = Math.min(4, Math.floor(Math.min(defaultWacc * 100, appliedWacc) - 1));
+  const maxWacc = Math.max(25, Math.ceil(Math.max(defaultWacc * 100, appliedWacc) + 5));
 
   const [growth, setGrowth] = useState(() => appliedGrowth);
   const [margin, setMargin] = useState(() => appliedMargin);
@@ -82,28 +90,28 @@ export default function AssumptionSliders({
   };
 
   const handleGrowthChange = (val) => {
-    let clamped = Math.max(-20, Math.min(50, val));
+    let clamped = Math.max(minGrowth, Math.min(maxGrowth, val));
     if (Math.abs(clamped - appliedGrowth) <= 0.08) clamped = appliedGrowth;
     setGrowth(clamped);
     notifyParent(clamped, margin, wacc, tgr);
   };
 
   const handleMarginChange = (val) => {
-    let clamped = Math.max(isEquityModel ? 2 : -60, Math.min(isFinancial ? 40 : isEquityModel ? 60 : 65, val));
+    let clamped = Math.max(minMargin, Math.min(maxMargin, val));
     if (Math.abs(clamped - appliedMargin) <= 0.08) clamped = appliedMargin;
     setMargin(clamped);
     notifyParent(growth, clamped, wacc, tgr);
   };
 
   const handleWaccChange = (val) => {
-    let clamped = Math.max(4, Math.min(25, val));
+    let clamped = Math.max(minWacc, Math.min(maxWacc, val));
     if (Math.abs(clamped - appliedWacc) <= 0.08) clamped = appliedWacc;
     setWacc(clamped);
     notifyParent(growth, margin, clamped, tgr);
   };
 
   const handleTgrChange = (val) => {
-    let clamped = Math.max(0.5, Math.min(maxTgr, val));
+    let clamped = Math.max(minTgr, Math.min(maxTgr, val));
     if (Math.abs(clamped - appliedTgr) <= 0.08) clamped = appliedTgr;
     setTgr(clamped);
     notifyParent(growth, margin, wacc, clamped);
@@ -129,14 +137,14 @@ export default function AssumptionSliders({
     let t = defaultTgr;
 
     if (preset === 'bear') {
-      g = Math.max(-10, g - 3.5);
+      g = Math.max(minGrowth, g - 3.5);
       m = Math.max(isEquityModel ? 6 : 5, m - 2.5);
-      w = Math.min(22, w + 1.0);
-      t = Math.max(1.5, t - 0.5);
+      w = Math.min(maxWacc, w + 1.0);
+      t = Math.max(minTgr, t - 0.5);
     } else if (preset === 'bull') {
-      g = Math.min(40, g + 4.0);
-      m = Math.min(isFinancial ? 32 : isEquityModel ? 50 : 55, m + 2.5);
-      w = Math.max(5.5, w - 0.6);
+      g = Math.min(maxGrowth, g + 4.0);
+      m = Math.min(maxMargin, m + 2.5);
+      w = Math.max(minWacc, w - 0.6);
       t = Math.min(maxTgr - 0.3, t + 0.4);
     }
 
@@ -495,8 +503,8 @@ export default function AssumptionSliders({
           </div>
           <input
             type="range"
-            min="-10"
-            max="40"
+            min={minGrowth}
+            max={maxGrowth}
             step="0.1"
             value={growth}
             onChange={(e) => handleGrowthChange(parseFloat(e.target.value))}
@@ -531,8 +539,8 @@ export default function AssumptionSliders({
           </div>
           <input
             type="range"
-            min={isEquityModel ? '5' : '-30'}
-            max={isFinancial ? '35' : isEquityModel ? '50' : '60'}
+            min={minMargin}
+            max={maxMargin}
             step="0.1"
             value={margin}
             onChange={(e) => handleMarginChange(parseFloat(e.target.value))}
@@ -563,8 +571,8 @@ export default function AssumptionSliders({
           </div>
           <input
             type="range"
-            min="5"
-            max="25"
+            min={minWacc}
+            max={maxWacc}
             step="0.1"
             value={wacc}
             onChange={(e) => handleWaccChange(parseFloat(e.target.value))}
@@ -609,7 +617,7 @@ export default function AssumptionSliders({
           </div>
           <input
             type="range"
-            min="1"
+            min={minTgr}
             max={maxTgr}
             step="0.1"
             value={tgr}
