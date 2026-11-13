@@ -60,11 +60,17 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
             op_debt = float(val)
 
     is_fin = bool(stock_data.get("is_financial", True))
-    note_str = (
-        "For banking and financial firms, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly."
-        if is_fin
-        else "In DDM / FCFE Equity Valuation mode, cash flows to equity holders are discounted directly at the CAPM Cost of Equity (Ke)."
-    )
+    suit = stock_data.get("model_suitability") or {}
+    is_nbfc = suit.get("model_family") == "NBFC_LENDER_DDM" or suit.get("lender_subtype") == "NBFC_WHOLESALE_LENDER"
+    if is_nbfc:
+        note_str = (
+            "For NBFCs / wholesale-funded specialty lenders, market borrowings fund the loan book alongside equity; "
+            "equity is valued via Excess Return DDM discounted at CAPM Cost of Equity (Ke), accompanied by wholesale leverage & credit-cost ROE sensitivity."
+        )
+    elif is_fin:
+        note_str = "For banking and financial firms, customer deposits and borrowings are operational inventory rather than capital structure debt. Cost of Equity (Ke) is used directly."
+    else:
+        note_str = "In DDM / FCFE Equity Valuation mode, cash flows to equity holders are discounted directly at the CAPM Cost of Equity (Ke)."
 
     return {
         "cost_of_equity": float(ke),
@@ -85,6 +91,7 @@ def compute_bank_cost_of_equity(stock_data: dict, market_profile: dict) -> dict:
         "beta_clamped": stock_data.get("beta_clamped", False),
         "beta_note": stock_data.get("beta_note", ""),
         "is_financial": is_fin,
+        "is_nbfc": is_nbfc,
         "is_equity_model": True,
         "note": note_str,
     }
@@ -178,12 +185,14 @@ def run_bank_valuation(
     # Bound start_growth to [-5%, 35%] consistent with bank Monte Carlo bounds
     start_growth = max(-0.05, min(0.35, float(start_growth)))
 
-    # Construct growth and ROE schedules (concave growth fade for compounder banks/NBFCs)
-    if start_growth > terminal_growth + 0.06:
-        steps = np.arange(projection_years, dtype=float) / float(projection_years)
-        growth_schedule = start_growth - (start_growth - terminal_growth) * (steps ** 1.35)
+    # Construct continuous smooth growth and ROE schedules
+    if projection_years > 1:
+        steps = np.arange(projection_years, dtype=float) / float(projection_years - 1)
     else:
-        growth_schedule = np.linspace(start_growth, terminal_growth, projection_years)
+        steps = np.zeros(1, dtype=float)
+    fade_blend = min(1.0, max(0.0, (start_growth - terminal_growth - 0.03) / 0.06))
+    growth_fade_exponent = 1.0 + 0.35 * fade_blend
+    growth_schedule = start_growth - (start_growth - terminal_growth) * (steps ** growth_fade_exponent)
     roe_schedule = np.linspace(base_roe, target_roe, projection_years)
 
     proj_net_income: List[float] = []
@@ -266,7 +275,25 @@ def run_bank_valuation(
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
 
     is_fin = bool(stock_data.get("is_financial", True))
-    resolved_model_type = model_type or ("BANKING_DDM" if is_fin else "CORPORATE_DDM")
+    suit = stock_data.get("model_suitability") or {}
+    is_nbfc = suit.get("model_family") == "NBFC_LENDER_DDM" or suit.get("lender_subtype") == "NBFC_WHOLESALE_LENDER"
+    resolved_model_type = model_type or ("NBFC_LENDER_DDM" if is_nbfc else ("BANKING_DDM" if is_fin else "CORPORATE_DDM"))
+
+    bs = stock_data.get("balance_sheet")
+    op_debt = 0.0
+    if hasattr(bs, "columns") and "Total Debt" in bs.columns and len(bs) > 0:
+        val = bs["Total Debt"].iloc[0]
+        if not np.isnan(val):
+            op_debt = float(val)
+    wholesale_leverage_ratio = float(op_debt / base_bve) if base_bve > 0 else 0.0
+    stressed_roe = max(0.05, float(roe_schedule[-1]) - 0.020)
+    stressed_ke = float(cost_of_equity) + (0.0075 if is_nbfc else 0.0050)
+    stressed_pb = (
+        max(0.2, (stressed_roe - effective_terminal_growth) / (stressed_ke - effective_terminal_growth))
+        if stressed_ke > effective_terminal_growth
+        else 1.0
+    )
+    credit_cost_stress_price = max(0.0, bvps * stressed_pb)
 
     tv_share_of_ev = float(pv_terminal_value / equity_value) if equity_value > 0 else 0.0
     tv_share_flag = bool(tv_share_of_ev > 0.78)
@@ -315,13 +342,23 @@ def run_bank_valuation(
         "use_mid_year": use_mid_year,
         # Dedicated Equity / DDM Model Fields
         "is_financial": is_fin,
+        "is_nbfc": is_nbfc,
+        "lender_subtype": "NBFC_WHOLESALE_LENDER" if is_nbfc else "COMMERCIAL_DEPOSIT_BANK",
         "is_equity_model": True,
         "model_type": resolved_model_type,
+        "wholesale_leverage_ratio": wholesale_leverage_ratio,
+        "credit_cost_stress_price": float(credit_cost_stress_price),
+        "funding_model_note": (
+            f"Wholesale debt / equity leverage: {wholesale_leverage_ratio:.2f}x. NBFC funding spread & credit-cost stress ROE ({stressed_roe*100:.1f}%) / Ke ({stressed_ke*100:.2f}%) implies {credit_cost_stress_price:,.2f}."
+            if is_nbfc
+            else "Deposit-funded commercial bank; Tier-1 equity retention linked to RWA growth / ROE."
+        ),
         "base_net_income": float(base_net_income),
         "base_bve": float(base_bve),
         "bvps": float(bvps),
         "base_roe": float(base_roe),
         "target_roe": float(target_roe),
+        "growth_fade_exponent": float(growth_fade_exponent),
         "cost_of_equity": float(cost_of_equity),
         "justified_pb": float(justified_pb),
         "justified_price": float(justified_price),
@@ -401,13 +438,15 @@ def run_bank_monte_carlo(
     b_roe = max(0.05, min(0.35, b_roe))
 
     target_roe_arr = np.clip(sim_roe, 0.05, 0.35)
-    linear_sched = np.linspace(sim_growth, terminal_growth, projection_years, axis=1)
-    steps = np.arange(projection_years, dtype=float) / float(projection_years)
-    concave_sched = sim_growth[:, None] - (sim_growth[:, None] - terminal_growth) * (
-        steps[None, :] ** 1.35
+    if projection_years > 1:
+        steps = np.arange(projection_years, dtype=float) / float(projection_years - 1)
+    else:
+        steps = np.zeros(1, dtype=float)
+    fade_blend = np.clip((sim_growth - terminal_growth - 0.03) / 0.06, 0.0, 1.0)
+    fade_exponents = 1.0 + 0.35 * fade_blend
+    growth_schedule = sim_growth[:, None] - (sim_growth[:, None] - terminal_growth) * (
+        steps[None, :] ** fade_exponents[:, None]
     )
-    high_g_mask = (sim_growth > terminal_growth + 0.06)[:, None]
-    growth_schedule = np.where(high_g_mask, concave_sched, linear_sched)
     roe_schedule = np.linspace(b_roe, target_roe_arr, projection_years, axis=1)
 
     discount_periods = np.arange(projection_years, dtype=float) + 0.5
@@ -479,10 +518,24 @@ def run_bank_monte_carlo(
         "sim_growth": sim_growth.tolist(),
         "sim_margin": sim_roe.tolist(),  # mapped to margin for frontend compatibility
         "sim_wacc": sim_ke.tolist(),     # mapped to wacc for frontend compatibility
+        "seed": 42,
+        "requested_iterations": int(iterations),
+        "candidate_draws_sampled": int(iterations),
+        "total_candidate_valid": int(valid_count),
+        "rejected_draws": int(iterations - valid_count),
+        "unused_valid_oversample": 0,
         "actual_iterations": len(sim_prices),
-        "total_simulations": iterations,
-        "valid_simulations": valid_count,
-        "invalid_simulations": iterations - valid_count,
+        "total_simulations": int(iterations),
+        "valid_simulations": int(valid_count),
+        "invalid_simulations": int(iterations - valid_count),
+        "invalid_simulation_reasons": {
+            "ke_too_low": int(np.sum(sim_ke <= terminal_growth)),
+            "zero_or_invalid_equity": int(iterations - valid_count),
+        },
+        "corr_sample_size": 0,
+        "corr_method": "bank_ddm_independent_draws",
+        "is_corr_regularized": False,
+        "hist_corr_gm": 0.0,
     }
 
 

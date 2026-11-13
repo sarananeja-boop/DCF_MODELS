@@ -6,10 +6,15 @@ const DCFModelTab = ({ data }) => {
 
   const { company: comp, dcf_result: dcf, wacc: waccObj } = data;
   const isFinancial = Boolean(comp?.is_financial || data.diagnostics?.is_financial || dcf?.is_financial);
+  const modelType = String(comp?.model_type || dcf?.model_type || data.diagnostics?.model_type || '');
+  const isInsurance = Boolean(modelType.startsWith('INSURANCE_') || dcf?.is_insurance);
+  const isReit = Boolean(modelType === 'REIT_INVIT_AFFO' || dcf?.is_reit);
   const isEquityModel = Boolean(
     isFinancial ||
+    isInsurance ||
+    isReit ||
     comp?.is_equity_model ||
-    comp?.model_type === 'CORPORATE_DDM' ||
+    modelType === 'CORPORATE_DDM' ||
     data.diagnostics?.is_equity_model ||
     dcf?.is_equity_model
   );
@@ -60,7 +65,11 @@ const DCFModelTab = ({ data }) => {
       <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg sm:text-xl font-bold text-[#f4eedf] tracking-tight">
-            {isFinancial
+            {isReit
+              ? '5-Year Distributable AFFO / NDCF Schedule'
+              : isInsurance
+              ? '5-Year Actuarial Equity & Solvency FCFE Schedule'
+              : isFinancial
               ? '5-Year Regulatory Capital FCFE Schedule'
               : isEquityModel
               ? '5-Year Corporate DDM & FCFE Schedule'
@@ -94,7 +103,7 @@ const DCFModelTab = ({ data }) => {
             <tbody className="divide-y divide-[#f4eedf]/8">
               <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
                 <td className="px-2.5 sm:px-4 py-3 font-semibold text-[#f4eedf] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
-                  {isEquityModel ? 'Projected Net Income' : 'Projected Revenue'}
+                  {isReit ? 'Projected Property Revenue' : isEquityModel ? 'Projected Net Income' : 'Projected Revenue'}
                 </td>
                 {dcf.projected_revenue?.map((val, i) => (
                   <td key={i} className="px-3 sm:px-4 py-3 text-right font-display font-bold tabular-nums text-[#f4eedf]">
@@ -104,7 +113,7 @@ const DCFModelTab = ({ data }) => {
               </tr>
               <tr className="bg-[#0d121a]/60 hover:bg-[#1a2332] transition-colors">
                 <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
-                  {isEquityModel ? 'Net Income Growth (g)' : 'Revenue Growth (%)'}
+                  {isReit ? 'Revenue / FFO Growth (g)' : isEquityModel ? 'Net Income Growth (g)' : 'Revenue Growth (%)'}
                 </td>
                 {dcf.growth_schedule?.map((val, i) => (
                   <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-bold tabular-nums text-[#e3b23c]">
@@ -115,11 +124,23 @@ const DCFModelTab = ({ data }) => {
               {dcf.margin_schedule && (
                 <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
                   <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
-                    {isEquityModel ? 'Target ROE (%)' : 'EBIT Margin (%)'}
+                    {isReit ? 'AFFO Margin (%)' : isInsurance ? 'Ex-AOCI ROE (%)' : isEquityModel ? 'Target ROE (%)' : 'EBIT Margin (%)'}
                   </td>
                   {dcf.margin_schedule.map((val, i) => (
                     <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#a6b0c3]">
                       {formatPct(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {isReit && dcf.projected_nopat && (
+                <tr className="bg-[#0d121a]/60 hover:bg-[#1a2332] transition-colors">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#f4eedf] sticky left-0 bg-[#111721] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
+                    Projected Adjusted FFO (AFFO)
+                  </td>
+                  {dcf.projected_nopat.map((val, i) => (
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display font-semibold tabular-nums text-[#f4eedf]">
+                      {formatNum(val)}
                     </td>
                   ))}
                 </tr>
@@ -136,10 +157,12 @@ const DCFModelTab = ({ data }) => {
                   ))}
                 </tr>
               )}
-              {dcf.projected_dna && (
+              {dcf.projected_dna && !isReit && (
                 <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
                   <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
-                    {isFinancial
+                    {isInsurance
+                      ? '(−) Solvency Reserve & Capital Retained'
+                      : isFinancial
                       ? '(−) Regulatory Capital Retained'
                       : isEquityModel
                       ? '(−) Retained Earnings Reinvested (b = g / ROE)'
@@ -148,6 +171,18 @@ const DCFModelTab = ({ data }) => {
                   {dcf.projected_dna.map((val, i) => (
                     <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
                       {isEquityModel ? `- ${formatNum(val)}` : formatNum(val)}
+                    </td>
+                  ))}
+                </tr>
+              )}
+              {isReit && dcf.projected_capex && (
+                <tr className="bg-[#141b26] hover:bg-[#1a2332] transition-colors">
+                  <td className="px-2.5 sm:px-4 py-2.5 font-medium text-[#a6b0c3] sticky left-0 bg-[#141b26] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
+                    (−) Growth CapEx &amp; AFFO Retained
+                  </td>
+                  {dcf.projected_capex.map((val, i) => (
+                    <td key={i} className="px-3 sm:px-4 py-2.5 text-right font-display tabular-nums text-[#a6b0c3]">
+                      - {formatNum(val)}
                     </td>
                   ))}
                 </tr>
@@ -178,7 +213,9 @@ const DCFModelTab = ({ data }) => {
               )}
               <tr className="bg-[#182232] border-t border-[#f4eedf]/20">
                 <td className="px-2.5 sm:px-4 py-3 font-bold text-[#f4eedf] sticky left-0 bg-[#182232] z-10 border-r border-[#f4eedf]/10 max-w-[140px] sm:max-w-none leading-snug">
-                  {isFinancial
+                  {isReit
+                    ? 'Distributable Unitholder AFFO (NDCF)'
+                    : isFinancial
                     ? 'Free Cash Flow to Equity (FCFE)'
                     : isEquityModel
                     ? 'Dividends / FCFE Available to Shareholders'
@@ -234,7 +271,11 @@ const DCFModelTab = ({ data }) => {
       {/* 2. Terminal Value & Equity Bridge Summary Strip */}
       <div className="bg-[#141b26] rounded-2xl p-5 shadow-lg border border-[#f4eedf]/10">
         <h3 className="font-display text-base sm:text-lg font-bold text-[#f4eedf] mb-3.5 tracking-tight">
-          {isFinancial
+          {isReit
+            ? 'Terminal Value & Cap-Rate NAV Equity Bridge'
+            : isInsurance
+            ? 'Terminal Value & Actuarial Ex-AOCI Equity Bridge'
+            : isFinancial
             ? 'Terminal Value & Bank Equity Bridge'
             : isEquityModel
             ? 'Terminal Value & Corporate DDM / FCFE Equity Bridge'
@@ -244,7 +285,7 @@ const DCFModelTab = ({ data }) => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="bg-[#0d121a] rounded-xl p-3.5 border border-[#f4eedf]/8">
             <div className="text-[11px] uppercase tracking-wider text-[#a6b0c3] font-semibold">
-              {isEquityModel ? 'PV of 5-Yr FCFEs' : 'PV of 5-Yr Cash Flows'}
+              {isReit ? 'PV of 5-Yr NDCF' : isEquityModel ? 'PV of 5-Yr FCFEs' : 'PV of 5-Yr Cash Flows'}
             </div>
             <div className="font-display text-lg sm:text-xl font-bold text-[#34b38a] tabular-nums mt-1">
               {formatNum(dcf.pv_ufcf)}

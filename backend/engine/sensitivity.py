@@ -157,7 +157,7 @@ def generate_terminal_growth_sensitivity_grid(
     if tax_rate is None and market_profile:
         tax_rate = market_profile.get("tax_rate")
 
-    # Evaluate base DCF first to anchor on effective_terminal_growth and base terminal_reinv_rate
+    # Evaluate base DCF first to anchor on effective_terminal_growth
     base_dcf = run_dcf(
         start_growth=avg_rev_growth,
         ebit_margin=base_margin,
@@ -172,28 +172,6 @@ def generate_terminal_growth_sensitivity_grid(
         use_mid_year=use_mid_year,
     )
     eff_base_tg = float(base_dcf.get("effective_terminal_growth", terminal_growth))
-    base_reinv = float(base_dcf.get("terminal_reinv_rate", 0.10))
-    base_ufcf = [float(x) for x in (base_dcf.get("projected_ufcf") or base_dcf.get("ufcf") or [])]
-    base_nopat = [float(x) for x in (base_dcf.get("projected_nopat") or base_dcf.get("nopat") or [])]
-    last_nopat = base_nopat[-1] if base_nopat else 0.0
-    n_proj = len(base_ufcf) if base_ufcf else projection_years
-    periods = [0.5 + k if use_mid_year else 1.0 + k for k in range(n_proj)]
-
-    terminal_val = float(base_dcf.get("terminal_value") or 0.0)
-    spread_base = float(base_wacc) - eff_base_tg
-    pure_gordon_tv = (
-        (last_nopat * (1.0 + eff_base_tg) * (1.0 - base_reinv)) / spread_base
-        if (spread_base > 0 and last_nopat > 0)
-        else terminal_val
-    )
-    tv_scale = (terminal_val / pure_gordon_tv) if (pure_gordon_tv > 0 and abs(terminal_val - pure_gordon_tv) > 1.0) else 1.0
-
-    cash_val = float(base_dcf.get("cash", wacc_data.get("total_cash", 0.0)) or 0.0)
-    debt_val = float(base_dcf.get("total_debt", wacc_data.get("total_debt", 0.0)) or 0.0)
-    min_int_val = float(base_dcf.get("minority_interest", wacc_data.get("minority_interest_claim", 0.0)) or 0.0) + float(
-        base_dcf.get("preferred_stock", wacc_data.get("preferred_stock_claim", 0.0)) or 0.0
-    )
-    shares_cnt = float(stock_data.get("shares_outstanding", 1.0) or 1.0)
 
     raw_wacc_range = np.linspace(base_wacc - 0.02, base_wacc + 0.02, grid_size)
     max_tg_bound = min(eff_base_tg + 0.01, float(np.min(raw_wacc_range)) - 0.016)
@@ -208,13 +186,21 @@ def generate_terminal_growth_sensitivity_grid(
         for tg in tg_range:
             tg_f = float(tg)
             try:
-                pv_fcff = sum(cf / ((1.0 + w_f) ** t) for cf, t in zip(base_ufcf, periods))
-                eff_g = min(tg_f, w_f - 0.015)
-                term_ufcf = last_nopat * (1.0 + eff_g) * (1.0 - base_reinv)
-                tv_nom = (term_ufcf / max(0.015, w_f - eff_g)) * tv_scale if last_nopat > 0 else 0.0
-                pv_tv = tv_nom / ((1.0 + w_f) ** periods[-1]) if periods else 0.0
-                eq_val = pv_fcff + pv_tv + cash_val - debt_val - min_int_val
-                row.append(max(0.0, float(eq_val / shares_cnt)))
+                res = run_dcf(
+                    start_growth=avg_rev_growth,
+                    ebit_margin=base_margin,
+                    discount_rate=w_f,
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    terminal_growth=tg_f,
+                    projection_years=projection_years,
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=use_mid_year,
+                    ignore_terminal_growth_cap=True,
+                )
+                row.append(float(res["implied_price"]))
             except Exception:
                 row.append(0.0)
         price_grid.append(row)

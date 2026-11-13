@@ -299,19 +299,25 @@ KNOWN_NON_DCF_SYMBOLS = {
     "KOTAKGOLD", "AXISGOLD", "QGOLDHALF", "SBIGETS", "GOLDSHARE", "IVZINGOLD",
     "IDBIGOLD", "BSLGOLDETF", "SETFGOLD", "SETFNIF50", "SETFNIFBK", "SETFBSE100",
     "SETFSN50", "NIFTYEES", "QNIFTY", "KTKSENSEX", "ICICISENSX", "ICICINIFTY",
-    # Indian REITs & InvITs
-    "EMBASSY", "MINDSPACE", "BIRET", "NEXUSSELECT", "NXST", "INDIGRID", "IRBINVIT",
-    "PGINVIT", "INDINFR", "INFRATRUST", "NHIT", "TOWERINFRA",
-    # US ETFs, Commodity Trusts & Equity REITs
+    # US ETFs & Commodity Trusts
     "SPY", "IVV", "VOO", "QQQ", "QQQM", "DIA", "IWM", "VTI", "VEA", "VWO", "EFA",
     "EEM", "GLD", "IAU", "SLV", "USO", "UNG", "DBC", "PDBC", "IBIT", "FBTC", "GBTC",
     "ETHE", "ARKK", "ARKW", "ARKG", "XLK", "XLF", "XLV", "XLE", "XLI", "XLY", "XLP",
     "XLU", "XLB", "XLRE", "XLC", "SMH", "SOXX", "SOXL", "TQQQ", "SQQQ", "TLT", "HYG",
     "LQD", "BND", "AGG", "SCHD", "VIG", "VYM", "JEPI", "JEPQ",
-    # Major US REITs & MLPs in SEC top list
+}
+
+REIT_INVIT_SYMBOLS = {
+    # Indian REITs & InvITs
+    "EMBASSY", "MINDSPACE", "BIRET", "NEXUSSELECT", "INDIGRID", "IRBINVIT",
+    "PGINVIT", "INDINFR", "INFRATRUST", "NHIT", "TOWERINFRA",
+    # US Equity REITs
     "PLD", "AMT", "EQIX", "WELL", "SPG", "DLR", "O", "PSA", "CCI", "VICI", "EXR",
     "AVB", "EQR", "IRM", "SBAC", "WY", "ARE", "INVH", "MAA", "ESS", "VTR",
-    "EPD", "ET", "MPLX", "CQP",
+}
+
+MIDSTREAM_MLP_SYMBOLS = {
+    "EPD", "ET", "MPLX", "CQP", "WES", "PAA", "SUN",
 }
 
 _ETF_MF_NAME_REGEX = re.compile(
@@ -329,9 +335,46 @@ _REIT_INVIT_NAME_REGEX = re.compile(
     r"(\bREIT\b|\bINVIT\b|REAL\s+ESTATE\s+INVESTMENT\s+TRUST|REAL\s+ESTATE\s+TRUST|"
     r"INFRASTRUCTURE\s+INVESTMENT\s+TRUST|INFRASTRUCTURE\s+TRUST|INFRA\s+TRUST|"
     r"GRID\s+TRUST|INDINFRAVIT|DIGITAL\s+REALTY\s+TRUST|REALTY\s+INCOME\s+CORP|"
-    r"VICI\s+PROPERTIES)",
+    r"VICI\s+PROPERTIES|BROOKFIELD\s+INDIA\s+REAL\s+ESTATE|EMBASSY\s+OFFICE\s+PARKS|"
+    r"MINDSPACE\s+BUSINESS\s+PARKS|NEXUS\s+SELECT\s+TRUST)",
     re.IGNORECASE,
 )
+
+
+def is_reit_invit_instrument(
+    symbol: Optional[str] = None,
+    name: Optional[str] = None,
+    quote_type: Optional[str] = None,
+    sector: Optional[str] = None,
+    industry: Optional[str] = None,
+) -> bool:
+    """Return True if the security is an Equity REIT or InvIT eligible for REIT/AFFO valuation (never ETFs)."""
+    sym_raw = (symbol or "").strip().upper()
+    sym_clean = re.sub(r"\.(NS|BO)$", "", sym_raw)
+    name_clean = html.unescape(name or "").strip()
+    qt = (quote_type or "").strip().upper()
+    ind = (industry or "").strip().lower()
+
+    # Never misclassify an actual REIT-themed ETF or index fund as a direct operating REIT.
+    if (
+        qt == "ETF"
+        or sym_clean in KNOWN_NON_DCF_SYMBOLS
+        or sym_clean.endswith(("ETF", "BEES"))
+        or _ETF_MF_NAME_REGEX.search(name_clean)
+    ):
+        return False
+
+    if sym_raw.endswith(("-RR.NS", "-IV.NS")):
+        return True
+    if "reit" in ind or "real estate investment trust" in ind or "invit" in ind:
+        return True
+    if sym_clean in REIT_INVIT_SYMBOLS:
+        return True
+    if sym_clean == "NXST" and (sym_raw.endswith((".NS", ".BO")) or _REIT_INVIT_NAME_REGEX.search(name_clean)):
+        return True
+    if _REIT_INVIT_NAME_REGEX.search(name_clean):
+        return True
+    return False
 
 
 def is_non_dcf_instrument(
@@ -341,19 +384,25 @@ def is_non_dcf_instrument(
     sector: Optional[str] = None,
     industry: Optional[str] = None,
 ) -> Tuple[bool, str, str]:
-    """Check whether a security is an ETF, Commodity Trust, Mutual Fund, REIT, or InvIT.
+    """Check whether a security is a non-corporate fund/index/commodity vehicle excluded from entity valuation.
 
     Returns:
         (is_excluded, category, user_message)
+        Note: REITs/InvITs return ``(False, "REIT_INVIT", "")`` so they route to the dedicated
+        REIT FFO/AFFO & Cap-Rate NAV engine instead of failing as ETFs/Mutual Funds.
     """
     sym_raw = (symbol or "").strip().upper()
     sym_clean = re.sub(r"\.(NS|BO)$", "", sym_raw)
     name_clean = html.unescape(name or "").strip()
     qt = (quote_type or "").strip().upper()
-    sec = (sector or "").strip().lower()
     ind = (industry or "").strip().lower()
 
-    # 1. Explicit non-equity quoteType from Yahoo Finance
+    # 1. Detect supported REIT / InvIT trusts before Yahoo's generic MUTUALFUND quoteType check
+    # (Indian listed REITs like EMBASSY.NS often carry quoteType="MUTUALFUND").
+    if is_reit_invit_instrument(symbol=symbol, name=name, quote_type=quote_type, sector=sector, industry=industry):
+        return (False, "REIT_INVIT", "")
+
+    # 2. Explicit non-equity quoteType from Yahoo Finance
     if qt in ("ETF", "MUTUALFUND", "INDEX", "CRYPTOCURRENCY", "CURRENCY", "FUTURE", "OPTION", "MONEYMARKET"):
         label = {
             "ETF": "an Exchange-Traded Fund (ETF) / Commodity Trust",
@@ -367,15 +416,7 @@ def is_non_dcf_instrument(
         return (
             True,
             qt,
-            f"'{sym_clean}' is {label}. Discounted Cash Flow (DCF) valuation applies only to operating companies that generate business cash flows, not pooled funds, indices, or commodities valued by Net Asset Value (NAV).",
-        )
-
-    # 2. NSE REIT / InvIT series suffixes (-RR, -IV) or REIT industry metadata
-    if sym_raw.endswith("-RR.NS") or sym_raw.endswith("-IV.NS") or "reit" in ind or _REIT_INVIT_NAME_REGEX.search(name_clean):
-        return (
-            True,
-            "REIT_INVIT",
-            f"'{sym_clean}' ({name_clean or sym_clean}) is a REIT / InvIT (Real Estate or Infrastructure Investment Trust). Pass-through trusts distribute mandated cash flows (NDCF) and are valued using Distribution Yield & Net Asset Value (NAV) rather than standard corporate FCFF DCF.",
+            f"'{sym_clean}' is {label}. Intrinsic valuation applies to operating entities and trusts with underlying cash flows, not pooled ETFs, indices, or currencies.",
         )
 
     # 3. Known ETF / MF / Segregated Portfolio symbol patterns
@@ -387,16 +428,10 @@ def is_non_dcf_instrument(
         or sym_clean.startswith(("NIEHSP", "NIESSP", "IPRU", "ABSLRIF", "KTKIND", "HEOF", "HHOF", "IDFCEOS"))
         or _ETF_MF_NAME_REGEX.search(name_clean)
     ):
-        if sym_clean in ("EMBASSY", "MINDSPACE", "BIRET", "NEXUSSELECT", "NXST", "INDIGRID", "IRBINVIT", "PGINVIT", "INDINFR", "INFRATRUST", "NHIT", "TOWERINFRA") or sym_clean in ("PLD", "AMT", "EQIX", "WELL", "SPG", "DLR", "O", "PSA", "CCI", "VICI"):
-            return (
-                True,
-                "REIT_INVIT",
-                f"'{sym_clean}' is a REIT / InvIT trust vehicle. Standard corporate DCF does not apply to pass-through property/infrastructure trusts valued by NAV and distribution yield.",
-            )
         return (
             True,
             "ETF_MF",
-            f"'{sym_clean}' ({name_clean or sym_clean}) is an Exchange-Traded Fund (ETF), Commodity Fund, or Mutual Fund scheme. DCF valuation requires corporate operating revenues, EBIT, and reinvestment cash flows, and cannot be applied to ETFs or commodities.",
+            f"'{sym_clean}' ({name_clean or sym_clean}) is an Exchange-Traded Fund (ETF), Commodity Fund, or Mutual Fund scheme, and cannot be valued via entity DCF or equity cash-flow models.",
         )
 
     return (False, "", "")

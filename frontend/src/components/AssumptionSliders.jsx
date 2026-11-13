@@ -11,10 +11,16 @@ export default function AssumptionSliders({
   if (!data) return null;
 
   const isFinancial = Boolean(data.company?.is_financial || data.diagnostics?.is_financial);
+  const modelType = String(data.company?.model_type || data.dcf_result?.model_type || data.diagnostics?.model_type || '');
+  const isInsurance = Boolean(modelType.startsWith('INSURANCE_') || data.dcf_result?.is_insurance);
+  const isReit = Boolean(modelType === 'REIT_INVIT_AFFO' || data.dcf_result?.is_reit);
+  const isNbfc = Boolean(modelType === 'NBFC_LENDER_DDM' || data.company?.is_nbfc || data.dcf_result?.is_nbfc);
   const isEquityModel = Boolean(
     isFinancial ||
+    isInsurance ||
+    isReit ||
     data.company?.is_equity_model ||
-    data.company?.model_type === 'CORPORATE_DDM' ||
+    modelType === 'CORPORATE_DDM' ||
     data.diagnostics?.is_equity_model ||
     data.dcf_result?.is_equity_model
   );
@@ -57,7 +63,7 @@ export default function AssumptionSliders({
   const minGrowth = Math.min(-20, Math.floor(Math.min(defaultGrowth * 100, appliedGrowth) - 5));
   const maxGrowth = Math.max(60, Math.ceil(Math.max(defaultGrowth * 100, appliedGrowth) + 10));
   const minMargin = Math.min(isEquityModel ? 2 : -60, Math.floor(Math.min(defaultMargin * 100, appliedMargin) - 5));
-  const maxMargin = Math.max(isFinancial ? 40 : isEquityModel ? 60 : 65, Math.ceil(Math.max(defaultMargin * 100, appliedMargin) + 5));
+  const maxMargin = Math.max(isReit ? 85 : isFinancial ? 40 : isEquityModel ? 60 : 65, Math.ceil(Math.max(defaultMargin * 100, appliedMargin) + 5));
   const minWacc = Math.min(4, Math.floor(Math.min(defaultWacc * 100, appliedWacc) - 1));
   const maxWacc = Math.max(25, Math.ceil(Math.max(defaultWacc * 100, appliedWacc) + 5));
 
@@ -190,36 +196,80 @@ export default function AssumptionSliders({
     const shares = data.market_data?.shares_outstanding || 1;
     const market = data.company?.market || 'US';
 
+    if (isReit) {
+      // REIT / InvIT AFFO / NDCF Engine mirroring reit_engine.py
+      const lastRev = Number(dcf.base_revenue ?? data.historicals?.revenue?.[data.historicals?.revenue?.length - 1] ?? 1e9);
+      const baseM = Math.max(0.08, Math.min(0.85, Number(dcf.base_affo_margin ?? dcf.base_roe ?? 0.50)));
+      const targetM = Math.max(0.08, Math.min(0.85, mNew));
+      const ke = wNew;
+      const termG = Math.min(tNew, market === 'IN' ? 0.055 : 0.025);
+      const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
+      const growthExcess = Math.max(0, gNew - termG);
+      const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
+      const fadeExp = 1.0 + 0.35 * fadeBlend;
+      const gSched = stepFracs.map((f) => gNew - (gNew - termG) * Math.pow(f, fadeExp));
+      const mSched = Array.from({ length: years }, (_, i) => baseM + (targetM - baseM) * (i / Math.max(1, years - 1)));
+
+      let curRev = lastRev;
+      let pvNdcf = 0;
+      let lastAffo = 0;
+      for (let i = 0; i < years; i++) {
+        curRev = curRev * (1 + gSched[i]);
+        const affoYr = curRev * mSched[i];
+        const gNext = i + 1 < years ? gSched[i + 1] : termG;
+        const retB = Math.min(0.25, Math.max(0.05, Math.max(0, gNext - 0.70 * termG) / 0.12));
+        pvNdcf += (affoYr * (1 - retB)) / Math.pow(1 + ke, i + 0.5);
+        if (i === years - 1) lastAffo = affoYr;
+      }
+
+      let tv = 0;
+      const spread = ke - termG;
+      if (ke > termG) {
+        const effTermG = spread < 0.020 ? ke - 0.020 : termG;
+        const effSpread = spread < 0.020 ? 0.020 : spread;
+        const termRet = Math.min(0.25, Math.max(0.05, Math.max(0, 0.30 * effTermG) / 0.12));
+        const termNdcf = lastAffo * (1 + effTermG) * (1 - termRet);
+        tv = termNdcf / effSpread;
+      }
+      const pvTv = tv / Math.pow(1 + ke, years - 0.5);
+      const eqVal = pvNdcf + pvTv;
+      const simPrice = Math.max(0, eqVal / shares);
+
+      return {
+        isDirty: true,
+        price: simPrice,
+        upside: (simPrice / currentPrice) - 1,
+      };
+    }
+
     if (isEquityModel) {
-      // Bank / Corporate DDM Engine mirroring bank_engine.py
+      // Bank / Insurer / Corporate DDM Engine mirroring bank_engine.py & insurance_engine.py
       const hist = data.historicals || {};
       const diag = data.diagnostics || {};
       const niHist = hist.net_income || [];
       const validNi = niHist.filter((x) => x > 0);
-      const baseNi = validNi.length > 0 ? validNi[validNi.length - 1] : (hist.revenue?.[hist.revenue.length - 1] || 1e9) * 0.15;
+      const baseNi = Number(
+        dcf.base_net_income ?? (validNi.length > 0 ? validNi[validNi.length - 1] : (hist.revenue?.[hist.revenue.length - 1] || 1e9) * 0.15)
+      );
 
       const bveHist = hist.book_value || [];
       const validBve = bveHist.filter((x) => x > 0);
-      const baseBve = validBve.length > 0 ? validBve[validBve.length - 1] : baseNi / 0.14;
+      const baseBve = Number(dcf.base_bve ?? (validBve.length > 0 ? validBve[validBve.length - 1] : baseNi / 0.14));
 
-      const currRoe = Number(diag.current_ebit_margin ?? hist.avg_roe ?? 0.14);
+      const currRoe = Number(dcf.base_roe ?? diag.current_ebit_margin ?? hist.avg_roe ?? 0.14);
       const targetRoe = Math.max(0.05, Math.min(0.35, mNew));
       let baseRoe = Math.max(0.05, Math.min(0.35, currRoe));
-      if (baseRoe < targetRoe * 0.90) baseRoe = targetRoe;
+      if (!isInsurance && baseRoe < targetRoe * 0.90) baseRoe = targetRoe;
 
       const ke = wNew;
       const termG = Math.min(tNew, market === 'IN' ? 0.055 : 0.025);
-      const stG = Math.max(-0.05, Math.min(0.35, gNew));
+      const stG = isInsurance ? gNew : Math.max(-0.05, Math.min(0.35, gNew));
 
-      let gSched;
-      if (stG > termG + 0.06) {
-        gSched = Array.from({ length: years }, (_, i) => {
-          const step = i / years;
-          return stG - (stG - termG) * Math.pow(step, 1.35);
-        });
-      } else {
-        gSched = Array.from({ length: years }, (_, i) => stG + (termG - stG) * (i / Math.max(1, years - 1)));
-      }
+      const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
+      const growthExcess = Math.max(0, stG - termG);
+      const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
+      const fadeExp = 1.0 + 0.35 * fadeBlend;
+      const gSched = stepFracs.map((f) => stG - (stG - termG) * Math.pow(f, fadeExp));
 
       const roeSched = Array.from({ length: years }, (_, i) => baseRoe + (targetRoe - baseRoe) * (i / Math.max(1, years - 1)));
 
@@ -359,7 +409,9 @@ export default function AssumptionSliders({
 
     const totalDebt = data.wacc?.total_debt || 0;
     const totalCash = data.wacc?.total_cash ?? data.company?.total_cash ?? 0;
-    const simEq = Math.max(0, simEv - totalDebt + totalCash);
+    const minority = data.dcf_result?.minority_interest || data.wacc?.minority_interest_claim || 0;
+    const preferred = data.dcf_result?.preferred_stock || data.wacc?.preferred_stock_claim || 0;
+    const simEq = Math.max(0, simEv - totalDebt + totalCash - minority - preferred);
     const simPrice = Math.max(0, simEq / shares);
 
     return {
@@ -381,9 +433,17 @@ export default function AssumptionSliders({
             <h3 className="font-display font-bold text-[#f4eedf] text-base tracking-tight truncate">
               Model Assumptions
             </h3>
-            {isFinancial ? (
+            {isInsurance ? (
               <span className="text-[11px] font-semibold text-[#34b38a] block truncate">
-                Bank FCFE / ROE Mode
+                Insurance Actuarial DDM Mode
+              </span>
+            ) : isReit ? (
+              <span className="text-[11px] font-semibold text-[#34b38a] block truncate">
+                REIT / InvIT AFFO &amp; Cap-Rate Mode
+              </span>
+            ) : isFinancial ? (
+              <span className="text-[11px] font-semibold text-[#34b38a] block truncate">
+                {isNbfc ? 'Wholesale NBFC DDM / ROE Mode' : 'Bank FCFE / ROE Mode'}
               </span>
             ) : isEquityModel ? (
               <span className="text-[11px] font-semibold text-[#8ab4f8] block truncate">
@@ -488,7 +548,7 @@ export default function AssumptionSliders({
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
             <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isEquityModel ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
+              {isReit ? 'Revenue / FFO Growth (Yr 1)' : isEquityModel ? 'Net Income Growth (Yr 1)' : 'Rev Growth (Yr 1)'}
             </label>
             <div className="flex items-center bg-[#0d121a] px-2.5 py-1 rounded-lg border border-[#f4eedf]/15 focus-within:border-[#e3b23c] shrink-0">
               <input
@@ -520,7 +580,11 @@ export default function AssumptionSliders({
         <div>
           <div className="flex flex-wrap justify-between items-center gap-1.5 text-sm mb-2">
             <label className="text-[#f4eedf] font-semibold text-xs sm:text-sm min-w-0">
-              {isEquityModel
+              {isReit
+                ? 'Target AFFO Margin'
+                : isInsurance
+                ? 'Target Ex-AOCI ROE'
+                : isEquityModel
                 ? 'Target ROE'
                 : isNegativeMargin
                 ? 'Target EBIT Margin (Yr 5)'

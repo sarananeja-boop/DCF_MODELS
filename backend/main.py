@@ -32,14 +32,23 @@ from engine.data_layer import (
     get_yf_session,
     _get_benchmark_returns,
 )
-from engine.dcf_engine import compute_wacc, run_dcf
+from engine.dcf_engine import compute_wacc, run_dcf, compute_dcf_scenarios
 from engine.monte_carlo import run_monte_carlo
 from engine.sensitivity import (
     generate_sensitivity_grid,
     generate_margin_sensitivity_grid,
     generate_terminal_growth_sensitivity_grid,
 )
-from engine.validators import validate_valuation, validate_bank_valuation, generate_verdict
+from engine.validators import (
+    validate_valuation,
+    validate_bank_valuation,
+    validate_insurance_valuation,
+    validate_reit_valuation,
+    generate_verdict,
+    run_accounting_reconciliations,
+    evaluate_validation_status,
+)
+from engine.canonical_schema import classify_model_suitability
 from engine.trend_analysis import compute_trends
 from engine.reverse_dcf import calculate_reverse_dcf
 from engine.bank_engine import (
@@ -49,10 +58,25 @@ from engine.bank_engine import (
     generate_bank_sensitivity_grid,
     generate_bank_roe_sensitivity_grid,
 )
+from engine.insurance_engine import (
+    _extract_insurance_profile,
+    run_insurance_valuation,
+    run_insurance_monte_carlo,
+    generate_insurance_sensitivity_grid,
+    generate_insurance_roe_sensitivity_grid,
+)
+from engine.reit_engine import (
+    _extract_reit_profile,
+    run_reit_valuation,
+    run_reit_monte_carlo,
+    generate_reit_sensitivity_grid,
+    generate_reit_margin_sensitivity_grid,
+)
 from engine.ticker_universe import (
     sync_live_universe,
     get_universe_payload,
     is_non_dcf_instrument,
+    is_reit_invit_instrument,
     resolve_ticker,
     ACTIVE_COMPANY_ENRICHMENTS,
 )
@@ -331,8 +355,112 @@ def analyze(req: AnalyzeRequest):
         # 4. Market profile (with live RFR)
         market_profile = get_market_profile(market)
 
+        # 4b. Sector & Model Suitability Gate
+        is_financial = bool(stock_data.get("is_financial", False))
+        prior_suit = stock_data.get("model_suitability") or {}
+        reg_asset_share = 0.05 if prior_suit.get("model_family") == "REGULATED_UTILITY_FCFF" else 0.0
+        suitability = classify_model_suitability(
+            sector=stock_data.get("sector"),
+            industry=stock_data.get("industry"),
+            company_name=stock_data.get("name"),
+            is_financial=is_financial,
+            is_capital_light_financial=bool(stock_data.get("is_capital_light_financial", False)),
+            is_non_dcf=bool(stock_data.get("is_non_dcf", False)),
+            reg_asset_share=reg_asset_share,
+            is_extractive=bool(stock_data.get("is_extractive", False)),
+            is_cyclical=bool(stock_data.get("is_cyclical", False)),
+            accounting_standard=metrics.get("accounting_standard", stock_data.get("accounting_standard", "US_GAAP")),
+            is_reit_entity=bool(stock_data.get("is_reit_entity", False)),
+        )
+        stock_data["model_suitability"] = suitability
+        metrics["model_suitability"] = suitability
+
+        if not suitability.get("supported", True) or suitability.get("validation_status") == "UNSUPPORTED_MODEL":
+            logger.info("Blocking unsupported sector/security %s under UNSUPPORTED_MODEL gate", ticker)
+            unsupported_recons = run_accounting_reconciliations(stock_data, metrics, None, None)
+            validation_gate = evaluate_validation_status(
+                stock_data, metrics, None, None, None, reconciliations=unsupported_recons
+            )
+            current_px = float(stock_data.get("current_price", 0) or 0)
+            blocked_resp = _numpy_to_python({
+                "company": {
+                    "ticker": ticker,
+                    "name": stock_data.get("name", ticker),
+                    "market": market,
+                    "currency": market_profile.get("currency", "USD"),
+                    "symbol": market_profile.get("symbol", "$"),
+                    "sector": stock_data.get("sector"),
+                    "industry": stock_data.get("industry"),
+                    "description": stock_data.get("description") or stock_data.get("info", {}).get("longBusinessSummary") or "",
+                    "city": stock_data.get("city") or stock_data.get("info", {}).get("city", ""),
+                    "country": stock_data.get("country") or stock_data.get("info", {}).get("country", ""),
+                    "website": stock_data.get("website") or stock_data.get("info", {}).get("website", ""),
+                    "employees": stock_data.get("employees") or stock_data.get("info", {}).get("fullTimeEmployees"),
+                    "is_financial": is_financial,
+                    "is_equity_model": False,
+                    "is_capital_light_financial": bool(stock_data.get("is_capital_light_financial", False)),
+                    "model_type": "UNSUPPORTED_MODEL",
+                    "valuation_method": "unsupported",
+                    "model_suitability": suitability,
+                    "accounting_standard": metrics.get("accounting_standard"),
+                    "redirect_note": stock_data.get("redirect_note"),
+                },
+                "model_suitability": suitability,
+                "validation_gate": validation_gate,
+                "accounting_reconciliations": unsupported_recons,
+                "market_data": {
+                    "current_price": current_px,
+                    "shares_outstanding": stock_data.get("shares_outstanding"),
+                    "shares_basic": metrics.get("shares_basic", stock_data.get("shares_basic")),
+                    "shares_diluted_tsm": metrics.get("shares_diluted_tsm", stock_data.get("diluted_valuation_shares")),
+                    "market_cap": stock_data.get("market_cap"),
+                    "beta": stock_data.get("beta"),
+                },
+                "macro": {
+                    "risk_free_rate": market_profile.get("risk_free_rate"),
+                    "risk_free_source": market_profile.get("risk_free_source"),
+                    "market_return": market_profile.get("market_return"),
+                    "tax_rate": market_profile.get("tax_rate", 0.2517 if market == "IN" else 0.21),
+                    "terminal_growth": market_profile.get("terminal_growth", 0.050 if market == "IN" else 0.025),
+                    "benchmark_index": market_profile.get("benchmark_index"),
+                },
+                "historicals": {
+                    "years": metrics.get("years"),
+                    "revenue": metrics.get("revenue"),
+                    "last_revenue": metrics.get("last_revenue"),
+                    "net_income": metrics.get("net_income"),
+                    "book_value": metrics.get("book_value"),
+                    "statements": metrics.get("statements", {}),
+                    "provenance": metrics.get("provenance", {}),
+                },
+                "wacc": None,
+                "dcf_result": None,
+                "monte_carlo": None,
+                "sensitivity": None,
+                "scenarios": None,
+                "validation": validation_gate,
+                "verdict": {
+                    "verdict": "UNSUPPORTED_MODEL",
+                    "description": suitability.get("reason") or "Unsupported model methodology for this sector.",
+                    "upside_pct": None,
+                    "is_distressed": False,
+                    "is_blocked": True,
+                },
+                "diagnostics": {
+                    "model_type": "UNSUPPORTED_MODEL",
+                    "is_financial": is_financial,
+                    "is_equity_model": False,
+                },
+                "metadata": {
+                    "model_version": "2.4.0",
+                    "engine_name": "ValuationLabs Quantitative DCF & Monte Carlo Engine",
+                    "valuation_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "currency": stock_data.get("currency", market_profile.get("currency", "USD")),
+                },
+            })
+            return blocked_resp
+
         # 5. Dual Engine Routing: Banking & Financial Services vs Non-Financial Corporations
-        is_financial = stock_data.get("is_financial", False)
 
         if "is_extractive" not in stock_data or "is_cyclical" not in stock_data:
             from engine.data_layer import classify_sector_dynamics
@@ -370,14 +498,20 @@ def analyze(req: AnalyzeRequest):
         gaap_sbc_note: Optional[str] = None
 
         current_price = float(stock_data.get("current_price", 0) or 0)
-        use_corporate_ddm = bool((not is_financial) and (requested_method == "ddm"))
+        suit_family = str(suitability.get("model_family") or "STANDARD_FCFF")
+        is_insurance_model = suit_family in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM")
+        is_reit_model = suit_family == "REIT_INVIT_AFFO"
+        is_bank_nbfc = bool(is_financial and not is_insurance_model and not is_reit_model)
+        use_corporate_ddm = bool((not is_bank_nbfc) and (not is_insurance_model) and (not is_reit_model) and (requested_method == "ddm"))
         active_model_type = (
-            "BANKING_DDM"
-            if is_financial
+            suit_family
+            if (is_bank_nbfc or is_insurance_model or is_reit_model)
             else ("CORPORATE_DDM" if use_corporate_ddm else "STANDARD_FCFF")
         )
+        if is_bank_nbfc and active_model_type not in ("NBFC_LENDER_DDM", "BANKING_DDM"):
+            active_model_type = "NBFC_LENDER_DDM" if suit_family == "NBFC_LENDER_DDM" else "BANKING_DDM"
 
-        if is_financial:
+        if is_bank_nbfc:
             logger.info("Routing %s to Financial Services (Bank/NBFC) Multi-Stage FCFE Model", ticker)
             # Cost of Equity (Ke via CAPM)
             wacc_data = compute_bank_cost_of_equity(stock_data, market_profile)
@@ -416,7 +550,7 @@ def analyze(req: AnalyzeRequest):
                 terminal_growth=terminal_growth,
                 projection_years=projection_years,
                 use_mid_year=True,
-                model_type="BANKING_DDM",
+                model_type=active_model_type,
             )
 
             # Bank Monte Carlo
@@ -459,13 +593,160 @@ def analyze(req: AnalyzeRequest):
             method_comparison = {
                 "can_switch": False,
                 "active_method": "ddm",
-                "active_model_type": "BANKING_DDM",
+                "active_model_type": active_model_type,
                 "ddm_implied_price": float(dcf_result.get("implied_price", 0.0)),
                 "ddm_upside_pct": float(((dcf_result.get("implied_price", 0.0) / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
                 "ddm_discount_rate": float(discount_rate),
                 "lock_reason": (
                     "Banking & NBFC institutions are valued exclusively via the DDM / FCFE model "
                     "because customer deposits and wholesale borrowings are operational funding rather than capital structure debt."
+                ),
+            }
+        elif is_insurance_model:
+            logger.info("Routing %s to dedicated Insurance Actuarial DDM Engine (%s)", ticker, active_model_type)
+            wacc_data = compute_bank_cost_of_equity(stock_data, market_profile)
+            ins_prof = _extract_insurance_profile(metrics, stock_data, model_type=active_model_type)
+
+            default_start_growth = float(ins_prof["default_start_growth"])
+            default_target_margin = float(ins_prof["default_target_roe"])
+            default_discount_rate = float(wacc_data.get("cost_of_equity", 0.10))
+
+            start_growth = overrides.revenue_growth if overrides.revenue_growth is not None else default_start_growth
+            target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else default_target_margin
+            current_margin = float(ins_prof["base_roe"])
+            discount_rate = overrides.wacc if overrides.wacc is not None else default_discount_rate
+            wacc_data["wacc"] = float(discount_rate)
+
+            dcf_result = run_insurance_valuation(
+                start_growth=start_growth,
+                target_roe=target_margin,
+                cost_of_equity=discount_rate,
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                current_roe=current_margin,
+                use_mid_year=True,
+                model_type=active_model_type,
+            )
+            mc_result = run_insurance_monte_carlo(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                iterations=req.monte_carlo_iterations,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+                model_type=active_model_type,
+            )
+            sens_growth_wacc = generate_insurance_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+                model_type=active_model_type,
+            )
+            sens_margin_wacc = generate_insurance_roe_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_roe=target_margin,
+                base_ke=discount_rate,
+                model_type=active_model_type,
+            )
+            sens_tg_wacc = None
+            validation = validate_insurance_valuation(dcf_result, stock_data, metrics)
+            method_comparison = {
+                "can_switch": False,
+                "active_method": "ddm",
+                "active_model_type": active_model_type,
+                "ddm_implied_price": float(dcf_result.get("implied_price", 0.0)),
+                "ddm_upside_pct": float(((dcf_result.get("implied_price", 0.0) / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
+                "ddm_discount_rate": float(discount_rate),
+                "lock_reason": (
+                    "Insurance carriers are valued via the dedicated Ex-AOCI Excess-Return & Policyholder Float DDM "
+                    "because technical policyholder reserves and fixed-income portfolios cannot be treated as corporate CapEx/debt."
+                ),
+            }
+        elif is_reit_model:
+            logger.info("Routing %s to dedicated REIT / InvIT AFFO & Cap-Rate NAV Engine", ticker)
+            wacc_data = compute_bank_cost_of_equity(stock_data, market_profile)
+            reit_prof = _extract_reit_profile(metrics, stock_data, market_profile)
+
+            default_start_growth = float(reit_prof["default_start_growth"])
+            default_target_margin = float(reit_prof["base_affo_margin"])
+            default_discount_rate = float(wacc_data.get("cost_of_equity", 0.10))
+
+            start_growth = overrides.revenue_growth if overrides.revenue_growth is not None else default_start_growth
+            target_margin = overrides.ebit_margin if overrides.ebit_margin is not None else default_target_margin
+            current_margin = float(reit_prof["base_affo_margin"])
+            discount_rate = overrides.wacc if overrides.wacc is not None else default_discount_rate
+            wacc_data["wacc"] = float(discount_rate)
+
+            dcf_result = run_reit_valuation(
+                start_growth=start_growth,
+                target_affo_margin=target_margin,
+                cost_of_equity=discount_rate,
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                use_mid_year=True,
+            )
+            mc_result = run_reit_monte_carlo(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                iterations=req.monte_carlo_iterations,
+                base_growth=start_growth,
+                base_affo_margin=target_margin,
+                base_ke=discount_rate,
+            )
+            sens_growth_wacc = generate_reit_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_affo_margin=target_margin,
+                base_ke=discount_rate,
+            )
+            sens_margin_wacc = generate_reit_margin_sensitivity_grid(
+                metrics=metrics,
+                stock_data=stock_data,
+                market_profile=market_profile,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                base_growth=start_growth,
+                base_affo_margin=target_margin,
+                base_ke=discount_rate,
+            )
+            sens_tg_wacc = None
+            validation = validate_reit_valuation(dcf_result, stock_data, metrics)
+            method_comparison = {
+                "can_switch": False,
+                "active_method": "reit_affo",
+                "active_model_type": "REIT_INVIT_AFFO",
+                "ddm_implied_price": float(dcf_result.get("implied_price", 0.0)),
+                "ddm_upside_pct": float(((dcf_result.get("implied_price", 0.0) / current_price) - 1.0) * 100.0) if current_price > 0 else 0.0,
+                "ddm_discount_rate": float(discount_rate),
+                "lock_reason": (
+                    "REITs / InvITs are valued via the dedicated FFO / Maintenance-Adjusted AFFO (NDCF) Equity Model "
+                    "alongside a Property Cap-Rate GAV/NAV cross-check."
                 ),
             }
         else:
@@ -561,8 +842,7 @@ def analyze(req: AnalyzeRequest):
                 median_margin = float(np.median(ebit_margins_hist)) if ebit_margins_hist else avg_ebit_margin
                 min_pos_margin = float(np.min(pos_margins)) if pos_margins else max(0.02, avg_ebit_margin)
                 ind_str = str(stock_data.get("industry") or "").lower()
-                sym_clean_c = str(stock_data.get("ticker") or "").replace(".NS", "").replace(".BO", "").strip().upper()
-                if "refining & marketing" in ind_str or sym_clean_c in {"IOC", "BPCL", "HPCL", "HINDPETRO", "MRPL", "CHENNPETRO"}:
+                if "refining & marketing" in ind_str:
                     # Downstream oil refining & marketing margins mean-revert to mid-cycle refining cracks
                     fcff_default_margin = max(0.025, 0.50 * min_pos_margin + 0.50 * min(avg_ebit_margin, median_margin))
                     fcff_default_current_margin = min(latest_margin, avg_ebit_margin)
@@ -933,10 +1213,49 @@ def analyze(req: AnalyzeRequest):
                 "avg_roe": float(metrics.get("avg_roe", 0.0) or 0.0),
             }
 
-        # 11. Verdict
+        # 10b. Scenarios + Accounting Reconciliations + Fail-Closed Validation Gate
+        if not is_bank_nbfc and not is_insurance_model and not is_reit_model and not use_corporate_ddm:
+            scenarios = compute_dcf_scenarios(
+                start_growth=start_growth,
+                ebit_margin=target_margin,
+                discount_rate=discount_rate,
+                metrics=metrics,
+                wacc_data=wacc_data,
+                stock_data=stock_data,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                current_margin=current_margin,
+                tax_rate=tax_rate,
+                use_mid_year=True,
+            )
+        else:
+            scenarios = None
+
+        accounting_reconciliations = run_accounting_reconciliations(
+            stock_data=stock_data,
+            metrics=metrics,
+            dcf_result=dcf_result,
+            mc_data=mc_result,
+        )
+        validation_gate = evaluate_validation_status(
+            stock_data=stock_data,
+            metrics=metrics,
+            dcf_result=dcf_result,
+            validation_data=validation,
+            mc_data=mc_result,
+            reconciliations=accounting_reconciliations,
+        )
+        if isinstance(validation, dict):
+            validation["validation_status"] = validation_gate["validation_status"]
+            validation["is_blocked"] = validation_gate["is_blocked"]
+            validation["gates_failed"] = validation_gate["gates_failed"]
+            validation["limitations"] = validation_gate["limitations"]
+            validation["reconciliations"] = accounting_reconciliations
+
+        # 11. Verdict (fail-closed if validation gate blocked)
         terminal_value_valid = dcf_result.get("terminal_value_valid", True)
         mc_valid = mc_result.get("actual_iterations", 0) > 0
-        
+
         # Assess if company is in deep distress (zero baseline equity value, or severe insolvency where EBITDA < Interest & extreme leverage)
         icr = float(wacc_data.get("interest_coverage", metrics.get("interest_coverage", 999.0)) or 999.0)
         wd = float(wacc_data.get("corporate_weight_debt", wacc_data.get("weight_debt", 0.0)) or 0.0)
@@ -947,13 +1266,24 @@ def analyze(req: AnalyzeRequest):
             or (icr < 0.65 and wd > 0.75 and trailing_ebitda_val < interest_exp_val)
         )
 
-        verdict = generate_verdict(
-            current_price=current_price,
-            mc_stats=mc_result.get("stats", {}),
-            terminal_value_valid=terminal_value_valid,
-            mc_valid=mc_valid,
-            is_distressed=is_distressed_firm,
-        )
+        if validation_gate.get("is_blocked"):
+            verdict = {
+                "verdict": validation_gate["validation_status"],
+                "description": "; ".join(validation_gate.get("gates_failed") or [])
+                or "Valuation verdict blocked due to failing data quality or accounting reconciliation gates.",
+                "upside_pct": None,
+                "is_distressed": is_distressed_firm,
+                "is_blocked": True,
+            }
+        else:
+            verdict = generate_verdict(
+                current_price=current_price,
+                mc_stats=mc_result.get("stats", {}),
+                terminal_value_valid=terminal_value_valid,
+                mc_valid=mc_valid,
+                is_distressed=is_distressed_firm,
+            )
+            verdict["is_blocked"] = False
 
         # 12. Trends
         trends = compute_trends(stock_data, metrics)
@@ -967,7 +1297,7 @@ def analyze(req: AnalyzeRequest):
             "sim_wacc": _downsample(mc_result.get("sim_wacc", []), 2000),
         }
 
-        is_equity_model = bool(is_financial or use_corporate_ddm)
+        is_equity_model = bool(is_bank_nbfc or use_corporate_ddm or is_insurance_model or is_reit_model)
 
         reverse_dcf_result = calculate_reverse_dcf(
             current_price=float(current_price),
@@ -1006,16 +1336,31 @@ def analyze(req: AnalyzeRequest):
                 "website": stock_data.get("website") or stock_data.get("info", {}).get("website", ""),
                 "employees": stock_data.get("employees") or stock_data.get("info", {}).get("fullTimeEmployees"),
                 "is_financial": is_financial,
+                "is_insurance": is_insurance_model,
+                "is_reit": is_reit_model,
                 "is_equity_model": is_equity_model,
                 "is_capital_light_financial": stock_data.get("is_capital_light_financial", False),
                 "model_type": active_model_type,
-                "valuation_method": "ddm" if is_equity_model else "fcff",
+                "valuation_method": "reit_affo" if is_reit_model else ("ddm" if is_equity_model else "fcff"),
+                "model_suitability": suitability,
+                "sector_driver_profile": suitability.get("driver_profile"),
+                "accounting_standard": metrics.get("accounting_standard"),
                 "redirect_note": stock_data.get("redirect_note"),
+                "is_nbfc": bool(wacc_data.get("is_nbfc", dcf_result.get("is_nbfc", False))),
+                "lender_subtype": wacc_data.get("lender_subtype") or dcf_result.get("lender_subtype"),
             },
+            "model_suitability": suitability,
+            "sector_driver_profile": suitability.get("driver_profile"),
+            "valuation_adjustments": (dcf_result.get("valuation_adjustments") or metrics.get("valuation_adjustments") or []),
+            "validation_gate": validation_gate,
+            "accounting_reconciliations": accounting_reconciliations,
+            "scenarios": scenarios,
             "method_comparison": method_comparison,
             "market_data": {
                 "current_price": current_price,
                 "shares_outstanding": stock_data.get("shares_outstanding"),
+                "shares_basic": metrics.get("shares_basic", stock_data.get("shares_basic")),
+                "shares_diluted_tsm": metrics.get("shares_diluted_tsm", stock_data.get("diluted_valuation_shares")),
                 "market_cap": stock_data.get("market_cap"),
                 "beta": stock_data.get("beta"),
                 "raw_beta": stock_data.get("raw_beta"),
@@ -1068,10 +1413,34 @@ def analyze(req: AnalyzeRequest):
                 "normalized_nwc_to_revenue": metrics.get("normalized_nwc_to_revenue"),
                 "n_years": metrics.get("n_years"),
                 "cash_and_equivalents": metrics.get("cash_and_equivalents"),
+                "restricted_cash": metrics.get("restricted_cash", 0.0),
                 "minority_interest_claim": metrics.get("minority_interest_claim", 0.0),
                 "preferred_stock_claim": metrics.get("preferred_stock_claim", 0.0),
+                "shares_basic": metrics.get("shares_basic"),
+                "shares_diluted_tsm": metrics.get("shares_diluted_tsm"),
+                "accounting_standard": metrics.get("accounting_standard"),
+                "lease_policy": metrics.get("lease_policy"),
+                "effective_tax_rate": metrics.get("effective_tax_rate"),
+                "hist_ebit_margins": metrics.get("hist_ebit_margins"),
+                "hist_rev_growths": metrics.get("hist_rev_growths"),
+                "rev_cagr": metrics.get("rev_cagr"),
+                "latest_ebit_margin": metrics.get("latest_ebit_margin"),
+                "cash_reconciliation": metrics.get("cash_reconciliation", {}),
+                "depreciation_reconciliation": metrics.get("depreciation_reconciliation", {}),
+                "capital_commitments": metrics.get("capital_commitments", {}),
+                "capital_advances": metrics.get("capital_advances", {}),
+                "share_reconciliation": metrics.get("share_reconciliation", {}),
+                "insurance_metrics": metrics.get("insurance_metrics", {}),
+                "reit_metrics": metrics.get("reit_metrics", {}),
+                "provenance": metrics.get("provenance", {}),
                 "statements": metrics.get("statements", {}),
             },
+            "cash_reconciliation": metrics.get("cash_reconciliation", {}),
+            "depreciation_reconciliation": metrics.get("depreciation_reconciliation", {}),
+            "capital_commitments": metrics.get("capital_commitments", {}),
+            "capital_advances": metrics.get("capital_advances", {}),
+            "share_reconciliation": metrics.get("share_reconciliation", {}),
+            "provenance": metrics.get("provenance", {}),
             "wacc": {
                 "cost_of_equity": wacc_data.get("cost_of_equity"),
                 "raw_cost_of_equity": wacc_data.get("raw_cost_of_equity"),
@@ -1126,8 +1495,21 @@ def analyze(req: AnalyzeRequest):
                 "histogram": mc_histogram,
                 "scatter": mc_scatter,
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
+                "corr_method": mc_result.get("corr_method"),
                 "corr_sample_size": mc_result.get("corr_sample_size"),
                 "is_corr_regularized": mc_result.get("is_corr_regularized", False),
+                "seed": mc_result.get("seed", 42),
+                "input_snapshot_hash": mc_result.get("input_snapshot_hash") or mc_result.get("input_hash"),
+                "input_hash": mc_result.get("input_snapshot_hash") or mc_result.get("input_hash"),
+                "oversampling_factor": mc_result.get("oversampling_factor", 3),
+                "oversample": mc_result.get("oversample"),
+                "candidate_draws_sampled": mc_result.get("candidate_draws_sampled", mc_result.get("total_simulations", 0)),
+                "candidate_draws": mc_result.get("candidate_draws_sampled", mc_result.get("total_simulations", 0)),
+                "total_candidate_valid": mc_result.get("total_candidate_valid", mc_result.get("valid_simulations", 0)),
+                "rejected_draws": mc_result.get("rejected_draws", mc_result.get("invalid_simulations", 0)),
+                "unused_valid_oversample": mc_result.get("unused_valid_oversample", 0),
+                "unused_draws": mc_result.get("unused_valid_oversample", 0),
+                "valid_draws": mc_result.get("valid_simulations", mc_result.get("actual_iterations", 0)),
                 "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])[:10000]],
             },
             "sensitivity": {
@@ -1141,6 +1523,8 @@ def analyze(req: AnalyzeRequest):
             "reverse_dcf": reverse_dcf_result,
             "diagnostics": {
                 "is_financial": is_financial,
+                "is_insurance": is_insurance_model,
+                "is_reit": is_reit_model,
                 "is_equity_model": is_equity_model,
                 "model_type": active_model_type,
                 "default_growth": float(default_start_growth),
@@ -1149,6 +1533,11 @@ def analyze(req: AnalyzeRequest):
                 "bvps": dcf_result.get("bvps"),
                 "justified_pb": dcf_result.get("justified_pb"),
                 "justified_price": dcf_result.get("justified_price"),
+                "cap_rate_nav_per_unit": dcf_result.get("cap_rate_nav_per_unit"),
+                "base_ffo": dcf_result.get("base_ffo"),
+                "base_affo": dcf_result.get("base_affo"),
+                "claims_loss_ratio": dcf_result.get("claims_loss_ratio"),
+                "policyholder_float": dcf_result.get("policyholder_float"),
                 "beta": stock_data.get("beta"),
                 "raw_beta": stock_data.get("raw_beta"),
                 "beta_clamped": stock_data.get("beta_clamped", False),
@@ -1275,9 +1664,18 @@ def export_excel(req: ExcelExportRequest):
 
         company_info = req.analysis_data.get("company", {})
         company_name = company_info.get("ticker", "valuation")
-        model_type = company_info.get("model_type") or req.analysis_data.get("diagnostics", {}).get("model_type")
-        is_eq = bool(company_info.get("is_financial") or company_info.get("is_equity_model") or model_type in ("BANKING_DDM", "CORPORATE_DDM"))
-        suffix = "DDM_FCFE_Report" if is_eq else "FCFF_DCF_Report"
+        val_gate = req.analysis_data.get("validation_gate") or req.analysis_data.get("validation") or {}
+        if val_gate.get("validation_status") == "UNSUPPORTED_MODEL":
+            suffix = "Unsupported_Model_Gate_Notice"
+        else:
+            model_type = str(company_info.get("model_type") or req.analysis_data.get("diagnostics", {}).get("model_type") or "")
+            if model_type == "REIT_INVIT_AFFO":
+                suffix = "REIT_AFFO_NAV_Report"
+            elif model_type.startswith("INSURANCE_"):
+                suffix = "Insurance_DDM_Report"
+            else:
+                is_eq = bool(company_info.get("is_financial") or company_info.get("is_equity_model") or model_type in ("BANKING_DDM", "NBFC_LENDER_DDM", "CORPORATE_DDM"))
+                suffix = "DDM_FCFE_Report" if is_eq else "FCFF_DCF_Report"
         filename = f"{company_name}_{suffix}.xlsx"
 
         return StreamingResponse(
@@ -1357,10 +1755,11 @@ def search_ticker(q: str, market: Optional[str] = None):
 
         for quote in raw_quotes:
             q_type = str(quote.get("quoteType", "")).upper()
-            if q_type != "EQUITY":
+            raw_sym = str(quote.get("symbol", "")).strip().upper()
+            q_name_raw = str(quote.get("longname") or quote.get("shortname") or "").strip()
+            if q_type != "EQUITY" and not is_reit_invit_instrument(raw_sym, q_name_raw, q_type):
                 continue
 
-            raw_sym = str(quote.get("symbol", "")).strip().upper()
             if not raw_sym:
                 continue
 

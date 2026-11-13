@@ -14,8 +14,10 @@ Key features:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -86,27 +88,43 @@ def run_monte_carlo(
     ebit_margins_aligned = ebit_margins_arr[1:] if len(ebit_margins_arr) > 1 else np.array([])
     corr_sample_size = min(len(rev_growth_arr), len(ebit_margins_aligned))
     is_corr_regularized = False
+    raw_corr_gm: Optional[float] = None
+    corr_method = "insufficient_sample_zero_fallback"
 
-    if (
-        corr_sample_size >= 4
-        and np.std(rev_growth_arr) > 1e-6
-        and np.std(ebit_margins_aligned) > 1e-6
-    ):
-        raw_corr = float(np.corrcoef(rev_growth_arr, ebit_margins_aligned)[0, 1])
-        if np.isnan(raw_corr):
-            hist_corr_gm = 0.0
+    if corr_sample_size >= 4:
+        g_slice = rev_growth_arr[-corr_sample_size:]
+        m_slice = ebit_margins_aligned[-corr_sample_size:]
+        if np.std(g_slice) > 1e-6 and np.std(m_slice) > 1e-6:
+            raw_corr = float(np.corrcoef(g_slice, m_slice)[0, 1])
+            if np.isfinite(raw_corr):
+                raw_corr_gm = raw_corr
+                shrinkage = corr_sample_size / (corr_sample_size + 4.0)
+                hist_corr_gm = float(np.clip(raw_corr * shrinkage, -0.90, 0.90))
+                corr_method = "empirical_eb_shrinkage"
+                is_corr_regularized = abs(hist_corr_gm - raw_corr) > 0.05
+            else:
+                hist_corr_gm = 0.0
         else:
-            # Empirical Bayes shrinkage towards neutral 0 for small samples (N < 8)
-            shrinkage = corr_sample_size / (corr_sample_size + 4.0)
-            hist_corr_gm = float(np.clip(raw_corr * shrinkage, -0.90, 0.90))
-            is_corr_regularized = abs(hist_corr_gm - raw_corr) > 0.05
-    elif corr_sample_size in (2, 3):
-        # Sample size too small (2-3 periods yields degenerate ±1.0 correlation)
-        # Regularize to neutral 0.0 to prevent mathematical artifacts like -0.99
-        hist_corr_gm = 0.0
-        is_corr_regularized = True
+            hist_corr_gm = 0.0
+    elif corr_sample_size == 3:
+        g_slice = rev_growth_arr[-3:]
+        m_slice = ebit_margins_aligned[-3:]
+        if np.std(g_slice) > 1e-6 and np.std(m_slice) > 1e-6:
+            raw_corr = float(np.corrcoef(g_slice, m_slice)[0, 1])
+            if np.isfinite(raw_corr):
+                raw_corr_gm = raw_corr
+                # Strong Empirical Bayes shrinkage toward neutral 0.0 for N=3 small samples
+                shrinkage = 3.0 / (3.0 + 6.0)
+                hist_corr_gm = float(np.clip(raw_corr * shrinkage, -0.50, 0.50))
+                corr_method = "small_sample_shrunk_eb"
+                is_corr_regularized = True
+            else:
+                hist_corr_gm = 0.0
+        else:
+            hist_corr_gm = 0.0
     else:
         hist_corr_gm = 0.0
+        is_corr_regularized = corr_sample_size > 0
 
     corr_matrix = np.eye(num_vars)
     corr_matrix[0, 1] = hist_corr_gm
@@ -131,7 +149,8 @@ def run_monte_carlo(
     # ------------------------------------------------------------------
     # 5B – Correlated fat-tailed draws (Student-t df=5 normalized to unit variance)
     # ------------------------------------------------------------------
-    rng = np.random.default_rng(42)
+    mc_seed = 42
+    rng = np.random.default_rng(mc_seed)
     oversample = iterations * 3
 
     # Var(t_5) = 5 / (5 - 2) = 5/3; scale by sqrt(3/5) so draws preserve t(5) fat tails with unit variance
@@ -197,29 +216,94 @@ def run_monte_carlo(
         sim_wacc = sim_wacc - np.mean(sim_wacc) + base_wacc
 
     # ------------------------------------------------------------------
-    # 5C – Reject-and-resample
+    # 5C – Reject-and-resample (masks computed on exact post-clip/shift candidates)
     # ------------------------------------------------------------------
-    valid_mask = (
-        (sim_wacc > terminal_growth + 0.005)
-        & (sim_cod > 0)
-        & (sim_rf > 0)
-        & (sim_erp > 0)
-    )
+    mask_wacc_too_low = sim_wacc <= (terminal_growth + 0.005)
+    mask_neg_cod = sim_cod <= 0.0
+    mask_neg_rf = sim_rf <= 0.0
+    mask_neg_erp = sim_erp <= 0.0
+    valid_mask = ~(mask_wacc_too_low | mask_neg_cod | mask_neg_rf | mask_neg_erp)
+
+    total_candidate_valid = int(np.sum(valid_mask))
+    rejected_filter_draws = int(oversample - total_candidate_valid)
 
     sim_growth = sim_growth[valid_mask][:iterations]
     sim_margin = sim_margin[valid_mask][:iterations]
     sim_wacc   = sim_wacc[valid_mask][:iterations]
 
     actual_n = len(sim_growth)
+    unused_valid_oversample = max(0, total_candidate_valid - actual_n)
+
+    distribution_specs: Dict[str, Any] = {
+        "family": "Student-t",
+        "df": 5,
+        "variance_scale": float(np.sqrt(3.0 / 5.0)),
+        "variables": {
+            "rev_growth": {"mean": float(mean_rev_growth), "std": float(std_rev_growth_mc), "clip": [-0.20, 0.65]},
+            "ebit_margin": {"mean": float(mean_ebit_margin), "std": float(std_ebit_margin_mc), "clip": [float(margin_floor), float(margin_ceil)]},
+            "risk_free_rate": {"mean": float(mean_rf), "std": float(std_rf), "constraint": "> 0"},
+            "beta": {"mean": float(mean_beta), "std": float(std_beta), "clip": [0.25, 3.0]},
+            "erp": {"mean": float(mean_erp), "std": float(std_erp), "constraint": "> 0"},
+            "pretax_cod": {"mean": float(mean_cod), "std": float(std_cod), "constraint": "> 0"},
+            "equity_weight": {"mean": float(mean_we), "std": float(std_we), "clip": [0.0, 1.0]},
+        },
+        "wacc_mean_override": float(base_wacc) if base_wacc is not None else None,
+        "min_wacc_condition": f"> {terminal_growth + 0.005:.4f}",
+    }
+    shares_out = float(stock_data.get("diluted_valuation_shares") or stock_data.get("shares_outstanding") or 1.0)
+    snapshot_payload = {
+        "ticker": stock_data.get("ticker"),
+        "seed": mc_seed,
+        "requested_iterations": int(iterations),
+        "oversample": int(oversample),
+        "terminal_growth": round(float(terminal_growth), 6),
+        "projection_years": int(projection_years),
+        "tax_rate": round(float(tax_rate), 6),
+        "means": [round(float(x), 8) for x in means.tolist()],
+        "stds": [round(float(x), 8) for x in stds.tolist()],
+        "base_wacc": round(float(base_wacc), 8) if base_wacc is not None else None,
+        "shares_used": round(shares_out, 2),
+        "total_debt": round(float(wacc_data.get("total_debt", 0.0) or 0.0), 2),
+        "cash": round(float(metrics.get("cash_and_equivalents", 0.0) or 0.0), 2),
+    }
+    input_snapshot_hash = hashlib.sha256(
+        json.dumps(snapshot_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:16]
 
     if actual_n == 0:
         logger.warning("No valid Monte Carlo draws after rejection filtering.")
+        empty_reasons = {
+            "wacc_too_low": int(np.sum(mask_wacc_too_low)),
+            "negative_cod": int(np.sum(mask_neg_cod)),
+            "negative_rf": int(np.sum(mask_neg_rf)),
+            "negative_erp": int(np.sum(mask_neg_erp)),
+            "nan_inf_result": 0,
+            "total_unique_rejected": int(rejected_filter_draws),
+        }
         return {
             "simulated_prices": [],
             "simulated_evs": [],
+            "simulated_raw_equity": [],
+            "seed": mc_seed,
+            "requested_iterations": int(iterations),
+            "candidate_draws_sampled": int(oversample),
+            "total_candidate_valid": 0,
+            "rejected_draws": int(rejected_filter_draws),
+            "unused_valid_oversample": 0,
+            "total_simulations": int(rejected_filter_draws),
+            "valid_simulations": 0,
+            "invalid_simulations": int(rejected_filter_draws),
+            "invalid_simulation_reasons": empty_reasons,
             "actual_iterations": 0,
             "stats": {},
             "hist_corr_gm": hist_corr_gm,
+            "raw_corr_gm": raw_corr_gm,
+            "corr_method": corr_method,
+            "corr_sample_size": corr_sample_size,
+            "is_corr_regularized": is_corr_regularized,
+            "correlation_matrix": corr_matrix.tolist(),
+            "distribution_specs": distribution_specs,
+            "input_snapshot_hash": input_snapshot_hash,
             "sim_growth": [],
             "sim_margin": [],
             "sim_wacc": [],
@@ -258,12 +342,12 @@ def run_monte_carlo(
     final_evs = simulated_evs[valid_prices_mask]
     final_raw_equity = simulated_raw_equity[valid_prices_mask]
     
-    math_invalid_count = actual_n - len(final_prices)
+    math_invalid_count = int(actual_n - len(final_prices))
+    rejected_draws = int(rejected_filter_draws + math_invalid_count)
 
     zero_price_sims = int(np.sum(final_prices == 0.0))
     neg_equity_sims = int(np.sum(final_raw_equity < 0.0))
     valid_n = len(final_prices)
-    shares_out = stock_data.get("shares_outstanding", 1.0)
 
     if valid_n > 0:
         stats = {
@@ -288,27 +372,39 @@ def run_monte_carlo(
         stats = {}
         
     invalid_simulation_reasons = {
-        "wacc_too_low": int(np.sum(samples[6, :] * (samples[2, :] + samples[3, :] * samples[4, :]) + (1 - samples[6, :]) * samples[5, :] * (1 - tax_rate) <= terminal_growth + 0.005)),
-        "negative_cod": int(np.sum(samples[5, :] <= 0)),
-        "negative_rf": int(np.sum(samples[2, :] <= 0)),
-        "negative_erp": int(np.sum(samples[4, :] <= 0)),
-        "nan_inf_result": int(math_invalid_count)
+        "wacc_too_low": int(np.sum(mask_wacc_too_low)),
+        "negative_cod": int(np.sum(mask_neg_cod)),
+        "negative_rf": int(np.sum(mask_neg_rf)),
+        "negative_erp": int(np.sum(mask_neg_erp)),
+        "nan_inf_result": int(math_invalid_count),
+        "total_unique_rejected": int(rejected_draws),
     }
 
     return {
         "simulated_prices": final_prices.tolist(),
         "simulated_evs": final_evs.tolist(),
         "simulated_raw_equity": final_raw_equity.tolist(),
-        "total_simulations": oversample,
-        "valid_simulations": valid_n,
-        "invalid_simulations": oversample - valid_n,
+        "seed": mc_seed,
+        "requested_iterations": int(iterations),
+        "candidate_draws_sampled": int(oversample),
+        "total_candidate_valid": int(total_candidate_valid),
+        "rejected_draws": int(rejected_draws),
+        "unused_valid_oversample": int(unused_valid_oversample),
+        "total_simulations": int(valid_n + rejected_draws),
+        "valid_simulations": int(valid_n),
+        "invalid_simulations": int(rejected_draws),
         "invalid_simulation_reasons": invalid_simulation_reasons,
-        "actual_iterations": valid_n,
+        "actual_iterations": int(valid_n),
         "stats": stats,
         "hist_corr_gm": hist_corr_gm,
+        "raw_corr_gm": raw_corr_gm,
+        "corr_method": corr_method,
         "corr_sample_size": corr_sample_size,
         "is_corr_regularized": is_corr_regularized,
-        "sim_growth": sim_growth.tolist(),
-        "sim_margin": sim_margin.tolist(),
-        "sim_wacc": sim_wacc.tolist(),
+        "correlation_matrix": corr_matrix.tolist(),
+        "distribution_specs": distribution_specs,
+        "input_snapshot_hash": input_snapshot_hash,
+        "sim_growth": sim_growth[valid_prices_mask].tolist(),
+        "sim_margin": sim_margin[valid_prices_mask].tolist(),
+        "sim_wacc": sim_wacc[valid_prices_mask].tolist(),
     }

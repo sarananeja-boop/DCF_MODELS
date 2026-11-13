@@ -41,8 +41,11 @@ const MonteCarloTab = ({ data }) => {
   const histCorrGm = monte_carlo.hist_corr_gm ?? monte_carlo.inputs?.hist_corr_gm ?? 0;
   const corrSampleSize = monte_carlo.corr_sample_size;
   const isCorrRegularized = monte_carlo.is_corr_regularized;
-  const totalSimulations = monte_carlo.total_simulations || iterations * 3;
-  const validSimulations = monte_carlo.valid_simulations || iterations;
+  const totalSimulations = monte_carlo.candidate_draws_sampled || monte_carlo.candidate_draws || monte_carlo.total_simulations || iterations * 3;
+  const validSimulations = monte_carlo.valid_draws || monte_carlo.valid_simulations || iterations;
+  const rejectedSimulations = monte_carlo.rejected_draws ?? monte_carlo.invalid_simulations ?? 0;
+  const unusedOversample = monte_carlo.unused_valid_oversample ?? monte_carlo.unused_draws ?? Math.max(0, totalSimulations - validSimulations - rejectedSimulations);
+  const mcSeed = monte_carlo.seed ?? 42;
   const invalidReasons = monte_carlo.invalid_simulation_reasons || {};
 
   const formatCurrency = (val) => {
@@ -226,9 +229,16 @@ const MonteCarloTab = ({ data }) => {
           </div>
           <div className="h-6 w-px bg-white/[0.08]" />
           <div className="text-left">
-            <span className="text-[10px] text-[#818ea4] block">Input ρ (Correlation)</span>
+            <span className="text-[10px] text-[#818ea4] block">Rejected / Unused</span>
+            <span className="font-display font-bold text-xs text-[#e07a5f] tabular-nums">
+              {rejectedSimulations.toLocaleString()} <span className="text-[#818ea4] font-normal">/ {unusedOversample.toLocaleString()}</span>
+            </span>
+          </div>
+          <div className="h-6 w-px bg-white/[0.08]" />
+          <div className="text-left">
+            <span className="text-[10px] text-[#818ea4] block">Seed / Input ρ</span>
             <span className="font-display font-bold text-xs text-[#8ab4f8] tabular-nums">
-              {Number(histCorrGm).toFixed(2)}
+              #{mcSeed} · {Number(histCorrGm).toFixed(2)}
               {corrSampleSize ? <span className="text-[10px] font-normal text-[#818ea4]"> (N={corrSampleSize})</span> : null}
               {isCorrRegularized ? <span className="text-[9px] text-[#e3b23c] ml-1 uppercase">Reg.</span> : null}
             </span>

@@ -87,11 +87,38 @@ def calculate_reverse_dcf(
 
     from engine.dcf_engine import run_dcf
     from engine.bank_engine import run_bank_valuation
+    from engine.insurance_engine import run_insurance_valuation
+    from engine.reit_engine import run_reit_valuation
+
+    resolved_mt = str((stock_data.get("model_suitability") or {}).get("model_family") or "")
 
     # 1. Price evaluator helper function
     def _eval_growth(g: float) -> float:
         try:
-            if is_equity_model:
+            if resolved_mt in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM"):
+                res = run_insurance_valuation(
+                    start_growth=g,
+                    target_roe=base_target_margin,
+                    cost_of_equity=discount_rate,
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    model_type=resolved_mt,
+                )
+            elif resolved_mt == "REIT_INVIT_AFFO":
+                res = run_reit_valuation(
+                    start_growth=g,
+                    target_affo_margin=base_target_margin,
+                    cost_of_equity=discount_rate,
+                    metrics=metrics,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                )
+            elif is_equity_model:
                 res = run_bank_valuation(
                     start_growth=g,
                     target_roe=base_target_margin,

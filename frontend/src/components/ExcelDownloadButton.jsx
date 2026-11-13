@@ -6,10 +6,19 @@ import toast from 'react-hot-toast';
 export default function ExcelDownloadButton({ data, compact = false }) {
   const [loading, setLoading] = useState(false);
 
+  const isUnsupported = Boolean(
+    data?.validation_gate?.validation_status === 'UNSUPPORTED_MODEL' ||
+    data?.model_suitability?.supported === false
+  );
+  const modelType = String(data?.company?.model_type || data?.dcf_result?.model_type || '');
+  const isReit = Boolean(modelType === 'REIT_INVIT_AFFO' || data?.dcf_result?.is_reit);
+  const isInsurance = Boolean(modelType.startsWith('INSURANCE_') || data?.dcf_result?.is_insurance);
   const isEquityModel = Boolean(
     data?.company?.is_financial ||
+    isInsurance ||
+    isReit ||
     data?.company?.is_equity_model ||
-    data?.company?.model_type === 'CORPORATE_DDM' ||
+    modelType === 'CORPORATE_DDM' ||
     data?.dcf_result?.is_equity_model
   );
 
@@ -18,7 +27,13 @@ export default function ExcelDownloadButton({ data, compact = false }) {
     
     setLoading(true);
     const toastId = toast.loading(
-      isEquityModel
+      isUnsupported
+        ? 'Generating Unsupported Model Gate Notice workbook...'
+        : isReit
+        ? 'Generating REIT AFFO / Cap-Rate Excel workbook...'
+        : isInsurance
+        ? 'Generating Insurance Actuarial DDM Excel workbook...'
+        : isEquityModel
         ? 'Generating DDM / FCFE Excel workbook...'
         : 'Generating FCFF DCF Excel workbook...'
     );
@@ -29,7 +44,15 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       });
       
       const dateStr = new Date().toISOString().split('T')[0];
-      const methodTag = isEquityModel ? 'DDM_FCFE' : 'FCFF_DCF';
+      const methodTag = isUnsupported
+        ? 'Gate_Notice'
+        : isReit
+        ? 'REIT_AFFO'
+        : isInsurance
+        ? 'Insurance_DDM'
+        : isEquityModel
+        ? 'DDM_FCFE'
+        : 'FCFF_DCF';
       const filename = `${data.company.ticker}_${methodTag}_Valuation_Model_${dateStr}.xlsx`;
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -40,7 +63,8 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       link.click();
       
       link.parentNode.removeChild(link);
-      toast.success(`${isEquityModel ? 'DDM / FCFE' : 'FCFF DCF'} Excel workbook downloaded`, { id: toastId });
+      const okLabel = isUnsupported ? 'Gate Notice' : isReit ? 'REIT AFFO' : isInsurance ? 'Insurance DDM' : isEquityModel ? 'DDM / FCFE' : 'FCFF DCF';
+      toast.success(`${okLabel} Excel workbook downloaded`, { id: toastId });
     } catch (error) {
       console.error("Excel download failed", error);
       toast.error('Failed to generate Excel file.', { id: toastId });
@@ -66,10 +90,10 @@ export default function ExcelDownloadButton({ data, compact = false }) {
       {compact ? (
         <>
           <span className="sm:hidden">{loading ? '...' : 'Excel'}</span>
-          <span className="hidden sm:inline">{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
+          <span className="hidden sm:inline">{loading ? 'Exporting...' : `Export ${isUnsupported ? 'Gate Notice' : isReit ? 'REIT' : isInsurance ? 'Insurer' : isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
         </>
       ) : (
-        <span>{loading ? 'Exporting...' : `Export ${isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
+        <span>{loading ? 'Exporting...' : `Export ${isUnsupported ? 'Gate Notice' : isReit ? 'REIT' : isInsurance ? 'Insurer' : isEquityModel ? 'DDM' : 'FCFF'} Excel (.xlsx)`}</span>
       )}
     </button>
   );

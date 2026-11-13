@@ -560,20 +560,43 @@ export default function App() {
   };
 
   const wsIsFinancial = Boolean(analysisData?.company?.is_financial);
+  const wsModelType = String(
+    analysisData?.company?.model_type ||
+    analysisData?.dcf_result?.model_type ||
+    analysisData?.diagnostics?.model_type ||
+    ''
+  );
+  const wsIsInsurance = Boolean(wsModelType.startsWith('INSURANCE_') || analysisData?.dcf_result?.is_insurance);
+  const wsIsReit = Boolean(wsModelType === 'REIT_INVIT_AFFO' || analysisData?.dcf_result?.is_reit);
+  const wsIsNbfc = Boolean(wsModelType === 'NBFC_LENDER_DDM' || analysisData?.company?.is_nbfc || analysisData?.dcf_result?.is_nbfc);
   const wsIsEquityModel = Boolean(
     wsIsFinancial ||
+    wsIsInsurance ||
+    wsIsReit ||
     analysisData?.company?.is_equity_model ||
-    analysisData?.company?.model_type === 'CORPORATE_DDM' ||
+    wsModelType === 'CORPORATE_DDM' ||
     analysisData?.dcf_result?.is_equity_model
   );
 
-  const tabs = [
-    { id: 'overview', label: 'Valuation Overview', icon: <FiActivity className="w-4 h-4" /> },
-    { id: 'dcf', label: wsIsEquityModel ? 'DDM & FCFE Schedule' : 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
-    { id: 'monte_carlo', label: 'Monte Carlo (10k Runs)', icon: <FiCpu className="w-4 h-4" /> },
-    { id: 'sensitivity', label: 'Sensitivity Matrix', icon: <FiGrid className="w-4 h-4" /> },
-    { id: 'trends', label: 'Historical Trends', icon: <FiBarChart2 className="w-4 h-4" /> }
-  ];
+  const wsValidationGate = analysisData?.validation_gate || analysisData?.validation || {};
+  const wsValStatus = wsValidationGate?.validation_status || null;
+  const wsIsUnsupported = Boolean(
+    wsValStatus === 'UNSUPPORTED_MODEL' ||
+    analysisData?.model_suitability?.supported === false ||
+    analysisData?.company?.model_suitability?.supported === false
+  );
+  const wsIsBlocked = Boolean(wsValidationGate?.is_blocked || analysisData?.verdict?.is_blocked || wsIsUnsupported);
+  const wsRecons = analysisData?.accounting_reconciliations || wsValidationGate?.reconciliations || null;
+
+  const tabs = wsIsUnsupported
+    ? [{ id: 'overview', label: 'Validation Gate Notice', icon: <FiActivity className="w-4 h-4" /> }]
+    : [
+        { id: 'overview', label: 'Valuation Overview', icon: <FiActivity className="w-4 h-4" /> },
+        { id: 'dcf', label: wsIsReit ? 'AFFO / NDCF Schedule' : wsIsEquityModel ? 'DDM & FCFE Schedule' : 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
+        { id: 'monte_carlo', label: 'Monte Carlo (10k Runs)', icon: <FiCpu className="w-4 h-4" /> },
+        { id: 'sensitivity', label: 'Sensitivity Matrix', icon: <FiGrid className="w-4 h-4" /> },
+        { id: 'trends', label: 'Historical Trends', icon: <FiBarChart2 className="w-4 h-4" /> }
+      ];
 
   const prevScaleMax = Math.max(currentPreview.currentPriceNum, currentPreview.fairValueNum, currentPreview.p95Num) * 1.15;
   const prevFairPct = Math.min(92, Math.max(8, (currentPreview.fairValueNum / prevScaleMax) * 100));
@@ -2599,12 +2622,52 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-[#a6b0c3] font-normal shrink-0">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[#a6b0c3] font-normal shrink-0">
+                  {wsValStatus && (
+                    <span className={`px-3 py-1 rounded-lg border text-[11px] font-bold ${
+                      wsIsBlocked
+                        ? 'bg-[#e07a5f]/15 border-[#e07a5f]/40 text-[#e07a5f]'
+                        : wsValStatus === 'VALIDATED'
+                        ? 'bg-[#34b38a]/15 border-[#34b38a]/40 text-[#34b38a]'
+                        : 'bg-[#e3b23c]/15 border-[#e3b23c]/40 text-[#e3b23c]'
+                    }`}>
+                      {wsValStatus}
+                      {wsRecons?.checks?.length ? ` (${wsRecons.passed_count}/${wsRecons.checks.length})` : ''}
+                    </span>
+                  )}
                   <span className="px-3 py-1 rounded-lg bg-[#141b26] border border-white/[0.08] text-[11px] font-medium text-[#f4eedf]">
-                    Framework: <strong className="text-[#e3b23c]">{wsIsFinancial ? 'Tier-1 Banking DDM/FCFE' : wsIsEquityModel ? 'Corporate DDM / FCFE' : 'Enterprise DCF (FCFF)'}</strong>
+                    Framework: <strong className="text-[#e3b23c]">
+                      {wsIsUnsupported
+                        ? 'UNSUPPORTED_MODEL'
+                        : wsIsInsurance
+                        ? (wsModelType === 'INSURANCE_LIFE_DDM' ? 'Life Insurer DDM' : 'P&C Insurer Ex-AOCI DDM')
+                        : wsIsReit
+                        ? 'REIT / InvIT AFFO & NAV'
+                        : wsIsNbfc
+                        ? 'Wholesale NBFC DDM'
+                        : wsIsFinancial
+                        ? 'Tier-1 Banking DDM/FCFE'
+                        : wsIsEquityModel
+                        ? 'Corporate DDM / FCFE'
+                        : 'Enterprise DCF (FCFF)'}
+                    </strong>
                   </span>
                 </div>
               </div>
+
+              {/* Fail-Closed Validation Gate Alert Banner */}
+              {wsIsBlocked && (
+                <div className="px-4 py-3.5 rounded-xl bg-[#e07a5f]/10 border border-[#e07a5f]/40 text-[#f4eedf] text-xs space-y-1">
+                  <div className="font-display font-bold uppercase tracking-wider text-[11px] text-[#e07a5f]">
+                    Fail-Closed Validation Gate Active — {wsValStatus || 'BLOCKED'}
+                  </div>
+                  <p className="text-[#f4eedf]/90 leading-relaxed">
+                    {(wsValidationGate?.gates_failed && wsValidationGate.gates_failed.length > 0)
+                      ? wsValidationGate.gates_failed.join(' · ')
+                      : (analysisData?.verdict?.description || 'Valuation blocked pending sector methodology or statutory reconciliation fix.')}
+                  </p>
+                </div>
+              )}
 
               {/* VALUATION METHOD SWITCHER & COMPARATIVE STATS BAR */}
               {analysisData.method_comparison && (
@@ -2791,13 +2854,24 @@ export default function App() {
               )}
 
               {/* 4 Straightforward On-Face Headline Metric Cards */}
+              {!wsIsUnsupported && (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 
                 {/* Card 1: DCF Intrinsic Fair Value (Primary Highlight - Clean & Uniform Border) */}
+                {(() => {
+                  const rawImplied = analysisData.dcf_result?.implied_price;
+                  const wsHasFairValue = rawImplied != null && Number.isFinite(Number(rawImplied)) && !wsIsUnsupported;
+                  return (
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 relative flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c] truncate">
-                      {wsIsFinancial
+                      {wsIsBlocked
+                        ? (wsHasFairValue ? 'Unverified Fair Value (Warning)' : 'Unverified / Blocked Fair Value')
+                        : wsIsReit
+                        ? 'REIT AFFO / NDCF Fair Value'
+                        : wsIsInsurance
+                        ? 'Actuarial Equity Fair Value'
+                        : wsIsFinancial
                         ? 'Bank DDM / FCFE Fair Value'
                         : wsIsEquityModel
                         ? 'DDM / FCFE Intrinsic Value'
@@ -2810,17 +2884,21 @@ export default function App() {
                     )}
                   </div>
                   <div className="font-display text-3xl sm:text-4xl xl:text-[40px] font-bold text-[#e3b23c] tabular-nums leading-tight my-1 truncate">
-                    {wsSymbol}{wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {wsHasFairValue ? `${wsSymbol}${wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'BLOCKED'}
                   </div>
                   <div className={`flex flex-wrap items-center text-xs font-bold tabular-nums gap-1 ${
-                    wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                    wsIsBlocked ? 'text-[#e3b23c]' : wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
                   }`}>
                     {wsIsUndervalued ? <FiTrendingUp className="text-sm shrink-0" /> : <FiTrendingDown className="text-sm shrink-0" />}
                     <span className="truncate">
-                      {wsIsUndervalued ? '▲' : '▼'} {Math.abs(wsUpsidePct).toFixed(1)}% {wsIsUndervalued ? 'Upside (Undervalued)' : `Downside (Above ${wsIsEquityModel ? 'DDM' : 'DCF'})`}
+                      {wsHasFairValue
+                        ? `${wsIsUndervalued ? '▲' : '▼'} ${Math.abs(wsUpsidePct).toFixed(1)}% ${wsIsUndervalued ? 'Upside (Undervalued)' : `Downside (Above ${wsIsEquityModel ? 'DDM' : 'DCF'})`}${wsIsBlocked ? ` · ${wsValStatus || 'Check Warnings'}` : ''}`
+                        : (wsValStatus || 'Gate Failed')}
                     </span>
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* Card 2: Current Market Price */}
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
@@ -2849,7 +2927,7 @@ export default function App() {
                       Monte Carlo Median
                     </span>
                     <span className="text-[11px] font-semibold text-[#8ab4f8] bg-[#5b8fd9]/10 px-2 py-0.5 rounded border border-[#5b8fd9]/25 shrink-0">
-                      10,000 Runs
+                      {(analysisData.monte_carlo?.valid_draws ?? analysisData.monte_carlo?.actual_iterations ?? 10000).toLocaleString()} Valid Runs
                     </span>
                   </div>
                   <div className="font-display text-3xl sm:text-4xl font-bold text-[#f4eedf] tabular-nums leading-tight my-1 truncate">
@@ -2867,7 +2945,7 @@ export default function App() {
                       Valuation Outlook
                     </span>
                     <span className="text-[11px] font-semibold text-[#a6b0c3] tabular-nums shrink-0">
-                      {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : wsIsEquityModel ? 'P/B' : 'EV/EBITDA'}:{' '}
+                      {analysisData.validation?.metric_used === 'ev_revenue' ? 'EV/Sales' : wsIsReit ? 'P/AFFO' : wsIsEquityModel ? 'P/B' : 'EV/EBITDA'}:{' '}
                       <strong className="text-[#f4eedf]">
                         {analysisData.validation?.market_multiple ? `${analysisData.validation.market_multiple.toFixed(1)}x` : 'N/A'}
                       </strong>
@@ -2876,7 +2954,9 @@ export default function App() {
                   <div className={`font-display ${
                     (analysisData.verdict?.verdict || '').length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
                   } font-bold leading-tight my-1 tracking-tight truncate ${
-                    analysisData.verdict?.verdict?.includes('BULLISH') || analysisData.verdict?.verdict?.includes('BUY')
+                    wsIsBlocked || analysisData.verdict?.verdict?.includes('BLOCKED') || analysisData.verdict?.verdict?.includes('UNSUPPORTED')
+                      ? 'text-[#e07a5f]'
+                      : analysisData.verdict?.verdict?.includes('BULLISH') || analysisData.verdict?.verdict?.includes('BUY')
                       ? 'text-[#34b38a]'
                       : analysisData.verdict?.verdict?.includes('BEARISH') || analysisData.verdict?.verdict?.includes('SELL')
                       ? 'text-[#e07a5f]'
@@ -2890,12 +2970,14 @@ export default function App() {
                 </div>
 
               </div>
+              )}
             </div>
 
             {/* 2. MAIN FULL-WIDTH 12-COLUMN GRID: LEFT CONTROLS + RIGHT ANALYSIS TABS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
               
               {/* Left Columns: Model Assumptions (with Restore Defaults) + Macro Config */}
+              {!wsIsUnsupported && (
               <div className="order-2 lg:order-1 lg:col-span-5 xl:col-span-4 2xl:col-span-3 min-w-0 space-y-4">
                 <AssumptionSliders 
                   key={`sliders-${resetKey}-${analysisData.company?.ticker}-${analysisData.company?.model_type || 'FCFF'}`}
@@ -2918,9 +3000,10 @@ export default function App() {
 
                 <MacroDisplay data={analysisData} />
               </div>
+              )}
 
               {/* Right Columns: Tab Navigation + Active Data View */}
-              <div className="order-1 lg:order-2 lg:col-span-7 xl:col-span-8 2xl:col-span-9 min-w-0 space-y-4">
+              <div className={`order-1 lg:order-2 ${wsIsUnsupported ? 'lg:col-span-12' : 'lg:col-span-7 xl:col-span-8 2xl:col-span-9'} min-w-0 space-y-4`}>
                 {/* Tab Bar with Smooth Scrolling */}
                 <div className="bg-[#141b26] rounded-2xl p-1.5 border border-[#f4eedf]/10 shadow-lg relative overflow-hidden">
                   <div 

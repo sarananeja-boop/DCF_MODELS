@@ -48,10 +48,15 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
 
   const { company, market_data, wacc: wacc_details, dcf_result, monte_carlo, validation, verdict, diagnostics, historicals, metadata } = data;
   const isFinancial = Boolean(company?.is_financial || diagnostics?.is_financial || dcf_result?.is_financial);
+  const modelType = String(company?.model_type || dcf_result?.model_type || diagnostics?.model_type || '');
+  const isInsurance = Boolean(modelType.startsWith('INSURANCE_') || dcf_result?.is_insurance);
+  const isReit = Boolean(modelType === 'REIT_INVIT_AFFO' || dcf_result?.is_reit);
   const isEquityModel = Boolean(
     isFinancial ||
+    isInsurance ||
+    isReit ||
     company?.is_equity_model ||
-    company?.model_type === 'CORPORATE_DDM' ||
+    modelType === 'CORPORATE_DDM' ||
     diagnostics?.is_equity_model ||
     dcf_result?.is_equity_model
   );
@@ -166,6 +171,10 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const latestDiv = historicals?.dividends_paid?.length ? historicals.dividends_paid[historicals.dividends_paid.length - 1] : null;
   const totalCash = wacc_details?.total_cash ?? historicals?.cash_and_equivalents ?? 0;
   const totalDebt = wacc_details?.total_debt ?? 0;
+  const minorityClaim = dcf_result?.minority_interest ?? wacc_details?.minority_interest_claim ?? historicals?.minority_interest_claim ?? 0;
+  const preferredClaim = dcf_result?.preferred_stock ?? wacc_details?.preferred_stock_claim ?? historicals?.preferred_stock_claim ?? 0;
+  const minorityPreferred = minorityClaim + preferredClaim;
+  const valuationShares = dcf_result?.shares_used ?? market_data?.shares_diluted_tsm ?? market_data?.shares_outstanding;
   const mktCap = market_data?.market_cap || (market_data?.shares_outstanding || 0) * currentPrice;
 
   // Multiple bar scaling
@@ -173,6 +182,15 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const modMult = validation?.model_multiple || 0;
   const benchMult = validation?.benchmark_exit_multiple ?? diagnostics?.benchmark_exit_multiple ?? 10;
   const maxMult = Math.max(mktMult, modMult, benchMult, 1) * 1.15;
+
+  // Validation Gate, Reconciliations & Scenarios
+  const validationGate = data.validation_gate || validation || {};
+  const valStatus = validationGate?.validation_status || (validation?.status ? String(validation.status) : null);
+  const recons = data.accounting_reconciliations || validationGate?.reconciliations || null;
+  const reconChecks = Array.isArray(recons?.checks) ? recons.checks : [];
+  const scenariosObj = data.scenarios && typeof data.scenarios === 'object' ? data.scenarios : null;
+  const isUnsupported = Boolean(valStatus === 'UNSUPPORTED_MODEL' || data.model_suitability?.supported === false);
+  const isGateBlocked = Boolean(validationGate?.is_blocked || verdict?.is_blocked || isUnsupported);
 
   // Distress & Stressed DCF Diagnostics
   const isDistressed = Boolean(
@@ -185,7 +203,37 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const negHistFcf = Boolean(diagnostics?.historical_fcf_negative || validation?.metric_used === 'ev_revenue');
   const tvFlag = Boolean(diagnostics?.tv_share_flag);
   const gaapSbcNote = diagnostics?.gaap_sbc_note;
-  const rawEqVal = dcf_result?.raw_equity_value ?? ((dcf_result?.enterprise_value || 0) - totalDebt + totalCash);
+  const rawEqVal = dcf_result?.raw_equity_value ?? ((dcf_result?.enterprise_value || 0) - totalDebt + totalCash - minorityPreferred);
+
+  if (isUnsupported || !dcf_result) {
+    const suit = data.model_suitability || company?.model_suitability || {};
+    return (
+      <div className="space-y-4 text-[#f4eedf]">
+        <div className="bg-[#141b26] rounded-2xl p-6 border border-[#e07a5f]/35 shadow-lg space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <FiAlertTriangle className="w-5 h-5 text-[#e07a5f]" />
+              <h3 className="font-display font-bold text-lg text-[#f4eedf]">
+                Fail-Closed Validation Gate: {valStatus || 'UNSUPPORTED_MODEL'}
+              </h3>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg bg-[#e07a5f]/15 border border-[#e07a5f]/35 text-[#e07a5f] text-xs font-bold">
+              {suit?.model_family || 'UNSUPPORTED'}
+            </span>
+          </div>
+          <p className="text-sm text-[#c5cedd] leading-relaxed">
+            {suit?.reason || verdict?.description || 'This sector/security cannot be reliably valued with Corporate FCFF DCF or Bank DDM under institutional standards.'}
+          </p>
+          {suit?.recommended_methodology && (
+            <div className="p-3 rounded-xl bg-[#0d121a] border border-[#f4eedf]/10 text-xs text-[#a6b0c3]">
+              <strong className="text-[#e3b23c]">Required Valuation Methodology: </strong>
+              {suit.recommended_methodology}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 text-[#f4eedf]">
@@ -403,7 +451,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
             </div>
             <div className="bg-[#0d121a] rounded-xl p-3 border border-[#f4eedf]/10 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#a6b0c3] font-semibold">
-                {isEquityModel ? 'Justified P/B' : 'Exit Mult.'}
+                {isReit ? 'Cap-Rate NAV' : isEquityModel ? 'Justified P/B' : 'Exit Mult.'}
               </div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-1 truncate">
                 {isEquityModel
@@ -443,7 +491,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <h3 className="font-display font-bold text-base sm:text-lg text-[#f4eedf] tracking-tight">
-                {isFinancial
+                {isReit
+                  ? 'Terminal Value & REIT AFFO Equity Bridge'
+                  : isInsurance
+                  ? 'Terminal Value & Actuarial Equity Bridge'
+                  : isFinancial
                   ? 'Terminal Value & Bank Equity Bridge'
                   : isEquityModel
                   ? 'Terminal Value & DDM / FCFE Equity Bridge'
@@ -544,9 +596,17 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
                     <span className="font-display font-bold text-lg tabular-nums text-[#e3b23c]">{symbol}{formatNumber(impliedPrice)}</span>
                   </div>
                   <div className="mt-2 text-[10px] text-[#a6b0c3] bg-[#0d121a] p-2 rounded-lg border border-[#f4eedf]/8">
-                    {isFinancial ? (
+                    {isInsurance ? (
                       <>
-                        🏦 <strong className="text-[#f4eedf]">Bank Framework:</strong> Customer deposits &amp; borrowings are operational funding rather than capital structure debt. Valued directly to Equity via Regulatory Capital FCFE.
+                        <strong className="text-[#f4eedf]">Insurance Actuarial Framework:</strong> Policyholder reserves &amp; unearned premiums represent investable float rather than corporate financing debt. Valued on Ex-AOCI Common Equity at Cost of Equity (<span className="font-mono">Ke</span>).
+                      </>
+                    ) : isReit ? (
+                      <>
+                        <strong className="text-[#f4eedf]">REIT / InvIT AFFO Framework:</strong> Distributable AFFO (NDCF after recurring maintenance CapEx) is discounted directly at Cost of Equity (<span className="font-mono">Ke</span>) and cross-checked against Cap-Rate GAV/NAV.
+                      </>
+                    ) : isFinancial ? (
+                      <>
+                        <strong className="text-[#f4eedf]">Bank Framework:</strong> Customer deposits &amp; borrowings are operational funding rather than capital structure debt. Valued directly to Equity via Regulatory Capital FCFE.
                       </>
                     ) : (
                       <>
@@ -592,10 +652,19 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#34b38a]">(+)</span>
-                      <span>Cash &amp; Marketable Securities</span>
+                      <span>EV-Eligible Unrestricted Cash</span>
                     </span>
                     <span className="font-display font-bold tabular-nums text-[#34b38a]">+{formatCurrency(totalCash, symbol, true)}</span>
                   </div>
+                  {minorityPreferred > 0 && (
+                    <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                      <span className="text-[#a6b0c3] flex items-center gap-1.5">
+                        <span className="w-5 text-center font-bold text-[#e07a5f]">(−)</span>
+                        <span>Minority Interest &amp; Preferred Stock</span>
+                      </span>
+                      <span className="font-display font-bold tabular-nums text-[#e07a5f]">−{formatCurrency(minorityPreferred, symbol, true)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-1.5 border-b border-[#f4eedf]/10 font-semibold bg-[#0d121a]/50 px-2 rounded-lg">
                     <span className="text-[#f4eedf] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#e3b23c]">(=)</span>
@@ -606,9 +675,9 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3] flex items-center gap-1.5">
                       <span className="w-5 text-center font-bold text-[#a6b0c3]">(÷)</span>
-                      <span>Diluted Shares Outstanding</span>
+                      <span>Diluted Valuation Shares (TSM)</span>
                     </span>
-                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{formatShares(market_data?.shares_outstanding, market)}</span>
+                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{formatShares(valuationShares, market)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-[#f4eedf] flex items-center gap-1.5">
@@ -841,7 +910,26 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
             )}
 
             <div className="space-y-2 text-xs">
-              {isEquityModel ? (
+              {isReit ? (
+                <>
+                  <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                    <span className="text-[#a6b0c3]">Current Market P / AFFO</span>
+                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{formatNumber(validation?.market_multiple ?? dcf_result?.p_affo)}x</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                    <span className="text-[#a6b0c3]">Model Implied P / AFFO</span>
+                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{formatNumber(validation?.model_multiple ?? dcf_result?.justified_pb)}x</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                    <span className="text-[#a6b0c3]">Cap-Rate NAV per Unit ({formatPercent(dcf_result?.benchmark_cap_rate)} Cap)</span>
+                    <span className="font-display font-bold tabular-nums text-[#e3b23c]">{symbol}{formatNumber(dcf_result?.cap_rate_nav_per_unit ?? dcf_result?.bvps)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
+                    <span className="text-[#a6b0c3]">AFFO per Unit (Base Run-Rate)</span>
+                    <span className="font-display font-bold tabular-nums text-[#f4eedf]">{symbol}{formatNumber(dcf_result?.affo_per_unit)}</span>
+                  </div>
+                </>
+              ) : isEquityModel ? (
                 <>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
                     <span className="text-[#a6b0c3]">Current Market P/B</span>
@@ -856,7 +944,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
                     <span className="font-display font-bold tabular-nums text-[#e3b23c]">{formatNumber(validation?.justified_pb ?? dcf_result?.justified_pb)}x</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-[#f4eedf]/6">
-                    <span className="text-[#a6b0c3]">Book Value / Share (BVPS)</span>
+                    <span className="text-[#a6b0c3]">{isInsurance ? 'Ex-AOCI Book Value / Share' : 'Book Value / Share (BVPS)'}</span>
                     <span className="font-display font-bold tabular-nums text-[#f4eedf]">{symbol}{formatNumber(validation?.bvps ?? dcf_result?.bvps)}</span>
                   </div>
                 </>
@@ -951,6 +1039,99 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
         </div>
 
       </div>
+
+      {/* =================================================================== */}
+      {/* ROW 2B: SCENARIO CROSS-CHECKS & ACCOUNTING RECONCILIATIONS          */}
+      {/* =================================================================== */}
+      {(scenariosObj || reconChecks.length > 0) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {scenariosObj && (
+            <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg space-y-3">
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#f4eedf]/10">
+                <h3 className="font-display font-bold text-base text-[#f4eedf]">
+                  Scenario &amp; Cross-Check Summary
+                </h3>
+                <span className="text-[11px] font-semibold text-[#8ab4f8]">
+                  Live Parameterized Sensitivity
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[#a6b0c3] border-b border-[#f4eedf]/10 text-left">
+                      <th className="py-1.5 pr-2 font-semibold">Scenario</th>
+                      <th className="py-1.5 px-2 font-semibold text-right">Implied Price</th>
+                      <th className="py-1.5 px-2 font-semibold text-right">Δ vs Base</th>
+                      <th className="py-1.5 pl-2 font-semibold">Key Driver</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f4eedf]/6">
+                    {Object.entries(scenariosObj).map(([sKey, sc]) => {
+                      if (!sc || typeof sc !== 'object') return null;
+                      const isApp = sc.applicable !== false && sc.implied_price != null;
+                      return (
+                        <tr key={sKey}>
+                          <td className="py-2 pr-2 font-semibold text-[#f4eedf]">{sc.label || sKey}</td>
+                          <td className="py-2 px-2 text-right font-display font-bold tabular-nums text-[#e3b23c]">
+                            {isApp ? `${symbol}${formatNumber(sc.implied_price)}` : 'N/A'}
+                          </td>
+                          <td className={`py-2 px-2 text-right font-display font-semibold tabular-nums ${
+                            !isApp || sc.delta_vs_base_pct == null ? 'text-[#a6b0c3]' : sc.delta_vs_base_pct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                          }`}>
+                            {isApp && sc.delta_vs_base_pct != null ? `${sc.delta_vs_base_pct >= 0 ? '+' : ''}${sc.delta_vs_base_pct.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="py-2 pl-2 text-[#a6b0c3] text-[11px] truncate max-w-[220px]" title={sc.key_driver || sc.note}>
+                            {sc.key_driver || sc.note || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {reconChecks.length > 0 && (
+            <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg space-y-3">
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#f4eedf]/10">
+                <h3 className="font-display font-bold text-base text-[#f4eedf]">
+                  Statutory Accounting Reconciliations
+                </h3>
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${
+                  isGateBlocked
+                    ? 'bg-[#e07a5f]/15 border-[#e07a5f]/35 text-[#e07a5f]'
+                    : 'bg-[#34b38a]/15 border-[#34b38a]/35 text-[#34b38a]'
+                }`}>
+                  {recons?.passed_count ?? reconChecks.filter(c => c.status === 'PASS').length}/{reconChecks.length} Passed · {valStatus || 'CHECKED'}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                {reconChecks.map((chk) => {
+                  const st = chk.status || 'INFO';
+                  const badgeCls =
+                    st === 'PASS'
+                      ? 'bg-[#34b38a]/15 text-[#34b38a] border-[#34b38a]/30'
+                      : st === 'WARN'
+                      ? 'bg-[#e3b23c]/15 text-[#e3b23c] border-[#e3b23c]/30'
+                      : 'bg-[#e07a5f]/15 text-[#e07a5f] border-[#e07a5f]/30';
+                  return (
+                    <div key={chk.id} className="flex items-start justify-between gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#0d121a] border border-[#f4eedf]/6 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[#f4eedf] text-[11.5px] truncate">{chk.name}</div>
+                        <div className="text-[10.5px] text-[#a6b0c3] truncate" title={chk.details}>{chk.details}</div>
+                      </div>
+                      <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${badgeCls}`}>
+                        {st}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* ROW 3: AI VALUATION SUMMARY                                         */}

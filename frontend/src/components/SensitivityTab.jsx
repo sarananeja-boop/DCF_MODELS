@@ -16,10 +16,15 @@ export default function SensitivityTab({ data }) {
 
   const { growth_wacc, margin_wacc } = data.sensitivity;
   const isFinancial = Boolean(data.company?.is_financial || data.diagnostics?.is_financial || data.dcf_result?.is_financial);
+  const modelType = String(data.company?.model_type || data.dcf_result?.model_type || data.diagnostics?.model_type || '');
+  const isInsurance = Boolean(modelType.startsWith('INSURANCE_') || data.dcf_result?.is_insurance);
+  const isReit = Boolean(modelType === 'REIT_INVIT_AFFO' || data.dcf_result?.is_reit);
   const isEquityModel = Boolean(
     isFinancial ||
+    isInsurance ||
+    isReit ||
     data.company?.is_equity_model ||
-    data.company?.model_type === 'CORPORATE_DDM' ||
+    modelType === 'CORPORATE_DDM' ||
     data.diagnostics?.is_equity_model ||
     data.dcf_result?.is_equity_model
   );
@@ -240,7 +245,11 @@ export default function SensitivityTab({ data }) {
                   <FiSliders className="w-3.5 h-3.5" />
                 </div>
                 <h3 className="font-display font-bold text-base text-[#f4eedf] tracking-tight">
-                  {isEquityModel ? 'Net Income Growth vs. Cost of Equity (Ke)' : 'Revenue Growth vs. Discount Rate (WACC)'}
+                  {isReit
+                    ? 'Revenue / AFFO Growth vs. Cost of Equity (Ke)'
+                    : isEquityModel
+                    ? 'Net Income Growth vs. Cost of Equity (Ke)'
+                    : 'Revenue Growth vs. Discount Rate (WACC)'}
                 </h3>
               </div>
               <span className="text-[11px] font-semibold text-[#a6b0c3]">
@@ -334,11 +343,17 @@ export default function SensitivityTab({ data }) {
                   <FiActivity className="w-3.5 h-3.5" />
                 </div>
                 <h3 className="font-display font-bold text-base text-[#f4eedf] tracking-tight">
-                  {isEquityModel ? 'Target ROE vs. Cost of Equity (Ke)' : 'Operating EBIT Margin vs. Discount Rate (WACC)'}
+                  {isReit
+                    ? 'Target AFFO Margin vs. Cost of Equity (Ke)'
+                    : isInsurance
+                    ? 'Target Ex-AOCI ROE vs. Cost of Equity (Ke)'
+                    : isEquityModel
+                    ? 'Target ROE vs. Cost of Equity (Ke)'
+                    : 'Operating EBIT Margin vs. Discount Rate (WACC)'}
                 </h3>
               </div>
               <span className="text-[11px] font-semibold text-[#a6b0c3]">
-                Columns: {isEquityModel ? 'ROE' : 'Margin'} &nbsp;|&nbsp; Rows: {isEquityModel ? 'Ke' : 'WACC'}
+                Columns: {isReit ? 'AFFO Margin' : isEquityModel ? 'ROE' : 'Margin'} &nbsp;|&nbsp; Rows: {isEquityModel ? 'Ke' : 'WACC'}
               </span>
             </div>
 
@@ -348,7 +363,7 @@ export default function SensitivityTab({ data }) {
                 <thead>
                   <tr className="bg-[#121824] border-b border-[#f4eedf]/10 text-[11px] text-[#a6b0c3]">
                     <th className="p-2.5 font-display font-bold text-left pl-3 bg-[#121824] sticky left-0 z-10 border-r border-[#f4eedf]/10">
-                      {isEquityModel ? 'Ke \\ ROE' : 'WACC \\ Margin'}
+                      {isReit ? 'Ke \\ AFFO Margin' : isEquityModel ? 'Ke \\ ROE' : 'WACC \\ Margin'}
                     </th>
                     {g2_x.map((mx, ci) => (
                       <th key={ci} className={`p-2 font-display font-semibold tabular-nums ${ci === baseColIdx2 ? 'text-[#8ab4f8] font-bold bg-[#5b8fd9]/10' : ''}`}>

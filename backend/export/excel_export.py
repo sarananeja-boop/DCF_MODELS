@@ -16,6 +16,7 @@ Sheets Included:
 """
 
 import logging
+import math
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional
@@ -66,6 +67,9 @@ BANNER_FILL = PatternFill(start_color=NAVY_PRIMARY, end_color=NAVY_PRIMARY, fill
 HEADER_FILL = PatternFill(start_color=NAVY_PRIMARY, end_color=NAVY_PRIMARY, fill_type="solid")
 ALT_ROW_FILL = PatternFill(start_color=LIGHT_BG, end_color=LIGHT_BG, fill_type="solid")
 HIGHLIGHT_FILL = PatternFill(start_color=HIGHLIGHT_BG, end_color=HIGHLIGHT_BG, fill_type="solid")
+PASS_FILL = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+WARN_FILL = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+BLOCKED_FILL = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
 
 # Fonts
 FONT_TITLE = Font(name="Calibri", size=16, bold=True, color=NAVY_PRIMARY)
@@ -197,6 +201,14 @@ def _auto_fit_columns(ws, min_width: int = 14, max_width: int = 35):
         ws.column_dimensions[col_letter].width = max_len
 
 
+def _format_accounting_standard(raw_std: Any, market: Any = "US") -> str:
+    """Format accounting standard identifiers into clean display labels."""
+    raw = str(raw_std or ("IND_AS" if str(market or "").upper() == "IN" else "US_GAAP"))
+    return {"IND_AS": "Ind AS", "US_GAAP": "US GAAP", "IFRS": "IFRS"}.get(
+        raw.upper(), raw.replace("_", " ").title()
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Sheet 1: Cover Page & Valuation Summary
 # ═══════════════════════════════════════════════════════════════════════════
@@ -238,23 +250,33 @@ def _build_cover(
     ws["B2"].font = FONT_TITLE
     ws["B3"].value = f"DCF Valuation & Risk Assessment Model — {company.get('ticker', '')}"
     ws["B3"].font = FONT_SUBTITLE
+    ws.merge_cells(f"B2:E2")
+    ws.merge_cells(f"B3:E3")
     ws.row_dimensions[2].height = 26
     ws.row_dimensions[3].height = 18
+
+    acct_std_label = _format_accounting_standard(
+        data.get("accounting_standard") or company.get("accounting_standard"),
+        company.get("market", "US"),
+    )
+    sector_prof = data.get("sector_driver_profile") or company.get("sector_driver_profile") or ((data.get("model_suitability") or {}).get("driver_profile")) or {}
 
     # Section 1: Company Profile
     r = 5
     _set_banner(ws, r, 2, 5, "Company Profile & Market Metadata")
     r += 1
 
+    dil_shares_cover = float(dcf.get("shares_used") or market_data.get("diluted_valuation_shares") or market_data.get("shares_outstanding") or 0)
+
     profile_items = [
         ("Company Name", company.get("name")),
         ("Ticker Symbol", company.get("ticker")),
         ("Exchange Market", company.get("market")),
+        ("Sector", str(company.get("sector") or sector_prof.get("label") or "Corporate")),
         ("Reporting Currency", currency),
+        ("Accounting Standard", acct_std_label),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
-        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
-        ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
-        ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
+        ("Diluted Shares Outstanding", dil_shares_cover, INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
     ]
 
@@ -301,7 +323,6 @@ def _build_cover(
 
     val_summary_items = [
         ("Current Market Price (CMP)", current_price, cfmt_price, False),
-        ("DCF Implied Fair Value (FCFF Base Case)", implied_price, cfmt_price, True),
         ("DCF Implied Fair Value (Live Model Formula)", dcf_price_formula, cfmt_price, True),
         ("Implied Upside / (Downside)", upside_formula, PCT_FMT, True),
         ("Investment Verdict", verdict.get("verdict", "NEUTRAL"), None, True),
@@ -446,50 +467,7 @@ def _build_cover(
             ec.border = THIN_BORDER
         r += 1
 
-    # Section 5: Monte Carlo Simulation & Reproducibility Configuration
-    r += 1
-    _set_banner(ws, r, 2, 5, "Monte Carlo Simulation & Reproducibility Configuration")
-    r += 1
-
-    mc_obj = data.get("monte_carlo", {})
-    valid_sims = int(mc_obj.get("valid_simulations") or mc_obj.get("actual_iterations") or 10000)
-    total_sims = int(mc_obj.get("total_simulations") or valid_sims)
-    rejected_sims = max(0, total_sims - valid_sims)
-    zero_sims = int(mc_obj.get("zero_price_simulations") or 0)
-    corr_gm = float(mc_obj.get("hist_corr_gm", mc_obj.get("inputs", {}).get("hist_corr_gm", 0.0)) or 0.0)
-
-    mc_config_rows = [
-        ("Retained Valid Simulations", valid_sims, INT_FMT),
-        ("Candidate Draws Sampled", total_sims, INT_FMT),
-        ("Rejected Draws (WACC <= g + 0.50% / Kd <= 0)", rejected_sims, INT_FMT),
-        ("Equity Wipeout Draws (Floored at 0.00)", zero_sims, INT_FMT),
-        ("Cholesky Growth-Margin Correlation (ρ)", corr_gm, NUM_2DEC_FMT),
-        ("Random Seed & Reproducibility Policy", "Deterministic Cholesky (Seed = 42)", None),
-    ]
-
-    for label, val, fmt in mc_config_rows:
-        fill = ALT_ROW_FILL if r % 2 == 0 else None
-        lbl = ws.cell(row=r, column=2, value=label)
-        lbl.font = FONT_LABEL_BOLD
-        lbl.fill = fill or PatternFill(fill_type=None)
-        lbl.border = THIN_BORDER
-        lbl.alignment = ALIGN_LEFT
-
-        val_cell = ws.cell(row=r, column=3, value=val)
-        val_cell.font = FONT_DATA
-        val_cell.fill = fill or PatternFill(fill_type=None)
-        val_cell.border = THIN_BORDER
-        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
-        if fmt:
-            val_cell.number_format = fmt
-
-        for c in (4, 5):
-            ec = ws.cell(row=r, column=c)
-            ec.fill = fill or PatternFill(fill_type=None)
-            ec.border = THIN_BORDER
-        r += 1
-
-    # Verdict Description & Model Suitability Advisory box
+    # Verdict Description box
     desc = verdict.get("description", "")
     suitability_note = validation.get("model_suitability_note") or ""
     combined_note = f"Note: {desc}" if desc else ""
@@ -949,10 +927,49 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     row_bs_check = _write_statement_row("Balance Sheet Check (Assets − Liabilities & Equity)", [], cfmt_large, is_bold=True,
                                         formula_subtraction=(row_tot_assets, row_tot_liab_eq))
 
+    # Non-additive EV Cash Bridge (separating restricted/earmarked balances from Gross Cash & STI)
+    cash_recon = data.get("cash_reconciliation") or historicals.get("cash_reconciliation") or {}
+    bs_tot_cash_last = float(raw_tot_cash[-1]) if raw_tot_cash else 0.0
+    ev_cash_target = float(
+        historicals.get("cash_and_equivalents")
+        or cash_recon.get("unrestricted_cash")
+        or wacc_data.get("total_cash")
+        or 0.0
+    )
+    gross_ev_cash = float(cash_recon.get("gross_cash_and_sti") or bs_tot_cash_last or 0.0)
+    restr_ev_val = float(
+        historicals.get("restricted_cash")
+        or cash_recon.get("restricted_earmarked_cash")
+        or (bs_stmt.get("Restricted Cash Excluded from EV", [0.0])[-1] if bs_stmt.get("Restricted Cash Excluded from EV") else 0.0)
+        or 0.0
+    )
+    if restr_ev_val <= 0.0 and gross_ev_cash > ev_cash_target + 0.01:
+        restr_ev_val = gross_ev_cash - ev_cash_target
+    raw_gross_ev = raw_tot_cash[:-1] + [gross_ev_cash] if n_years > 0 else []
+    row_ev_gross = _write_statement_row(
+        "Non-Additive Memo: Reconciled Gross Cash & STI Base (per Note)",
+        raw_gross_ev,
+        cfmt_large,
+        formula_sum=[row_tot_cash] if (n_years > 0 and abs(gross_ev_cash - bs_tot_cash_last) < 0.01) else None,
+    )
+    raw_restr_ev = [0.0] * max(n_years - 1, 0) + ([restr_ev_val] if n_years > 0 else [])
+    row_restr_ev = _write_statement_row(
+        "Non-Additive Memo: Less Restricted / Earmarked Cash Excluded from EV Bridge",
+        raw_restr_ev,
+        cfmt_large,
+    )
+    row_ev_cash = _write_statement_row(
+        "Non-Additive Memo: EV-Eligible Unrestricted Cash & Marketable Securities",
+        raw_tot_cash[:-1] + [ev_cash_target] if n_years > 0 else [],
+        cfmt_large,
+        is_bold=True,
+        formula_subtraction=(row_ev_gross, row_restr_ev),
+    )
+
     # Determine latest column coordinate for DCF model linking
     latest_cash_col_letter = get_column_letter(2 + n_years)
     avg_col_letter = get_column_letter(3 + n_years)
-    cash_cell_coord = f"'Historical Financials'!{latest_cash_col_letter}{row_tot_cash}"
+    cash_cell_coord = f"'Historical Financials'!{latest_cash_col_letter}{row_ev_cash}"
 
     # ═══════════════════════════════════════════════════════════════════════════
     # PART III: CASH FLOW STATEMENT & FCFF RECONCILIATION
@@ -963,8 +980,8 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     raw_cfo_ni = cf_stmt.get("CFO Starting Profit (Net Income / PBT)") or cf_stmt.get("Net Profit from Operations") or historicals.get("net_income", [])
     row_cfo_ni = _write_statement_row("Operating Activities: Starting Profit (Net Income / PBT)", raw_cfo_ni, cfmt_large)
 
-    raw_cfo_dna = cf_stmt.get("Depreciation & Amortization (Reported CF)") or cf_stmt.get("Depreciation & Amortization") or historicals.get("dna", [])
-    row_cfo_dna = _write_statement_row("Add: Depreciation & Amortization (Cash Flow)", raw_cfo_dna, cfmt_large)
+    raw_cfo_dna = cf_stmt.get("Depreciation & Amortization") or cf_stmt.get("Depreciation & Amortization (Reported CF Gross)") or historicals.get("dna", [])
+    row_cfo_dna = _write_statement_row("Add: Depreciation & Amortization (Normalized Symmetric with IS)", raw_cfo_dna, cfmt_large)
 
     raw_cfo_sbc = cf_stmt.get("Stock-Based Compensation (SBC)", [0.0] * n_years)
     row_cfo_sbc = _write_statement_row("Add: Stock-Based Compensation (SBC)", raw_cfo_sbc, cfmt_large)
@@ -975,18 +992,27 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     raw_cfo_wc = cf_stmt.get("Change in Working Capital", [0.0] * n_years)
     row_cfo_wc = _write_statement_row("Working Capital Changes (Cash Flow Statement)", raw_cfo_wc, cfmt_large)
 
-    raw_cfo_tax = cf_stmt.get("Direct Taxes Paid", [0.0] * n_years)
-    row_cfo_tax = _write_statement_row("Direct Taxes Paid / Refunds", raw_cfo_tax, cfmt_large)
+    raw_cfo_tax = (
+        cf_stmt.get("Direct Taxes Paid (In CFO Reconciliation)")
+        if cf_stmt.get("Direct Taxes Paid (In CFO Reconciliation)") is not None
+        else cf_stmt.get("Direct Taxes Paid", [0.0] * n_years)
+    )
+    row_cfo_tax = _write_statement_row("Direct Taxes Paid / Refunds (In CFO Reconciliation)", raw_cfo_tax, cfmt_large)
 
     raw_cfo = cf_stmt.get("Cash Flow from Operating Activities (CFO)", [0.0] * n_years)
-    raw_cfo_other = cf_stmt.get("Other Non-Cash & Operating Adjustments")
+    raw_cfo_other = (
+        cf_stmt.get("Other Non-Cash & Operating Adjustments (Reconciling Item)")
+        if cf_stmt.get("Other Non-Cash & Operating Adjustments (Reconciling Item)") is not None
+        else cf_stmt.get("Other Non-Cash & Operating Adjustments")
+    )
     if raw_cfo_other is None:
+        _at_cf = lambda seq, idx: float(seq[idx]) if seq and idx < len(seq) and seq[idx] is not None else 0.0
         raw_cfo_other = [
-            float(raw_cfo[i] - (raw_cfo_ni[i] + raw_cfo_dna[i] + raw_cfo_sbc[i] + raw_cfo_deftax[i] + raw_cfo_wc[i] + raw_cfo_tax[i]))
+            float(_at_cf(raw_cfo, i) - (_at_cf(raw_cfo_ni, i) + _at_cf(raw_cfo_dna, i) + _at_cf(raw_cfo_sbc, i) + _at_cf(raw_cfo_deftax, i) + _at_cf(raw_cfo_wc, i) + _at_cf(raw_cfo_tax, i)))
             if i < len(raw_cfo) else 0.0
             for i in range(n_years)
         ]
-    row_cfo_other = _write_statement_row("Other Non-Cash & Operating Adjustments", raw_cfo_other, cfmt_large)
+    row_cfo_other = _write_statement_row("Other Non-Cash & Operating Adjustments (Reconciling Item)", raw_cfo_other, cfmt_large)
 
     row_cfo = _write_statement_row(
         "Cash Flow from Operating Activities (CFO)",
@@ -1072,18 +1098,25 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     )
 
     raw_end_cash = cf_stmt.get("Ending Cash Position", [0.0] * n_years)
-    raw_beg_cash = [
-        float(raw_end_cash[i] - raw_net_cf[i]) if i < len(raw_end_cash) and i < len(raw_net_cf) else 0.0
-        for i in range(n_years)
-    ]
+    raw_fx_roll = cf_stmt.get("Effect of Exchange Rate Changes (FX)", [0.0] * n_years)
+    raw_beg_cash_rep = cf_stmt.get("Beginning Cash Position")
+    if raw_beg_cash_rep and len(raw_beg_cash_rep) == n_years and any(abs(float(x or 0)) > 0 for x in raw_beg_cash_rep):
+        raw_beg_cash = [float(x or 0.0) for x in raw_beg_cash_rep]
+    else:
+        raw_beg_cash = [
+            float(raw_end_cash[i] - raw_net_cf[i] - (raw_fx_roll[i] if i < len(raw_fx_roll) else 0.0))
+            if i < len(raw_end_cash) and i < len(raw_net_cf) else 0.0
+            for i in range(n_years)
+        ]
     row_beg_cash = _write_statement_row("Beginning Cash Position (Incl. Restricted Cash)", raw_beg_cash, cfmt_large)
+    row_fx_roll = _write_statement_row("Effect of Exchange Rate Changes on Cash (FX)", raw_fx_roll, cfmt_large)
 
     row_end_cash = _write_statement_row(
         "Ending Cash Position",
         raw_end_cash,
         cfmt_large,
         is_bold=True,
-        formula_sum=[row_beg_cash, row_net_cf],
+        formula_sum=[row_beg_cash, row_net_cf, row_fx_roll],
     )
 
     raw_restr_cash = cf_stmt.get("Less: Restricted Cash in Ending Cash Position", [0.0] * n_years)
@@ -1159,6 +1192,34 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
         custom_formula=f"={'{col}'}{row_hist_nopat}+{'{col}'}{row_dna}-{'{col}'}{row_capex}-{'{col}'}{row_dnwc_hist}",
     )
 
+    # Supplemental Cash Flow & Statutory Reconciling Memos (Non-Additive)
+    raw_cf_rep_dna = cf_stmt.get("Depreciation & Amortization (Reported CF Gross)", raw_cfo_dna)
+    raw_recoup_da = cf_stmt.get("Recoupment / Capitalised Depreciation Adjustment (Note 46)", [0.0] * n_years)
+    raw_rep_capex = cf_stmt.get("Fixed Assets Purchased (Reported CapEx)", raw_capex)
+    raw_supp_cash_tax = cf_stmt.get("Supplemental: Income Taxes Paid (Cash, Non-Additive)", [0.0] * n_years)
+    if any(raw_recoup_da) or any(raw_supp_cash_tax) or raw_rep_capex != raw_capex:
+        r += 1
+        _write_statement_row(
+            "Supplemental Memo: Reported Cash Flow Gross D&A (Before Note 46 Recoupment)",
+            raw_cf_rep_dna,
+            cfmt_large,
+        )
+        _write_statement_row(
+            "Supplemental Memo: Less Recoupment / Capitalised D&A (Note 46)",
+            raw_recoup_da,
+            cfmt_large,
+        )
+        _write_statement_row(
+            "Supplemental Memo: Reported Gross CapEx (Incl. CWIP / Advances)",
+            raw_rep_capex,
+            cfmt_large,
+        )
+        _write_statement_row(
+            "Supplemental Memo: Cash Income Taxes Paid (IAS 7 / Ind AS 7 Disclosure)",
+            raw_supp_cash_tax,
+            cfmt_large,
+        )
+
     # ═══════════════════════════════════════════════════════════════════════════
     # PART IV: EQUITY PROFITABILITY, ROE & DIVIDEND PAYOUT RATIOS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1182,6 +1243,86 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
                                         custom_formula=f"=1-{'{col}'}{row_payout}")
     row_sust_growth = _write_statement_row("Sustainable Internal Growth Rate (g = ROE × Retention Rate)", [], PCT_FMT, is_bold=True,
                                            custom_formula=f"={'{col}'}{row_roe}*{'{col}'}{row_ret_rate}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART V: STATUTORY DISCLOSURES, COMMITMENTS, LEASE POLICY & TSM SHARE BRIDGE
+    # ═══════════════════════════════════════════════════════════════════════════
+    r += 1
+    _write_sub_banner("Part V: Statutory Disclosures, Commitments, Lease Policy & TSM Share Bridge")
+
+    lease_pol = data.get("lease_policy") or historicals.get("lease_policy") or {}
+    share_recon = data.get("share_reconciliation") or historicals.get("share_reconciliation") or {}
+    cap_comm_val = historicals.get("capital_commitments")
+    cap_adv_val = historicals.get("capital_advances")
+
+    if cap_comm_val is not None:
+        _write_statement_row(
+            "Contracted Capital Commitments (Note 32c — Off-BS Disclosure)",
+            [0.0] * max(n_years - 1, 0) + ([float(cap_comm_val)] if n_years > 0 else []),
+            cfmt_large,
+        )
+    if cap_adv_val is not None:
+        _write_statement_row(
+            "Capital Advances Outstanding (Note 11)",
+            [0.0] * max(n_years - 1, 0) + ([float(cap_adv_val)] if n_years > 0 else []),
+            cfmt_large,
+        )
+
+    basic_pe_sh = float(share_recon.get("basic_period_end_shares") or (raw_pe_shares[-1] if raw_pe_shares else 0.0) or 0.0)
+    rsu_unvested_sh = float(share_recon.get("unvested_rsu_shares") or 0.0)
+    opt_gross_sh = float(share_recon.get("option_gross_shares") or 0.0)
+    tsm_repurch_sh = float(share_recon.get("tsm_treasury_repurchase_shares") or 0.0)
+    tsm_inc_opt_sh = float(share_recon.get("tsm_incremental_option_shares") or max(0.0, opt_gross_sh - tsm_repurch_sh))
+    val_dil_target = float(
+        share_recon.get("diluted_valuation_shares")
+        or data.get("dcf_result", {}).get("shares_used")
+        or data.get("market_data", {}).get("diluted_valuation_shares")
+        or (raw_pe_shares[-1] if raw_pe_shares else 0.0)
+        or (raw_shares[-1] if raw_shares else 0.0)
+    )
+
+    row_tsm_pe = _write_statement_row(
+        "TSM Bridge: Period-End Basic Common Shares Outstanding",
+        [0.0] * max(n_years - 1, 0) + ([basic_pe_sh] if n_years > 0 else []),
+        INT_FMT,
+    )
+    row_tsm_rsu = _write_statement_row(
+        "TSM Bridge: (+) Unvested RSUs / PSUs Included in Valuation Dilution",
+        [0.0] * max(n_years - 1, 0) + ([rsu_unvested_sh] if n_years > 0 else []),
+        INT_FMT,
+    )
+    row_tsm_opt = _write_statement_row(
+        "TSM Bridge: (+) TSM Incremental In-the-Money Option Shares",
+        [0.0] * max(n_years - 1, 0) + ([tsm_inc_opt_sh] if n_years > 0 else []),
+        INT_FMT,
+    )
+    row_val_shares = _write_statement_row(
+        "TSM Bridge: Total Diluted Shares for DCF Per-Share Valuation",
+        [0.0] * max(n_years - 1, 0) + ([val_dil_target] if n_years > 0 else []),
+        INT_FMT,
+        is_bold=True,
+        formula_sum=[row_tsm_pe, row_tsm_rsu, row_tsm_opt] if abs((basic_pe_sh + rsu_unvested_sh + tsm_inc_opt_sh) - val_dil_target) <= max(1.0, val_dil_target * 1e-4) else None,
+    )
+
+    # Textual policy disclosures (Accounting standard, Lease policy, Cash policy)
+    hist_acct_std = _format_accounting_standard(
+        historicals.get("accounting_standard") or data.get("accounting_standard"),
+        company.get("market", "US"),
+    )
+    for pol_lbl, pol_txt in [
+        ("Accounting Standard & Jurisdiction", f"{hist_acct_std} | Market: {company.get('market', 'US')}"),
+        ("Lease & EV Bridge Policy", str(lease_pol.get("treatment") or lease_pol.get("note") or "Debt-inclusive EV bridge consistent with WACC capital weights")),
+        ("Cash Bridge Classification Note", f"{cash_recon.get('source', 'Balance Sheet')} ({cash_recon.get('note_ref', 'Note')})"),
+    ]:
+        ws.cell(row=r, column=2, value=pol_lbl).font = FONT_LABEL_BOLD
+        ws.cell(row=r, column=2).border = THIN_BORDER
+        pol_c = ws.cell(row=r, column=3, value=pol_txt)
+        pol_c.font = FONT_DATA
+        pol_c.alignment = ALIGN_LEFT
+        for cc in range(3, 4 + n_years):
+            ws.cell(row=r, column=cc).border = THIN_BORDER
+        ws.row_dimensions[r].height = 18
+        r += 1
 
     # ═══════════════════════════════════════════════════════════════════════════
     # NATIVE EXCEL CHARTS ON HISTORICALS (OpenPyXL)
@@ -1258,7 +1399,10 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
         "cash_cell": cash_cell_coord,
         "net_income_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_ni}",
         "book_value_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_equity}",
+        "eq_bv_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_equity}",
+        "intang_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_intang}",
         "shares_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_shares}",
+        "val_shares_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_val_shares}",
         "bvps_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_bvps}",
         "roe_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_roe}",
     }
@@ -1476,12 +1620,23 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     n_proj = len(growth_schedule)
 
     # Tax rate from macro profile (25.17% for IN, 21.00% for US)
-    tax_rate_dcf = macro.get("tax_rate", 0.2517 if company.get("market") == "IN" else 0.21)
+    tax_rate_dcf = float(dcf.get("tax_rate", macro.get("tax_rate", 0.2517 if company.get("market") == "IN" else 0.21)) or 0.21)
 
-    avg_dna_pct = historicals.get("avg_dna_pct", 0.02)
-    avg_capex_pct = historicals.get("avg_capex_pct", 0.03)
-    norm_nwc_pct = dcf.get("normalized_nwc_to_revenue", historicals.get("normalized_nwc_to_revenue", historicals.get("avg_dnwc_pct", 0.01)))
-    last_revenue = historicals.get("last_revenue") or (historicals.get("revenue", [-1])[-1] if historicals.get("revenue") else (proj_rev[0] / (1 + growth_schedule[0]) if proj_rev else 1e9))
+    avg_dna_pct = float(historicals.get("avg_dna_pct", 0.02) or 0.02)
+    avg_capex_pct = float(historicals.get("avg_capex_pct", 0.03) or 0.03)
+    norm_nwc_pct = float(dcf.get("normalized_nwc_to_revenue", historicals.get("normalized_nwc_to_revenue", historicals.get("avg_dnwc_pct", 0.01))) or 0.0)
+    last_revenue = float(historicals.get("last_revenue") or (historicals.get("revenue", [-1])[-1] if historicals.get("revenue") else (proj_rev[0] / (1 + growth_schedule[0]) if proj_rev else 1e9)) or 1.0)
+    effective_dna_pct = float(
+        dcf.get("effective_dna_pct")
+        or (min(avg_dna_pct, max(avg_capex_pct * 1.05, 0.025)) if avg_dna_pct > avg_capex_pct * 1.15 else avg_dna_pct)
+    )
+    start_growth_val = float(growth_schedule[0]) if growth_schedule else 0.05
+    raw_term_g_val = float(dcf.get("terminal_growth", macro.get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025)) or 0.025)
+    fade_exp_val = float(dcf.get("growth_fade_exponent", 1.0) or 1.0)
+    is_extractive_flag = bool(dcf.get("is_extractive", company.get("is_extractive", False)))
+    is_cyclical_flag = bool(dcf.get("is_cyclical", company.get("is_cyclical", False)))
+    is_india_flag = (company.get("market") == "IN")
+    use_mid_year_flag = bool(dcf.get("use_mid_year", True))
 
     hist_years = historicals.get("years", [])
     base_year_lbl = f"FY {hist_years[-1]}" if hist_years else "Base FY"
@@ -1498,7 +1653,22 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     header_row = r
     r += 1
 
-    # 1. Revenue Growth Rate
+    # Reserve exact row coordinates for Projection Fade Driver parameters written below TV bridge
+    growth_row = r
+    rev_row = r + 1
+    margin_row = r + 2
+    ebit_row = r + 3
+    tax_row = r + 4
+    nopat_row = r + 5
+    dna_row = r + 6
+    capex_row = r + 7
+    dnwc_row = r + 8
+    fcff_row = r + 9
+    period_row = r + 10
+    df_row = r + 11
+    pv_fcff_row = r + 12
+
+    # 1. Revenue Growth Rate (Formula-driven smooth fade when horizon > 1)
     lbl1 = ws.cell(row=r, column=2, value="YoY Revenue Growth Rate")
     lbl1.font = FONT_LABEL_BOLD
     lbl1.fill = ALT_ROW_FILL
@@ -1507,14 +1677,17 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
 
+    # Driver block sits right below DCF bridge; compute exact row offsets deterministically
+    # Pre-declare fade exponent cell coordinate referenced in growth formulas (populated in Calibration block)
+    # Using fixed-offset section tracking: we write exact row number after TV & Bridge rows are laid out
+    #Wait: we know exact row count from period_row -> tv_row -> bridge -> calibration, so track placeholders and populate values cleanly after laying out rows!
     for i in range(n_proj):
-        c = ws.cell(row=r, column=4 + i, value=growth_schedule[i])
+        c = ws.cell(row=r, column=4 + i, value=float(growth_schedule[i]))
         c.font = FONT_DATA_BOLD
         c.number_format = PCT_FMT
         c.alignment = ALIGN_RIGHT
         c.border = THIN_BORDER
         c.fill = ALT_ROW_FILL
-    growth_row = r
     r += 1
 
     # 2. Revenue Projections (Live Formula: =Prev_Rev * (1 + g); Base Year linked to Historical Financials)
@@ -1746,17 +1919,18 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     fcff_row = r
     r += 1
 
-    # 11. Mid-Year Convention (t = 0.5, 1.5, 2.5, 3.5, 4.5)
-    lbl11 = ws.cell(row=r, column=2, value="Mid-Year Convention (Years t)")
+    # 11. Discounting Period Convention (Mid-Year t = 0.5, 1.5, ... or Year-End t = 1.0, 2.0, ...)
+    lbl11 = ws.cell(row=r, column=2, value="Mid-Year Convention (Years t)" if use_mid_year_flag else "End-of-Year Convention (Years t)")
     lbl11.font = FONT_LABEL
     lbl11.border = THIN_BORDER
     ws.cell(row=r, column=3, value="-").alignment = ALIGN_CENTER
     ws.cell(row=r, column=3).border = THIN_BORDER
 
+    first_t = 0.5 if use_mid_year_flag else 1.0
     for i in range(n_proj):
         col = 4 + i
         if i == 0:
-            c = ws.cell(row=r, column=col, value=0.5)
+            c = ws.cell(row=r, column=col, value=first_t)
         else:
             prev_letter = get_column_letter(col - 1)
             c = ws.cell(row=r, column=col, value=f"={prev_letter}{r}+1")
@@ -1811,18 +1985,39 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     # Terminal Value & Enterprise Value to Equity Bridge
     # ═══════════════════════════════════════════════════════════════════════════
 
-    # Section: Terminal Value Calculation
-    _set_banner(ws, r, 2, 5, "Calculation of Terminal Value (Gordon Growth Model — Sustainable Reinvestment)")
+    # Section: Terminal Value Calculation (4-row HUL layout; g/RONIC drivers linked below)
+    _set_banner(ws, r, 2, 5, "Calculation of Terminal Value")
     r += 1
 
     last_col_letter = get_column_letter(3 + n_proj)
     term_g_ref = wacc_links["terminal_g_cell"]
     wacc_ref = wacc_links["wacc_cell"]
 
-    # 1. Terminal Growth Rate (g)
+    # 1. FCFF (n+1) (placeholder formula wired after supporting reinvestment schedule below)
+    n1_row = r
+    ws.cell(row=r, column=2, value="FCFF (n+1)").font = FONT_LABEL
+    n1_cell = ws.cell(row=r, column=4)
+    n1_cell.font = FONT_DATA_BOLD
+    n1_cell.number_format = cfmt_large
+    n1_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    r += 1
+
+    # 2. Cost of Capital (WACC)
+    wacc_param_row = r
+    ws.cell(row=r, column=2, value="WACC").font = FONT_LABEL
+    wacc_cell = ws.cell(row=r, column=4, value=f"={wacc_ref}")
+    wacc_cell.font = FONT_DATA_BOLD
+    wacc_cell.number_format = PCT_FMT
+    wacc_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    r += 1
+
+    # 3. Terminal Growth Rate (g)
     tg_row = r
-    wacc_param_row = r + 1
-    ws.cell(row=r, column=2, value="Long-Term Terminal Growth Rate (g)").font = FONT_LABEL
+    ws.cell(row=r, column=2, value="Terminal Growth Rate (g)").font = FONT_LABEL
     tg_cell = ws.cell(row=r, column=4, value=f"=MIN({term_g_ref}, D{wacc_param_row}-0.025)")
     tg_cell.font = FONT_DATA_BOLD
     tg_cell.number_format = PCT_FMT
@@ -1831,100 +2026,28 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
         ws.cell(row=r, column=c).border = THIN_BORDER
     r += 1
 
-    # 2. Cost of Capital (WACC)
-    ws.cell(row=r, column=2, value="Cost of Capital (WACC)").font = FONT_LABEL
-    wacc_cell = ws.cell(row=r, column=4, value=f"={wacc_ref}")
-    wacc_cell.font = FONT_DATA_BOLD
-    wacc_cell.number_format = PCT_FMT
-    wacc_cell.alignment = ALIGN_RIGHT
-    for c in (2, 3, 4, 5):
-        ws.cell(row=r, column=c).border = THIN_BORDER
-    wacc_param_row = r
-    r += 1
-
-    # 3. Terminal Year NOPAT (Year N+1 = Year N NOPAT * (1 + g))
-    ws.cell(row=r, column=2, value="Terminal Year NOPAT (Year N+1 = Year N NOPAT × (1 + g))").font = FONT_LABEL
-    term_nopat_cell = ws.cell(row=r, column=4, value=f"={last_col_letter}{nopat_row}*(1+D{tg_row})")
-    term_nopat_cell.font = FONT_DATA_BOLD
-    term_nopat_cell.number_format = cfmt_large
-    term_nopat_cell.alignment = ALIGN_RIGHT
-    for c in (2, 3, 4, 5):
-        ws.cell(row=r, column=c).border = THIN_BORDER
-    term_nopat_row = r
-    r += 1
-
-    # 4. Steady-State Return on New Invested Capital (RONIC)
-    eff_term_g = float(dcf.get("effective_terminal_growth", 0.025) or 0.025)
-    sust_roic = float(dcf.get("sustainable_roic", 0.15) or 0.15)
-    term_reinv = float(dcf.get("terminal_reinv_rate", eff_term_g / sust_roic if sust_roic > 0 else 0.20) or 0.20)
-
-    ws.cell(row=r, column=2, value="Steady-State Return on New Invested Capital (RONIC)").font = FONT_LABEL
-    roic_cell = ws.cell(row=r, column=4, value=sust_roic)
-    roic_cell.font = FONT_DATA
-    roic_cell.number_format = PCT_FMT
-    roic_cell.alignment = ALIGN_RIGHT
-    for c in (2, 3, 4, 5):
-        ws.cell(row=r, column=c).border = THIN_BORDER
-    roic_row = r
-    r += 1
-
-    # 5. Terminal Reinvestment Rate (b = g / RONIC)
-    roic_reinv_raw = eff_term_g / sust_roic if sust_roic > 0 else term_reinv
-    if abs(term_reinv - min(0.80, max(0.10, roic_reinv_raw))) < 1e-7:
-        reinv_formula = f"=MIN(0.80, MAX(0.10, D{tg_row}/D{roic_row}))"
-    elif abs(term_reinv - min(0.80, max(0.06, roic_reinv_raw))) < 1e-7:
-        reinv_formula = f"=MIN(0.80, MAX(0.06, D{tg_row}/D{roic_row}))"
-    else:
-        reinv_scale = (term_reinv / roic_reinv_raw) if roic_reinv_raw > 0 else 1.0
-        reinv_formula = f"=MIN(0.80, MAX(0.06, (D{tg_row}/D{roic_row})*{reinv_scale:.10f}))"
-
-    ws.cell(row=r, column=2, value="Terminal Reinvestment Rate (b = g / RONIC)").font = FONT_LABEL
-    reinv_cell = ws.cell(row=r, column=4, value=reinv_formula)
-    reinv_cell.font = FONT_DATA_BOLD
-    reinv_cell.number_format = PCT_FMT
-    reinv_cell.alignment = ALIGN_RIGHT
-    for c in (2, 3, 4, 5):
-        ws.cell(row=r, column=c).border = THIN_BORDER
-    reinv_row = r
-    r += 1
-
-    # 6. Normalized Terminal Year UFCF (Year N+1 = Terminal NOPAT * (1 - b))
-    ws.cell(row=r, column=2, value="Normalized Terminal Free Cash Flow (UFCF n+1)").font = FONT_LABEL
-    n1_cell = ws.cell(row=r, column=4, value=f"=D{term_nopat_row}*(1-D{reinv_row})")
-    n1_cell.font = FONT_DATA_BOLD
-    n1_cell.number_format = cfmt_large
-    n1_cell.alignment = ALIGN_RIGHT
-    for c in (2, 3, 4, 5):
-        ws.cell(row=r, column=c).border = THIN_BORDER
-    n1_row = r
-    r += 1
-
-    # 7. Terminal Value at Year N (= UFCF_{n+1} / (WACC - g))
-    wacc_rate = float(wacc_data.get("wacc", 0.10) or 0.10)
-    terminal_val = float(dcf.get("terminal_value") or 0.0)
-    spread = wacc_rate - eff_term_g
-    pure_gordon_tv = (
-        float(dcf.get("terminal_ufcf", proj_nopat[-1] * (1.0 + eff_term_g) * (1.0 - term_reinv))) / spread
-        if (spread > 0 and proj_nopat)
-        else terminal_val
-    )
-    if pure_gordon_tv > 0 and abs(terminal_val - pure_gordon_tv) > 1.0:
-        tv_scale = terminal_val / pure_gordon_tv
-        tv_formula = f"=IF(D{wacc_param_row}>D{tg_row}, (D{n1_row}/(D{wacc_param_row}-D{tg_row}))*{tv_scale:.10f}, 0)"
-    else:
-        tv_formula = f"=IF(D{wacc_param_row}>D{tg_row}, D{n1_row}/(D{wacc_param_row}-D{tg_row}), 0)"
-
-    ws.cell(row=r, column=2, value="Terminal Value at Year N").font = FONT_LABEL_BOLD
+    # 4. Terminal Value (placeholder formula wired after supporting reinvestment & exit check)
+    tv_row = r
+    ws.cell(row=r, column=2, value="Terminal Value").font = FONT_LABEL_BOLD
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
-    tv_cell = ws.cell(row=r, column=4, value=tv_formula)
+    tv_cell = ws.cell(row=r, column=4)
     tv_cell.font = FONT_TOTAL
     tv_cell.number_format = cfmt_large
     tv_cell.alignment = ALIGN_RIGHT
     tv_cell.fill = HIGHLIGHT_FILL
     for c in (2, 3, 4, 5):
         ws.cell(row=r, column=c).border = TOTAL_BORDER
-    tv_row = r
     r += 2
+
+    eff_term_g = float(dcf.get("effective_terminal_growth", 0.025) or 0.025)
+    sust_roic = float(dcf.get("sustainable_roic", 0.15) or 0.15)
+    min_reinv_floor = float(dcf.get("min_reinv_floor", 0.06 if bool(dcf.get("is_high_roic", False)) else 0.10) or 0.10)
+    is_high_roic_flag = bool(dcf.get("is_high_roic", False))
+    capex_floor_abs = float(dcf.get("capex_floor_abs") or 0.0)
+    raw_exit_mult = dcf.get("benchmark_exit_multiple")
+    if raw_exit_mult is None:
+        raw_exit_mult = dcf.get("benchmark_exit_mult")
+    benchmark_exit_mult = float(raw_exit_mult if raw_exit_mult is not None else 10.0)
 
     # Section: Enterprise Value to Equity Value Bridge
     _set_banner(ws, r, 2, 5, "Calculation of Enterprise Value & Equity Value per Share")
@@ -2028,10 +2151,16 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     eq_row = r
     r += 1
 
-    # 8. Shares Outstanding
-    shares_cnt = market_data.get("shares_outstanding", 1)
-    ws.cell(row=r, column=2, value="(÷) Diluted Shares Outstanding").font = FONT_LABEL
-    ws.cell(row=r, column=4, value=shares_cnt).font = FONT_DATA
+    # 8. Shares Outstanding (TSM Valuation Diluted Shares)
+    val_shares_cnt = float(
+        dcf.get("shares_used")
+        or market_data.get("diluted_valuation_shares")
+        or market_data.get("shares_outstanding", 1)
+        or 1
+    )
+    shares_formula_or_val = f"={hist_refs['val_shares_cell']}" if hist_refs.get("val_shares_cell") else val_shares_cnt
+    ws.cell(row=r, column=2, value="(÷) Diluted Valuation Shares (TSM Bridge)").font = FONT_LABEL
+    ws.cell(row=r, column=4, value=shares_formula_or_val).font = FONT_DATA
     ws.cell(row=r, column=4).number_format = INT_FMT
     ws.cell(row=r, column=4).alignment = ALIGN_RIGHT
     for c in (2, 3, 4, 5):
@@ -2074,7 +2203,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     upside_row = r
     r += 1
 
-    # 11. Verdict
+    # 12. Verdict
     ws.cell(row=r, column=2, value="Valuation Outlook").font = FONT_LABEL_BOLD
     v_cell = ws.cell(row=r, column=4, value=verdict.get("verdict", "NEUTRAL"))
     v_cell.font = FONT_LABEL_BOLD
@@ -2082,10 +2211,263 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     for c in (2, 3, 4, 5):
         ws.cell(row=r, column=c).border = TOTAL_BORDER
 
+    # Section: Projection Fade Calibration Drivers & Live Growth Formula Wiring
+    r += 2
+    _set_banner(ws, r, 2, 5, "Continuous Revenue Growth Fade Calibration Drivers")
+    r += 1
+
+    start_g_driver_row = r
+    ws.cell(row=r, column=2, value="Year 1 Starting Revenue Growth Rate").font = FONT_LABEL
+    cg1 = ws.cell(row=r, column=4, value=start_growth_val)
+    cg1.font = FONT_DATA_BOLD
+    cg1.number_format = PCT_FMT
+    cg1.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    r += 1
+
+    fade_target_g_driver_row = r
+    ws.cell(row=r, column=2, value="Fade Horizon Target Terminal Growth (g)").font = FONT_LABEL
+    cg2 = ws.cell(row=r, column=4, value=raw_term_g_val)
+    cg2.font = FONT_DATA
+    cg2.number_format = PCT_FMT
+    cg2.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    r += 1
+
+    fade_exp_driver_row = r
+    ws.cell(row=r, column=2, value="Continuous Growth Fade Exponent").font = FONT_LABEL
+    if not is_extractive_flag and not is_cyclical_flag:
+        fade_exp_formula = f"=1+0.35*MIN(1, MAX(0, (D{start_g_driver_row}-D{fade_target_g_driver_row}-0.05)/0.10))"
+    else:
+        fade_exp_formula = 1.0
+    cg3 = ws.cell(row=r, column=4, value=fade_exp_formula)
+    cg3.font = FONT_DATA_BOLD
+    cg3.number_format = NUM_2DEC_FMT
+    cg3.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    r += 1
+
+    # Wire live continuous fade formulas into growth_row columns D..{last_col_letter}
+    for i in range(n_proj):
+        c = ws.cell(row=growth_row, column=4 + i)
+        if i == 0:
+            c.value = f"=D{start_g_driver_row}"
+        else:
+            step_den = max(1, n_proj - 1)
+            c.value = (
+                f"=D{start_g_driver_row}-(D{start_g_driver_row}-D{fade_target_g_driver_row})"
+                f"*(({i}/{step_den})^D{fade_exp_driver_row})"
+            )
+
+    # Section: Terminal Value Reinvestment Drivers (Supporting Schedule for 4-row TV block)
+    r += 1
+    _set_banner(ws, r, 2, 5, "Terminal Value Reinvestment Drivers (Supporting Schedule)")
+    r += 1
+
+    ws.cell(row=r, column=2, value="Terminal Year NOPAT (Year N+1)").font = FONT_LABEL
+    term_nopat_cell = ws.cell(row=r, column=4, value=f"={last_col_letter}{nopat_row}*(1+D{tg_row})")
+    term_nopat_cell.font = FONT_DATA_BOLD
+    term_nopat_cell.number_format = cfmt_large
+    term_nopat_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    term_nopat_row = r
+    r += 1
+
+    ws.cell(row=r, column=2, value="Steady-State Return on New Invested Capital (RONIC)").font = FONT_LABEL
+    if dcf.get("tangible_ic") is not None and float(dcf.get("tangible_ic") or 0.0) > 0.0:
+        tangible_ic_val = float(dcf["tangible_ic"])
+        hist_roic_val = float(dcf.get("hist_roic", 0.0) or 0.0)
+        avg_gm_val = float(historicals.get("avg_gross_margin", 0.0) or 0.0)
+        ext_int = 1 if is_extractive_flag else 0
+        cyc_int = 1 if is_cyclical_flag else 0
+        has_cur_m = dcf.get("current_margin") is not None
+        min_r_add = 0.045 if (not is_extractive_flag and not is_cyclical_flag and avg_capex_pct > effective_dna_pct * 2.20) else 0.0
+        yrN_tic_expr = f"({tangible_ic_val:.6f}*MAX(1, IF({last_revenue:.6f}>0, {last_col_letter}{rev_row}/{last_revenue:.6f}, 1)))"
+        proj_roic_expr = f"IF(AND({yrN_tic_expr}>0, {last_col_letter}{nopat_row}>0), {last_col_letter}{nopat_row}/{yrN_tic_expr}, D{wacc_param_row})"
+        eff_roic_expr = (
+            f"IF({hist_roic_val:.10f}<=0.02, MAX({hist_roic_val:.10f}, {proj_roic_expr}), 0.5*{hist_roic_val:.10f}+0.5*({proj_roic_expr}))"
+            if has_cur_m
+            else f"IF({hist_roic_val:.10f}<=0.02, MAX({hist_roic_val:.10f}, {proj_roic_expr}), {hist_roic_val:.10f})"
+        )
+        is_hi_expr = f"AND({ext_int}=0, {cyc_int}=0, ({eff_roic_expr})>=0.22, OR({avg_gm_val:.6f}>=0.45, ({eff_roic_expr})>=0.28))"
+        roic_formula = f"=MAX(D{wacc_param_row}+{min_r_add:.6f}, MIN({eff_roic_expr}, IF({is_hi_expr}, 0.45, 0.30)))"
+    else:
+        roic_formula = sust_roic
+    roic_cell = ws.cell(row=r, column=4, value=roic_formula)
+    roic_cell.font = FONT_DATA
+    roic_cell.number_format = PCT_FMT
+    roic_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    roic_row = r
+    r += 1
+
+    ws.cell(row=r, column=2, value="ROIC-Implied Reinvestment Rate (g / RONIC)").font = FONT_LABEL
+    roic_reinv_cell = ws.cell(row=r, column=4, value=f"=D{tg_row}/D{roic_row}")
+    roic_reinv_cell.font = FONT_DATA
+    roic_reinv_cell.number_format = PCT_FMT
+    roic_reinv_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    roic_reinv_row = r
+    r += 1
+
+    yr5_capex_pct_expr = f"({last_col_letter}{capex_row}/{last_col_letter}{rev_row})"
+    yr5_nopat_m_expr = f"IF({last_col_letter}{margin_row}>0, MAX(0.01, {last_col_letter}{margin_row}*(1-{last_col_letter}{tax_row})), 0.01)"
+    yr5_reinv_formula = (
+        f"=MAX(0, (({yr5_capex_pct_expr}-{effective_dna_pct:.10f})+MAX(0, {norm_nwc_pct:.10f}*D{tg_row}))/{yr5_nopat_m_expr})"
+    )
+    ws.cell(row=r, column=2, value="Year-5 Physical & NWC Reinvestment Rate").font = FONT_LABEL
+    yr5_reinv_cell = ws.cell(row=r, column=4, value=yr5_reinv_formula)
+    yr5_reinv_cell.font = FONT_DATA
+    yr5_reinv_cell.number_format = PCT_FMT
+    yr5_reinv_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    yr5_reinv_row = r
+    r += 1
+
+    if is_high_roic_flag and margin_schedule and margin_schedule[-1] > 0:
+        reinv_base_expr = f"MIN(0.80, MAX({min_reinv_floor:.6f}, MIN(D{roic_reinv_row}, 0.45*D{roic_reinv_row}+0.55*D{yr5_reinv_row})))"
+    else:
+        reinv_base_expr = f"MIN(0.80, MAX({min_reinv_floor:.6f}, D{roic_reinv_row}))"
+
+    if is_extractive_flag and margin_schedule and margin_schedule[-1] > 0:
+        reinv_formula = f"=MIN(0.80, MAX({reinv_base_expr}, MAX(0, ({yr5_capex_pct_expr}-{effective_dna_pct:.10f})/{yr5_nopat_m_expr})))"
+    elif is_cyclical_flag and margin_schedule and margin_schedule[-1] > 0:
+        reinv_formula = f"=MIN(0.80, MAX({reinv_base_expr}, MAX(0, ({yr5_capex_pct_expr}-{effective_dna_pct:.10f})/{yr5_nopat_m_expr})*0.85))"
+    else:
+        reinv_formula = f"={reinv_base_expr}"
+
+    ws.cell(row=r, column=2, value="Terminal Reinvestment Rate Applied").font = FONT_LABEL
+    reinv_cell = ws.cell(row=r, column=4, value=reinv_formula)
+    reinv_cell.font = FONT_DATA_BOLD
+    reinv_cell.number_format = PCT_FMT
+    reinv_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    reinv_row = r
+    r += 1
+
+    ws.cell(row=r, column=2, value=f"Exit Multiple Benchmark TV (Terminal EBITDA × {benchmark_exit_mult:.1f}x)").font = FONT_LABEL
+    exit_tv_formula = f"=MAX(0, {last_col_letter}{rev_row}*(1+D{tg_row})*({last_col_letter}{margin_row}+{effective_dna_pct:.10f})*{benchmark_exit_mult:.6f})"
+    exit_tv_cell = ws.cell(row=r, column=4, value=exit_tv_formula)
+    exit_tv_cell.font = FONT_DATA
+    exit_tv_cell.number_format = cfmt_large
+    exit_tv_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    exit_tv_row = r
+    r += 1
+
+    # Wire live HUL-style Terminal Value cells cleanly back to Supporting Schedule
+    n1_cell.value = f"=D{term_nopat_row}*(1-D{reinv_row})"
+    gordon_tv_expr = f"D{n1_row}/(D{wacc_param_row}-D{tg_row})"
+    if is_extractive_flag:
+        tv_cell.value = f"=IF(AND(D{wacc_param_row}>D{tg_row}, D{n1_row}>0), IF(AND(D{exit_tv_row}>0, ({gordon_tv_expr})>D{exit_tv_row}), 0.35*({gordon_tv_expr})+0.65*D{exit_tv_row}, ({gordon_tv_expr})), 0)"
+    elif is_cyclical_flag:
+        tv_cell.value = f"=IF(AND(D{wacc_param_row}>D{tg_row}, D{n1_row}>0), IF(AND(D{exit_tv_row}>0, ({gordon_tv_expr})>D{exit_tv_row}), 0.45*({gordon_tv_expr})+0.55*D{exit_tv_row}, ({gordon_tv_expr})), 0)"
+    else:
+        tv_cell.value = f"=IF(AND(D{wacc_param_row}>D{tg_row}, D{n1_row}>0), {gordon_tv_expr}, 0)"
+
+    # Section: Scenario & Cross-Check Valuation Summary
+    scenarios = data.get("scenarios", {}) or {}
+    r += 1
+    _set_banner(ws, r, 2, 6, "Scenario & Methodology Cross-Check Valuation Summary")
+    r += 1
+    _set_table_headers(
+        ws,
+        r,
+        ["Valuation Case / Sensitivity Stress", f"Enterprise Value ({currency})", f"Equity Value ({currency})", f"Implied Price ({currency})", "Delta vs Base (%)"],
+        start_col=2,
+    )
+    r += 1
+
+    exit_ev_formula = f"=D{sum_pv_row}+D{exit_tv_row}*{last_col_letter}{df_row}"
+    exit_eq_formula = f"=D{r+1}+D{cash_row}-D{debt_row}-D{min_int_row}"  # row ref adjusted dynamically below
+
+    gordon_only_ev_formula = (
+        f"=D{sum_pv_row}+IF(AND(D{wacc_param_row}>D{tg_row}, D{n1_row}>0), "
+        f"D{n1_row}/(D{wacc_param_row}-D{tg_row}), 0)*{last_col_letter}{df_row}"
+    )
+    scen_rows_spec = [
+        ("base", "Base Case (Gordon Growth Model)", f"=D{ev_row}", f"=D{eq_row}", f"=D{price_row}"),
+        ("exit_multiple", f"Exit Multiple Cross-Check ({benchmark_exit_mult:.1f}x Term. EBITDA)", exit_ev_formula, None, None),
+        ("unclipped_nwc", "Unclipped Operating NWC Sensitivity", None, None, None),
+        ("committed_capex", "Contracted Capital Commitments / CapEx Floor", None, None, None),
+        ("full_rsu_dilution", "Full Unvested RSU Dilution Test (Max Share Count)", None, None, None),
+    ]
+    for opt_k, opt_lbl in [
+        ("pure_gordon_tv", "Pure Gordon Growth TV (Unblended)"),
+        ("unadjusted_capex", "Unadjusted Historical Avg CapEx"),
+        ("aro_provisions_stress", "75% LT-Provisions ARO Debt Stress"),
+        ("unadjusted_gross_debt", "Unadjusted Gross Debt (No CWIP/Captive Offset)"),
+        ("bottom_up_sector_beta", "Bottom-Up Cyclical Sector Beta"),
+        ("unadjusted_beta", "Unclamped Raw Regression Beta"),
+    ]:
+        if isinstance(scenarios.get(opt_k), dict) and scenarios[opt_k].get("applicable"):
+            ev_f = gordon_only_ev_formula if opt_k == "pure_gordon_tv" else None
+            scen_rows_spec.append((opt_k, opt_lbl, ev_f, None, None))
+
+    for s_key, s_label, s_ev_f, s_eq_f, s_px_f in scen_rows_spec:
+        s_obj = scenarios.get(s_key) or {}
+        if not s_obj and s_key not in ("base", "exit_multiple"):
+            continue
+        ev_cell_val = s_ev_f if s_ev_f is not None else float(s_obj.get("enterprise_value") or 0.0)
+        if s_key in ("exit_multiple", "pure_gordon_tv"):
+            eq_cell_val = f"=C{r}+D{cash_row}-D{debt_row}-D{min_int_row}"
+            px_cell_val = f"=MAX(0, D{r}/D{shares_row})"
+        elif s_eq_f is not None and s_px_f is not None:
+            eq_cell_val = s_eq_f
+            px_cell_val = s_px_f
+        else:
+            eq_cell_val = float(s_obj.get("equity_value") or 0.0)
+            px_cell_val = float(s_obj.get("implied_price") or 0.0)
+
+        fill = HIGHLIGHT_FILL if s_key == "base" else (ALT_ROW_FILL if r % 2 == 0 else None)
+        c_lbl = ws.cell(row=r, column=2, value=s_obj.get("label") or s_label)
+        c_lbl.font = FONT_LABEL_BOLD if s_key == "base" else FONT_LABEL
+        c_lbl.fill = fill or PatternFill(fill_type=None)
+        c_lbl.border = THIN_BORDER
+
+        c_ev = ws.cell(row=r, column=3, value=ev_cell_val)
+        c_ev.font = FONT_DATA_BOLD if s_key == "base" else FONT_DATA
+        c_ev.fill = fill or PatternFill(fill_type=None)
+        c_ev.border = THIN_BORDER
+        c_ev.number_format = cfmt_large
+        c_ev.alignment = ALIGN_RIGHT
+
+        c_eq = ws.cell(row=r, column=4, value=eq_cell_val)
+        c_eq.font = FONT_DATA_BOLD if s_key == "base" else FONT_DATA
+        c_eq.fill = fill or PatternFill(fill_type=None)
+        c_eq.border = THIN_BORDER
+        c_eq.number_format = cfmt_large
+        c_eq.alignment = ALIGN_RIGHT
+
+        c_px = ws.cell(row=r, column=5, value=px_cell_val)
+        c_px.font = FONT_DATA_BOLD if s_key == "base" else FONT_DATA
+        c_px.fill = fill or PatternFill(fill_type=None)
+        c_px.border = THIN_BORDER
+        c_px.number_format = cfmt_price
+        c_px.alignment = ALIGN_RIGHT
+
+        c_dl = ws.cell(row=r, column=6, value=f"=IF($D${price_row}>0, (E{r}-$D${price_row})/$D${price_row}, 0)")
+        c_dl.font = FONT_DATA
+        c_dl.fill = fill or PatternFill(fill_type=None)
+        c_dl.border = THIN_BORDER
+        c_dl.number_format = PCT_FMT
+        c_dl.alignment = ALIGN_RIGHT
+        ws.row_dimensions[r].height = 19
+        r += 1
+
     # ═══════════════════════════════════════════════════════════════════════════
     # NATIVE EXCEL CHARTS ON DCF MODEL (OpenPyXL)
     # ═══════════════════════════════════════════════════════════════════════════
-    chart_col_letter = get_column_letter(end_col + 2)
+    chart_col_letter = get_column_letter(max(end_col + 2, 9))
     proj_cats_ref = Reference(ws, min_col=4, min_row=header_row, max_col=3 + n_proj, max_row=header_row)
 
     # Chart 3: Projected Free Cash Flow (FCFF) Trajectory
@@ -2142,17 +2524,51 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
         "ev_cell": f"'DCF Model'!D{ev_row}",
         "eq_cell": f"'DCF Model'!D{eq_row}",
         "ev_row": ev_row,
+        "sum_pv_row": sum_pv_row,
+        "pv_tv_row": pv_tv_row,
         "cash_row": cash_row,
         "debt_row": debt_row,
         "min_int_row": min_int_row,
         "shares_row": shares_row,
         "price_row": price_row,
         "reinv_row": reinv_row,
+        "roic_row": roic_row,
         "nopat_row": nopat_row,
         "fcff_row": fcff_row,
+        "rev_row": rev_row,
+        "margin_row": margin_row,
+        "ebit_row": ebit_row,
+        "tax_row": tax_row,
         "period_row": period_row,
+        "tg_row": tg_row,
+        "wacc_param_row": wacc_param_row,
+        "start_g_driver_row": start_g_driver_row,
+        "fade_target_g_driver_row": fade_target_g_driver_row,
+        "fade_exp_driver_row": fade_exp_driver_row,
         "n_proj": n_proj,
-        "tv_scale": (terminal_val / pure_gordon_tv) if (pure_gordon_tv > 0 and abs(terminal_val - pure_gordon_tv) > 1.0) else 1.0,
+        "start_growth": start_growth_val,
+        "raw_term_g": raw_term_g_val,
+        "eff_term_g": eff_term_g,
+        "target_margin": float(margin_schedule[-1]) if margin_schedule else 0.15,
+        "current_margin": dcf.get("current_margin"),
+        "last_revenue": last_revenue,
+        "effective_dna_pct": effective_dna_pct,
+        "avg_capex_pct": avg_capex_pct,
+        "norm_nwc_pct": norm_nwc_pct,
+        "cwip_to_rev": float(historicals.get("cwip_to_rev", 0.0) or 0.0),
+        "avg_gross_margin": float(historicals.get("avg_gross_margin", 0.0) or 0.0),
+        "latest_rnd_pct": float(historicals.get("latest_rnd_pct", 0.0) or 0.0),
+        "benchmark_exit_mult": benchmark_exit_mult,
+        "capex_floor_abs": capex_floor_abs,
+        "tax_rate": tax_rate_dcf,
+        "use_mid_year": use_mid_year_flag,
+        "is_extractive": is_extractive_flag,
+        "is_cyclical": is_cyclical_flag,
+        "is_india": is_india_flag,
+        "is_financial": bool(company.get("is_financial", False)),
+        "sector": str(company.get("sector") or ""),
+        "tangible_ic": float(dcf.get("tangible_ic") or 1.0),
+        "hist_roic": float(dcf.get("hist_roic") or 0.0),
     }
 
 
@@ -2174,12 +2590,15 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     market_data = data.get("market_data", {})
     dcf = data.get("dcf_result", {})
     wacc_data = data.get("wacc", {})
+    historicals = data.get("historicals", {})
+    macro = data.get("macro", {})
     dcf_links = dcf_links or {}
 
     cfmt_price = _get_currency_fmt_price(currency)
+    cfmt_large = _get_currency_fmt_large(currency)
 
     # Title Banner
-    _set_banner(ws, 2, 2, 8, "Valuation Sensitivity Analysis (2D Scenario Price Matrix)")
+    _set_banner(ws, 2, 2, 11, "Valuation Sensitivity Analysis (2D Dynamic Formula Scenario Price Matrices)")
 
     # Reference Values Block
     ws.cell(row=4, column=2, value="Current Share Price:").font = FONT_LABEL_BOLD
@@ -2193,32 +2612,49 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     dcf_cell.font = FONT_DATA_BOLD
     dcf_cell.number_format = cfmt_price
 
-    cash_val = float(dcf.get("cash", wacc_data.get("total_cash", 0.0)) or 0.0)
-    debt_val = float(dcf.get("total_debt", wacc_data.get("total_debt", 0.0)) or 0.0)
-    min_int_val = float(dcf.get("minority_interest", wacc_data.get("minority_interest_claim", 0.0)) or 0.0) + float(
-        dcf.get("preferred_stock", wacc_data.get("preferred_stock_claim", 0.0)) or 0.0
-    )
-    shares_cnt = float(market_data.get("shares_outstanding", 1.0) or 1.0)
-    base_ev = float(dcf.get("enterprise_value", 0.0) or 0.0)
-
-    ev_row = dcf_links.get("ev_row", 30)
-    cash_row = dcf_links.get("cash_row", 31)
-    debt_row = dcf_links.get("debt_row", 32)
-    min_int_row = dcf_links.get("min_int_row", 33)
-    shares_row = dcf_links.get("shares_row", 35)
-    price_row = dcf_links.get("price_row", 36)
-    reinv_row = dcf_links.get("reinv_row", 23)
-    nopat_row = dcf_links.get("nopat_row", 9)
-    fcff_row = dcf_links.get("fcff_row", 13)
-    period_row = dcf_links.get("period_row", 14)
-    n_proj = int(dcf_links.get("n_proj", 5) or 5)
-    tv_scale = float(dcf_links.get("tv_scale", 1.0) or 1.0)
+    # Extract exact model parameters (prefer live dcf_links, fallback cleanly to dcf/historicals)
+    n_proj = int(dcf_links.get("n_proj") or len(dcf.get("growth_schedule", [0.05] * 5)) or 5)
+    rev_row = int(dcf_links.get("rev_row") or 4)
+    period_row = int(dcf_links.get("period_row") or 13)
+    cash_row = int(dcf_links.get("cash_row") or 30)
+    debt_row = int(dcf_links.get("debt_row") or 31)
+    min_int_row = int(dcf_links.get("min_int_row") or 32)
+    shares_row = int(dcf_links.get("shares_row") or 34)
+    start_g_driver_row = dcf_links.get("start_g_driver_row")
+    fade_target_g_driver_row = dcf_links.get("fade_target_g_driver_row")
+    margin_row = int(dcf_links.get("margin_row") or 5)
+    tax_row = int(dcf_links.get("tax_row") or 7)
     last_proj_col = get_column_letter(3 + n_proj)
 
-    r = 6
+    last_rev = float(dcf_links.get("last_revenue") or historicals.get("last_revenue") or 1.0)
+    start_g_val = float(dcf_links.get("start_growth") if dcf_links.get("start_growth") is not None else (dcf.get("growth_schedule", [0.05])[0]))
+    raw_tg_val = float(dcf_links.get("raw_term_g") if dcf_links.get("raw_term_g") is not None else (dcf.get("terminal_growth") or macro.get("terminal_growth", 0.025)))
+    target_m_val = float(dcf_links.get("target_margin") if dcf_links.get("target_margin") is not None else (dcf.get("margin_schedule", [0.15])[-1]))
+    cur_m_val = dcf_links.get("current_margin") if "current_margin" in dcf_links else dcf.get("current_margin")
+    eff_dna_pct = float(dcf_links.get("effective_dna_pct") if dcf_links.get("effective_dna_pct") is not None else (dcf.get("effective_dna_pct") or historicals.get("avg_dna_pct", 0.02)))
+    avg_capex_pct = float(dcf_links.get("avg_capex_pct") if dcf_links.get("avg_capex_pct") is not None else (historicals.get("avg_capex_pct", 0.03)))
+    norm_nwc_pct = float(dcf_links.get("norm_nwc_pct") if dcf_links.get("norm_nwc_pct") is not None else (dcf.get("normalized_nwc_to_revenue", 0.0)))
+    cwip_to_rev = float(dcf_links.get("cwip_to_rev") or historicals.get("cwip_to_rev", 0.0) or 0.0)
+    avg_gm = float(dcf_links.get("avg_gross_margin") or historicals.get("avg_gross_margin", 0.0) or 0.0)
+    tax_rate = float(dcf_links.get("tax_rate") if dcf_links.get("tax_rate") is not None else (dcf.get("tax_rate") or macro.get("tax_rate", 0.21)))
+    is_ext_int = 1 if dcf_links.get("is_extractive", company.get("is_extractive", False)) else 0
+    is_cyc_int = 1 if dcf_links.get("is_cyclical", company.get("is_cyclical", False)) else 0
+    is_in_int = 1 if dcf_links.get("is_india", company.get("market") == "IN") else 0
+    tangible_ic = float(dcf_links.get("tangible_ic") or dcf.get("tangible_ic") or 1.0)
+    hist_roic = float(dcf_links.get("hist_roic") or dcf.get("hist_roic") or 0.0)
+    capex_floor_abs = float(dcf_links.get("capex_floor_abs") or dcf.get("capex_floor_abs") or 0.0)
+    raw_sens_exit_mult = dcf_links.get("benchmark_exit_mult")
+    if raw_sens_exit_mult is None:
+        raw_sens_exit_mult = dcf.get("benchmark_exit_multiple")
+    if raw_sens_exit_mult is None:
+        raw_sens_exit_mult = dcf.get("benchmark_exit_mult")
+    exit_mult_val = float(raw_sens_exit_mult if raw_sens_exit_mult is not None else 10.0)
+    use_mid_year_flag = bool(dcf_links.get("use_mid_year", dcf.get("use_mid_year", True)))
 
-    # Helper for 2D sensitivity table (WACC on Rows, Second Driver on Columns)
-    def _render_sensitivity_table(
+    r = 6
+    table_specs = []
+
+    def _render_table_shell(
         start_row: int,
         title: str,
         row_label: str,
@@ -2226,14 +2662,13 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
         col_label: str,
         col_vals: list,
         price_grid: list,
-        mode: str = "generic",
+        mode: str,
     ) -> int:
         cur_r = start_row
         num_cols = len(col_vals)
         _set_banner(ws, cur_r, 2, 2 + num_cols, title)
         cur_r += 1
 
-        # Header Row
         ws.row_dimensions[cur_r].height = 22
         corner_cell = ws.cell(row=cur_r, column=2, value=f"{row_label} \\ {col_label}")
         corner_cell.font = FONT_HEADER
@@ -2252,21 +2687,10 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
 
         table_header_r = cur_r
         cur_r += 1
-
-        # Data Rows
-        grid_start_letter = get_column_letter(3)
-        grid_end_letter = get_column_letter(2 + num_cols)
         data_start_r = cur_r
 
-        pv_fcff_terms = [
-            f"('DCF Model'!${get_column_letter(4+k)}${fcff_row}/(1+$B{ '{r}' })^'DCF Model'!${get_column_letter(4+k)}${period_row})"
-            for k in range(n_proj)
-        ]
-        pv_fcff_expr_tmpl = "(" + "+".join(pv_fcff_terms) + ")"
-
         for i, (r_val, row_prices) in enumerate(zip(row_vals, price_grid)):
-            r_val_f = float(r_val)
-            row_lbl = ws.cell(row=cur_r, column=2, value=r_val_f)
+            row_lbl = ws.cell(row=cur_r, column=2, value=float(r_val))
             row_lbl.font = FONT_HEADER
             row_lbl.fill = HEADER_FILL
             row_lbl.number_format = PCT_FMT
@@ -2275,44 +2699,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
 
             for j, price in enumerate(row_prices):
                 col = 3 + j
-                col_letter = get_column_letter(col)
-                c_val_f = float(col_vals[j])
-                price_f = float(price)
-
-                if dcf_links.get("price_cell"):
-                    if mode == "terminal_growth":
-                        pv_fcff_expr = pv_fcff_expr_tmpl.replace("{r}", str(cur_r))
-                        eff_g_expr = f"MIN({col_letter}${table_header_r},$B{cur_r}-0.015)"
-                        term_ufcf_expr = f"('DCF Model'!${last_proj_col}${nopat_row}*(1+{eff_g_expr})*(1-'DCF Model'!$D${reinv_row}))"
-                        tv_expr = f"({term_ufcf_expr}/MAX(0.015,$B{cur_r}-{eff_g_expr}))"
-                        if abs(tv_scale - 1.0) > 1e-6:
-                            tv_expr = f"({tv_expr}*{tv_scale:.10f})"
-                        pv_tv_expr = f"({tv_expr}/(1+$B{cur_r})^'DCF Model'!${last_proj_col}${period_row})"
-                        cell_val = (
-                            f"=MAX(0,({pv_fcff_expr}+{pv_tv_expr}+'DCF Model'!$D${cash_row}"
-                            f"-'DCF Model'!$D${debt_row}-'DCF Model'!$D${min_int_row})/'DCF Model'!$D${shares_row})"
-                        )
-                    elif i == len(row_vals) // 2 and j == len(col_vals) // 2:
-                        cell_val = f"='DCF Model'!$D${price_row}"
-                    else:
-                        if price_f <= 0.0:
-                            ev_ij = max(0.0, debt_val + min_int_val - cash_val - shares_cnt * 0.01)
-                        else:
-                            ev_ij = price_f * shares_cnt - cash_val + debt_val + min_int_val
-                        w_Anchor = max(0.0001, r_val_f)
-                        if base_ev > 0:
-                            ev_ratio = ev_ij / base_ev
-                            ev_anchor_expr = f"('DCF Model'!$D${ev_row}*{ev_ratio:.10f})"
-                        else:
-                            ev_anchor_expr = f"{ev_ij:.6f}"
-                        cell_val = (
-                            f"=MAX(0,(({ev_anchor_expr}*({w_Anchor:.6f}/$B{cur_r})*(1+({col_letter}${table_header_r}-{c_val_f:.6f})))"
-                            f"+'DCF Model'!$D${cash_row}-'DCF Model'!$D${debt_row}-'DCF Model'!$D${min_int_row})/'DCF Model'!$D${shares_row})"
-                        )
-                else:
-                    cell_val = price_f
-
-                cell = ws.cell(row=cur_r, column=col, value=cell_val)
+                cell = ws.cell(row=cur_r, column=col, value=float(price))
                 cell.font = FONT_DATA_BOLD if (i == len(row_vals) // 2 and j == len(col_vals) // 2) else FONT_DATA
                 cell.number_format = cfmt_price
                 cell.alignment = ALIGN_RIGHT
@@ -2320,18 +2707,21 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
             cur_r += 1
 
         data_end_r = cur_r - 1
-
-        # Add 3-color scale conditional formatting (soft red -> yellow -> soft green)
+        grid_start_letter = get_column_letter(3)
+        grid_end_letter = get_column_letter(2 + num_cols)
         rule = ColorScaleRule(
-            start_type="min", start_color="FCA5A5",   # soft red
-            mid_type="percentile", mid_value=50, mid_color="FEF08A",  # soft yellow
-            end_type="max", end_color="86EFAC",       # soft green
+            start_type="min", start_color="FCA5A5",
+            mid_type="percentile", mid_value=50, mid_color="FEF08A",
+            end_type="max", end_color="86EFAC",
         )
-        ws.conditional_formatting.add(
-            f"{grid_start_letter}{data_start_r}:{grid_end_letter}{data_end_r}",
-            rule,
-        )
-
+        ws.conditional_formatting.add(f"{grid_start_letter}{data_start_r}:{grid_end_letter}{data_end_r}", rule)
+        table_specs.append({
+            "mode": mode,
+            "row_vals": row_vals,
+            "col_vals": col_vals,
+            "table_header_r": table_header_r,
+            "data_start_r": data_start_r,
+        })
         return cur_r + 2
 
     # Table 1: Cost of Capital / WACC (Rows) vs. Terminal Growth Rate g (Columns)
@@ -2339,7 +2729,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     w_range_tg = tgw.get("wacc_range", [])
     grid_tg = tgw.get("price_grid", [])
     if tg_range and w_range_tg and grid_tg:
-        r = _render_sensitivity_table(
+        r = _render_table_shell(
             r,
             "Sensitivity Table 1: Cost of Capital / WACC (%) vs. Terminal Growth Rate (g %)",
             "WACC",
@@ -2355,7 +2745,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     w_range = gw.get("wacc_range", [])
     grid1 = gw.get("price_grid", [])
     if g_range and w_range and grid1:
-        r = _render_sensitivity_table(
+        r = _render_table_shell(
             r,
             "Sensitivity Table 2: Cost of Capital / WACC (%) vs. Revenue Growth Rate (%)",
             "WACC",
@@ -2371,7 +2761,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     w_range2 = mw.get("wacc_range", [])
     grid2 = mw.get("price_grid", [])
     if m_range and w_range2 and grid2:
-        r = _render_sensitivity_table(
+        r = _render_table_shell(
             r,
             "Sensitivity Table 3: Cost of Capital / WACC (%) vs. Operating Margin (%)",
             "WACC",
@@ -2382,8 +2772,240 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
             mode="ebit_margin",
         )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Multi-Year Live Calculation Audit Engine (eliminates shortcuts / static grid cells)
+    # ═══════════════════════════════════════════════════════════════════════════
+    if table_specs and dcf_links.get("price_cell"):
+        _set_banner(ws, r, 2, 5, "Sensitivity Calibration Parameters (Linked to Base DCF Model)")
+        r += 1
+
+        param_rows: Dict[str, int] = {}
+        has_cur_m = cur_m_val is not None
+        last_rev_val_or_f = f"='DCF Model'!C{rev_row}" if dcf_links.get("rev_row") else last_rev
+        start_g_val_or_f = f"='DCF Model'!D{start_g_driver_row}" if start_g_driver_row else start_g_val
+        raw_tg_val_or_f = f"='DCF Model'!D{fade_target_g_driver_row}" if fade_target_g_driver_row else raw_tg_val
+        target_m_val_or_f = f"='DCF Model'!{last_proj_col}{margin_row}" if dcf_links.get("margin_row") else target_m_val
+        tax_val_or_f = f"='DCF Model'!D{tax_row}" if dcf_links.get("tax_row") else tax_rate
+
+        param_defs = [
+            ("last_rev", "Base FY Revenue (Year 0)", last_rev_val_or_f, cfmt_large),
+            ("start_g", "Base Year-1 Starting Revenue Growth", start_g_val_or_f, PCT_FMT),
+            ("raw_tg", "Base Input Terminal Growth Rate (g)", raw_tg_val_or_f, PCT_FMT),
+            ("target_m", "Target Operating Margin (Year N)", target_m_val_or_f, PCT_FMT),
+            ("cur_m", "Year 0 Base Operating Margin (Step Start)", float(cur_m_val) if has_cur_m else 0.0, PCT_FMT),
+            ("eff_dna", "Effective D&A % of Revenue", eff_dna_pct, PCT_FMT),
+            ("avg_capex", "Historical CapEx % of Revenue", avg_capex_pct, PCT_FMT),
+            ("norm_nwc", "Normalized NWC % of Revenue", norm_nwc_pct, PCT_FMT),
+            ("cwip_rev", "CWIP % of Revenue", cwip_to_rev, PCT_FMT),
+            ("avg_gm", "Average Gross Margin %", avg_gm, PCT_FMT),
+            ("tax_rate", "Marginal Operating Tax Rate", tax_val_or_f, PCT_FMT),
+            ("tangible_ic", "Base Tangible Invested Capital", tangible_ic, cfmt_large),
+            ("hist_roic", "Base Year Historical ROIC", hist_roic, PCT_FMT),
+            ("capex_floor", "Contracted CapEx Floor (Absolute)", capex_floor_abs, cfmt_large),
+            ("exit_mult", "Sector Exit EV/EBITDA Benchmark Multiple", exit_mult_val, MULT_FMT),
+            ("is_ext", "Extractive Commodity Flag (1/0)", is_ext_int, INT_FMT),
+            ("is_cyc", "Cyclical Capital-Intensive Flag (1/0)", is_cyc_int, INT_FMT),
+            ("is_in", "India Market Jurisdiction Flag (1/0)", is_in_int, INT_FMT),
+        ]
+        for p_key, p_lbl, p_val, p_fmt in param_defs:
+            ws.cell(row=r, column=2, value=p_lbl).font = FONT_LABEL
+            ws.cell(row=r, column=2).border = THIN_BORDER
+            pc = ws.cell(row=r, column=3, value=p_val)
+            pc.font = FONT_DATA_BOLD
+            pc.number_format = p_fmt
+            pc.alignment = ALIGN_RIGHT
+            pc.border = THIN_BORDER
+            param_rows[p_key] = r
+            r += 1
+
+        r += 1
+        # Audit Schedule Columns:
+        # B(2): Scenario ID | C(3): WACC | D(4): tg_in | E(5): start_g | F(6): target_m
+        # G(7): clamped_tg | H(8): eff_tg | I(9): fade_exp | J(10): capex_steady | K(11): capex_start
+        # 12..11+N: Rev_1..Rev_N | 12+N..11+2N: PV_UFCF_1..PV_UFCF_N
+        # next: Sum_PV_UFCF | Eff_ROIC | Sust_ROIC | Term_Reinv | Term_Val | PV_TV | EV | Implied_Price
+        c_last_rev = f"$C${param_rows['last_rev']}"
+        c_start_g = f"$C${param_rows['start_g']}"
+        c_raw_tg = f"$C${param_rows['raw_tg']}"
+        c_target_m = f"$C${param_rows['target_m']}"
+        c_cur_m = f"$C${param_rows['cur_m']}"
+        c_dna = f"$C${param_rows['eff_dna']}"
+        c_capex = f"$C${param_rows['avg_capex']}"
+        c_nwc = f"$C${param_rows['norm_nwc']}"
+        c_cwip = f"$C${param_rows['cwip_rev']}"
+        c_gm = f"$C${param_rows['avg_gm']}"
+        c_tax = f"$C${param_rows['tax_rate']}"
+        c_tic = f"$C${param_rows['tangible_ic']}"
+        c_hroic = f"$C${param_rows['hist_roic']}"
+        c_cfloor = f"$C${param_rows['capex_floor']}"
+        c_emult = f"$C${param_rows['exit_mult']}"
+        c_ext = f"$C${param_rows['is_ext']}"
+        c_cyc = f"$C${param_rows['is_cyc']}"
+        c_in = f"$C${param_rows['is_in']}"
+
+        rev_cols = [get_column_letter(12 + k) for k in range(n_proj)]
+        pv_cols = [get_column_letter(12 + n_proj + k) for k in range(n_proj)]
+        col_sum_pv = get_column_letter(12 + 2 * n_proj)
+        col_eff_roic = get_column_letter(13 + 2 * n_proj)
+        col_sust_roic = get_column_letter(14 + 2 * n_proj)
+        col_reinv = get_column_letter(15 + 2 * n_proj)
+        col_tv = get_column_letter(16 + 2 * n_proj)
+        col_pv_tv = get_column_letter(17 + 2 * n_proj)
+        col_ev = get_column_letter(18 + 2 * n_proj)
+        col_price_out = get_column_letter(19 + 2 * n_proj)
+
+        audit_headers = (
+            ["Scenario ID", "WACC", "Input g", "Start g", "Target EBIT %", "Clamped g", "Eff. g", "Fade Exp", "CapEx Steady %", "CapEx Start %"]
+            + [f"Rev Yr{k+1}" for k in range(n_proj)]
+            + [f"PV(UFCF) Yr{k+1}" for k in range(n_proj)]
+            + ["Sum PV(UFCF)", "Eff. ROIC", "Sust. ROIC", "Term. Reinv %", "Terminal Value", "PV(TV)", "Enterprise Value", "Implied Price"]
+        )
+        _set_banner(ws, r, 2, 1 + len(audit_headers), "Multi-Year Sensitivity Calculation Engine")
+        r += 1
+        _set_table_headers(ws, r, audit_headers, start_col=2)
+        r += 1
+
+        step_den = max(1, n_proj - 1)
+        for t_idx, spec in enumerate(table_specs, start=1):
+            mode = spec["mode"]
+            t_hdr_r = spec["table_header_r"]
+            d_start_r = spec["data_start_r"]
+            min_spread = 0.015 if mode == "terminal_growth" else 0.025
+
+            for i in range(len(spec["row_vals"])):
+                grid_r = d_start_r + i
+                for j in range(len(spec["col_vals"])):
+                    grid_col = 3 + j
+                    grid_col_l = get_column_letter(grid_col)
+                    aud_r = r
+
+                    w_ref = f"$B{grid_r}"
+                    col_ref = f"{grid_col_l}${t_hdr_r}"
+
+                    tg_in_f = f"={col_ref}" if mode == "terminal_growth" else f"={c_raw_tg}"
+                    sg_in_f = f"={col_ref}" if mode == "revenue_growth" else f"={c_start_g}"
+                    tm_in_f = f"={col_ref}" if mode == "ebit_margin" else f"={c_target_m}"
+
+                    if mode == "terminal_growth":
+                        clamped_tg_f = f"=MIN(D{aud_r}, MAX(0.01, C{aud_r}-0.015))"
+                    else:
+                        clamped_tg_f = f"=MIN(D{aud_r}, IF({c_ext}=1, 0.025, IF({c_in}=1, 0.05, 0.025)))"
+                    eff_tg_f = f"=IF((C{aud_r}-G{aud_r})<{min_spread}, MAX(0.01, C{aud_r}-{min_spread}), G{aud_r})"
+                    fade_exp_f = f"=IF(OR({c_ext}=1, {c_cyc}=1), 1, 1+0.35*MIN(1, MAX(0, (E{aud_r}-D{aud_r}-0.05)/0.10)))"
+
+                    max_ext_expr = f"IF({c_cwip}>0.50, {c_dna}*1.45, MAX({c_dna}*2.5, MAX(0.05, F{aud_r})*(1-{c_tax})*0.72))"
+                    base_ss_expr = f"({c_dna}*(1+D{aud_r}))"
+                    capex_ss_f = (
+                        f"=IF({c_ext}=1, MAX({base_ss_expr}, MIN({c_capex}, {max_ext_expr})), "
+                        f"IF({c_cyc}=1, MAX({base_ss_expr}, MIN({c_capex}*0.90, {c_dna}*1.35)), {base_ss_expr}))"
+                    )
+                    std_start_cap_expr = (
+                        f"IF(AND({c_capex}>{c_dna}*2.20, {c_capex}>0.15), {c_dna}*(1+MAX(0.10, D{aud_r})), "
+                        f"IF(AND({c_capex}>{c_dna}*1.40, {c_capex}>0.12), MIN({c_capex}, {c_dna}*(1+MAX(0.15, E{aud_r}*1.8))), {c_capex}))"
+                    )
+                    capex_start_f = f"=IF({c_ext}=1, MIN({c_capex}, {max_ext_expr}*1.10), IF({c_cyc}=1, {c_capex}, {std_start_cap_expr}))"
+
+                    ws.cell(row=aud_r, column=2, value=f"T{t_idx}-R{i+1}C{j+1}").font = FONT_DATA
+                    ws.cell(row=aud_r, column=3, value=f"={w_ref}").number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=4, value=tg_in_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=5, value=sg_in_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=6, value=tm_in_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=7, value=clamped_tg_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=8, value=eff_tg_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=9, value=fade_exp_f).number_format = NUM_2DEC_FMT
+                    ws.cell(row=aud_r, column=10, value=capex_ss_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=11, value=capex_start_f).number_format = PCT_FMT
+
+                    for k in range(n_proj):
+                        if k == 0:
+                            g_k_expr = f"E{aud_r}"
+                            prev_rev_ref = c_last_rev
+                        else:
+                            g_k_expr = f"(E{aud_r}-(E{aud_r}-D{aud_r})*(({k}/{step_den})^I{aud_r}))"
+                            prev_rev_ref = f"{rev_cols[k-1]}{aud_r}"
+                        c_rev = ws.cell(row=aud_r, column=12 + k, value=f"={prev_rev_ref}*(1+{g_k_expr})")
+                        c_rev.number_format = cfmt_large
+
+                        m_k_expr = (
+                            f"({c_cur_m}+(F{aud_r}-{c_cur_m})*(({k+1})/{n_proj}))"
+                            if has_cur_m
+                            else f"F{aud_r}"
+                        )
+                        capex_k_expr = f"(K{aud_r}+(J{aud_r}-K{aud_r})*({k}/{step_den}))" if n_proj > 1 else f"K{aud_r}"
+                        capex_amt_expr = (
+                            f"MAX({c_cfloor}, {rev_cols[k]}{aud_r}*{capex_k_expr})"
+                            if capex_floor_abs > 0
+                            else f"({rev_cols[k]}{aud_r}*{capex_k_expr})"
+                        )
+                        ufcf_k_expr = (
+                            f"({rev_cols[k]}{aud_r}*({m_k_expr}*(1-{c_tax})+{c_dna})-{capex_amt_expr}-{c_nwc}*({rev_cols[k]}{aud_r}-{prev_rev_ref}))"
+                        )
+                        period_ref = f"'DCF Model'!${get_column_letter(4+k)}${period_row}"
+                        c_pv = ws.cell(row=aud_r, column=12 + n_proj + k, value=f"={ufcf_k_expr}/((1+C{aud_r})^{period_ref})")
+                        c_pv.number_format = cfmt_large
+
+                    sum_pv_f = f"=SUM({pv_cols[0]}{aud_r}:{pv_cols[-1]}{aud_r})"
+                    ws.cell(row=aud_r, column=12 + 2 * n_proj, value=sum_pv_f).number_format = cfmt_large
+
+                    mN_expr = f"({c_cur_m}+(F{aud_r}-{c_cur_m})*({n_proj}/{n_proj}))" if has_cur_m else f"F{aud_r}"
+                    revN_ref = f"{rev_cols[-1]}{aud_r}"
+                    yr5_nopat_expr = f"({revN_ref}*{mN_expr}*(1-{c_tax}))"
+                    yr5_tic_expr = f"({c_tic}*MAX(1, IF({c_last_rev}>0, {revN_ref}/{c_last_rev}, 1)))"
+                    proj_roic_expr = f"IF(AND({yr5_tic_expr}>0, {yr5_nopat_expr}>0), {yr5_nopat_expr}/{yr5_tic_expr}, C{aud_r})"
+                    if has_cur_m:
+                        eff_roic_f = f"=IF({c_hroic}<=0.02, MAX({c_hroic}, {proj_roic_expr}), 0.5*{c_hroic}+0.5*({proj_roic_expr}))"
+                    else:
+                        eff_roic_f = f"=IF({c_hroic}<=0.02, MAX({c_hroic}, {proj_roic_expr}), {c_hroic})"
+                    ws.cell(row=aud_r, column=13 + 2 * n_proj, value=eff_roic_f).number_format = PCT_FMT
+
+                    is_hi_expr = f"AND({c_ext}=0, {c_cyc}=0, {col_eff_roic}{aud_r}>=0.22, OR({c_gm}>=0.45, {col_eff_roic}{aud_r}>=0.28))"
+                    min_r_floor_expr = f"(C{aud_r}+IF(AND({c_ext}=0, {c_cyc}=0, {c_capex}>{c_dna}*2.20), 0.045, 0))"
+                    sust_roic_f = f"=MAX({min_r_floor_expr}, MIN({col_eff_roic}{aud_r}, IF({is_hi_expr}, 0.45, 0.30)))"
+                    ws.cell(row=aud_r, column=14 + 2 * n_proj, value=sust_roic_f).number_format = PCT_FMT
+
+                    roic_b_expr = f"(H{aud_r}/{col_sust_roic}{aud_r})"
+                    yr5_nm_expr = f"IF({mN_expr}>0, MAX(0.01, {mN_expr}*(1-{c_tax})), 0.01)"
+                    mod_b_expr = f"MAX(0, ((J{aud_r}-{c_dna})+MAX(0, {c_nwc}*H{aud_r}))/{yr5_nm_expr})"
+                    min_bf_expr = f"IF({is_hi_expr}, 0.06, 0.10)"
+                    blend_b_expr = f"IF(AND({is_hi_expr}, {mN_expr}>0), MIN({roic_b_expr}, 0.45*{roic_b_expr}+0.55*{mod_b_expr}), {roic_b_expr})"
+                    base_reinv_expr = f"MIN(0.80, MAX({min_bf_expr}, {blend_b_expr}))"
+                    capex_reinv_expr = f"MAX(0, (J{aud_r}-{c_dna})/{yr5_nm_expr})"
+                    reinv_f = (
+                        f"=IF(AND({c_ext}=1, {mN_expr}>0), MIN(0.80, MAX({base_reinv_expr}, {capex_reinv_expr})), "
+                        f"IF(AND({c_cyc}=1, {mN_expr}>0), MIN(0.80, MAX({base_reinv_expr}, {capex_reinv_expr}*0.85)), {base_reinv_expr}))"
+                    )
+                    ws.cell(row=aud_r, column=15 + 2 * n_proj, value=reinv_f).number_format = PCT_FMT
+
+                    term_nopat_expr = f"({revN_ref}*(1+H{aud_r})*{mN_expr}*(1-{c_tax}))"
+                    term_ufcf_expr = f"({term_nopat_expr}*(1-{col_reinv}{aud_r}))"
+                    gordon_tv_expr = f"(({term_ufcf_expr})/(C{aud_r}-H{aud_r}))"
+                    term_ebitda_expr = f"({revN_ref}*(1+H{aud_r})*({mN_expr}+{c_dna}))"
+                    exit_tv_expr = f"({term_ebitda_expr}*{c_emult})"
+                    tv_f = (
+                        f"=IF(AND(C{aud_r}>H{aud_r}, ({term_ufcf_expr})>0), "
+                        f"IF(AND({c_ext}=1, {exit_tv_expr}>0, ({gordon_tv_expr})>{exit_tv_expr}), 0.35*({gordon_tv_expr})+0.65*({exit_tv_expr}), "
+                        f"IF(AND({c_cyc}=1, {exit_tv_expr}>0, ({gordon_tv_expr})>{exit_tv_expr}), 0.45*({gordon_tv_expr})+0.55*({exit_tv_expr}), {gordon_tv_expr})), 0)"
+                    )
+                    ws.cell(row=aud_r, column=16 + 2 * n_proj, value=tv_f).number_format = cfmt_large
+
+                    pv_tv_f = f"={col_tv}{aud_r}/((1+C{aud_r})^'DCF Model'!${last_proj_col}${period_row})"
+                    ws.cell(row=aud_r, column=17 + 2 * n_proj, value=pv_tv_f).number_format = cfmt_large
+
+                    ev_f = f"={col_sum_pv}{aud_r}+{col_pv_tv}{aud_r}"
+                    ws.cell(row=aud_r, column=18 + 2 * n_proj, value=ev_f).number_format = cfmt_large
+
+                    px_f = (
+                        f"=MAX(0, ({col_ev}{aud_r}+'DCF Model'!$D${cash_row}-'DCF Model'!$D${debt_row}-'DCF Model'!$D${min_int_row})"
+                        f"/'DCF Model'!$D${shares_row})"
+                    )
+                    ws.cell(row=aud_r, column=19 + 2 * n_proj, value=px_f).number_format = cfmt_price
+
+                    # Wire the 2D visible table cell directly to this live audit row!
+                    ws.cell(row=grid_r, column=grid_col).value = f"={col_price_out}{aud_r}"
+                    r += 1
+
     ws.column_dimensions["A"].width = 3
-    _auto_fit_columns(ws, min_width=16, max_width=30)
+    _auto_fit_columns(ws, min_width=15, max_width=28)
     ws.freeze_panes = "C6"
 
 
@@ -2420,20 +3042,20 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
         sim_prices = [round(float(p), 2) for p in rng.normal(m, max(1.0, s), 2500)]
     
     n_reps_to_write = min(len(sim_prices), 10000)
-    n_total_sims = n_reps_to_write if sim_prices else mc.get("actual_iterations", len(sim_prices))
-    rep_start_row = 27
+    n_valid_sims = int(mc.get("valid_simulations") or mc.get("actual_iterations") or n_reps_to_write)
+    rep_start_row = 36
     rep_end_row = rep_start_row + n_reps_to_write - 1
 
     # Title Banner (Cols B to E)
     _set_banner(ws, 2, 2, 5, f"Monte Carlo Valuation & Value-at-Risk (VaR) Engine — {company_name} ({ticker})")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Section 1: Summary Statistics (Cols B to E, Rows 4 to 15)
+    # Section 1: Summary Statistics (Cols B to E, Rows 4 to 15 — keeps C7/C8/C12 fixed!)
     # ═══════════════════════════════════════════════════════════════════════════
     _set_banner(ws, 4, 2, 5, "Monte Carlo Valuation Summary & Probability Metrics")
-    
+
     stats_items = [
-        ("Total Simulation Runs", n_total_sims, INT_FMT, None),
+        ("Simulation Iterations", n_valid_sims, INT_FMT, None),
         ("Base DCF Implied Fair Value", base_dcf_price, cfmt_price, None),
         ("Mean Implied Share Price", f"=AVERAGE(H{rep_start_row}:H{rep_end_row})", cfmt_price, mc_stats.get("mean")),
         ("Median Base Fair Value", f"=MEDIAN(H{rep_start_row}:H{rep_end_row})", cfmt_price, mc_stats.get("median")),
@@ -2522,9 +3144,9 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
         r += 1
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Section 3: Frequency Distribution Table (Rows 25 to 52)
+    # Section 3: Frequency Distribution Table (Rows 34+, leaves rows 24-33 clear beside G4 chart)
     # ═══════════════════════════════════════════════════════════════════════════
-    r = 25
+    r = 34
     _set_banner(ws, r, 2, 5, "Valuation Frequency Distribution (Simulated Density)")
     r += 1
 
@@ -2657,9 +3279,9 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[D
     # ═══════════════════════════════════════════════════════════════════════════
     # Section 4: Simulated Replications Table (like HUL Col G & H) (Cols G to I)
     # ═══════════════════════════════════════════════════════════════════════════
-    _set_banner(ws, 25, 7, 9, "Simulated Monte Carlo Replications (Cholesky DCF Iterations)")
+    _set_banner(ws, 34, 7, 9, "Simulated Monte Carlo Replications (Cholesky DCF Iterations)")
     rep_headers = ["Replication #", f"Simulated Price ({currency})", "Return vs CMP"]
-    _set_table_headers(ws, 26, rep_headers, start_col=7)
+    _set_table_headers(ws, 35, rep_headers, start_col=7)
 
     for idx, price in enumerate(sim_prices[:n_reps_to_write]):
         cur_r = rep_start_row + idx
@@ -2736,36 +3358,66 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
     cfmt_large = _get_currency_fmt_large(currency)
 
     is_fin = bool(company.get("is_financial", True))
+    model_type = str(
+        company.get("model_type")
+        or dcf.get("model_type")
+        or ("BANKING_DDM" if is_fin else "STANDARD_FCFF")
+    )
+    is_ins = model_type in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM") or bool(dcf.get("is_insurance"))
+    is_life_ins = model_type == "INSURANCE_LIFE_DDM" or str(dcf.get("insurer_subtype") or "") == "LIFE_ANNUITY"
+    is_reit = model_type == "REIT_INVIT_AFFO" or bool(dcf.get("is_reit"))
     method_comp = data.get("method_comparison", {})
 
     # Title Block
-    ws["B2"].value = company.get("name", "Financial Institution" if is_fin else "Corporate Equity Valuation")
-    ws["B2"].font = FONT_TITLE
-    ws["B3"].value = (
-        f"Multi-Stage FCFE & Regulatory Capital Valuation Model — {company.get('ticker', '')}"
-        if is_fin
-        else f"Multi-Stage Dividend Discount (DDM) & FCFE Equity Valuation Model — {company.get('ticker', '')}"
+    ws["B2"].value = company.get(
+        "name",
+        "Insurance Carrier"
+        if is_ins
+        else ("REIT / Infrastructure Trust" if is_reit else ("Financial Institution" if is_fin else "Corporate Equity Valuation")),
     )
+    ws["B2"].font = FONT_TITLE
+    if is_ins:
+        ws["B3"].value = f"Multi-Stage Actuarial Excess-Return & Policyholder Float Valuation — {company.get('ticker', '')}"
+    elif is_reit:
+        ws["B3"].value = f"Multi-Stage REIT / InvIT Distributable AFFO (NDCF) & Cap-Rate NAV Model — {company.get('ticker', '')}"
+    elif is_fin:
+        ws["B3"].value = f"Multi-Stage FCFE & Regulatory Capital Valuation Model — {company.get('ticker', '')}"
+    else:
+        ws["B3"].value = f"Multi-Stage Dividend Discount (DDM) & FCFE Equity Valuation Model — {company.get('ticker', '')}"
     ws["B3"].font = FONT_SUBTITLE
     ws.row_dimensions[2].height = 26
     ws.row_dimensions[3].height = 18
 
     # Section 1: Entity Metadata
     r = 5
-    _set_banner(ws, r, 2, 5, "Financial Institution Profile & Market Metadata" if is_fin else "Company Profile & Market Metadata")
+    sec1_title = (
+        "Insurer Actuarial Profile & Market Metadata"
+        if is_ins
+        else ("REIT / InvIT Portfolio Profile & Market Metadata" if is_reit else ("Financial Institution Profile & Market Metadata" if is_fin else "Company Profile & Market Metadata"))
+    )
+    _set_banner(ws, r, 2, 5, sec1_title)
     r += 1
 
+    val_shares_cover = float(
+        dcf.get("shares_used")
+        or market_data.get("diluted_valuation_shares")
+        or market_data.get("shares_outstanding", 0)
+        or 0
+    )
+    acct_std_label = _format_accounting_standard(
+        data.get("accounting_standard") or company.get("accounting_standard"),
+        company.get("market", "US"),
+    )
     profile_items = [
         ("Company Name", company.get("name")),
         ("Ticker Symbol", company.get("ticker")),
         ("Exchange Market", company.get("market")),
-        ("Sector", company.get("sector") or ("Financial Services" if is_fin else "Equities")),
-        ("Industry", company.get("industry") or ("Banking / NBFC" if is_fin else "Corporate")),
+        ("Sector", company.get("sector") or ("Real Estate / InvIT" if is_reit else ("Financial Services" if is_fin else "Equities"))),
+        ("Industry", company.get("industry") or ("Insurance" if is_ins else ("REIT / InvIT" if is_reit else ("Banking / NBFC" if is_fin else "Corporate")))),
         ("Reporting Currency", currency),
+        ("Accounting Standard", acct_std_label),
         ("Valuation Date", datetime.now().strftime("%d-%b-%Y")),
-        ("Model Engine Version", data.get("metadata", {}).get("model_version", "v2.4.0")),
-        ("Data Provenance", data.get("metadata", {}).get("data_provenance", "SEC EDGAR / NSE-BSE Statutory Filings")),
-        ("Shares Outstanding", market_data.get("shares_outstanding"), INT_FMT),
+        ("Diluted Shares Outstanding" if not is_reit else "Diluted Units Outstanding", val_shares_cover, INT_FMT),
         ("Market Capitalization", market_data.get("market_cap"), cfmt_large),
     ]
 
@@ -2808,26 +3460,97 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
     just_price = diagnostics.get("justified_price", dcf.get("justified_price", 0.0))
     verdict_text = verdict.get("verdict") or verdict.get("action", "FAIR VALUE")
 
-    output_items = [
-        ("Multi-Stage DDM / FCFE Fair Value per Share", implied_price, cfmt_price, True),
-        ("Current Market Price (CMP)", cmp, cfmt_price, False),
-        ("Implied Upside / (Downside)", upside, PCT_FMT, True),
-        ("Valuation Outlook", verdict_text, None, True),
-        (
-            "Valuation Methodology",
-            "Damodaran Multi-Stage Regulatory Capital FCFE & DDM"
-            if is_fin
-            else "Multi-Stage Dividend Discount (DDM) & Corporate FCFE Model",
-            None,
-            False,
-        ),
-        ("Discount Rate Standard", "Cost of Equity (Ke via CAPM)", None, False),
-        ("Cost of Equity (Ke)", ke_val, PCT_FMT, False),
-        ("Long-Term Terminal Growth Rate (g)", g_val, PCT_FMT, False),
-        ("Book Value per Share (BVPS)", bvps_val, cfmt_price, False),
-        ("Justified Price-to-Book (P/B)", just_pb, MULT_FMT, False),
-        ("Justified P/B Fair Value", just_price, cfmt_price, False),
-    ]
+    is_nbfc = bool(dcf.get("is_nbfc") or company.get("is_nbfc") or (data.get("model_suitability") or {}).get("model_family") == "NBFC_LENDER_DDM")
+    lender_sub_raw = dcf.get("lender_subtype") or company.get("lender_subtype") or ("NBFC_WHOLESALE_LENDER" if is_nbfc else "COMMERCIAL_DEPOSIT_BANK")
+    lender_sub_label = {
+        "NBFC_WHOLESALE_LENDER": "Wholesale / Specialized Lender",
+        "COMMERCIAL_DEPOSIT_BANK": "Commercial Deposit Bank",
+    }.get(str(lender_sub_raw), str(lender_sub_raw).replace("_", " ").title())
+    if is_ins:
+        method_label = (
+            "Actuarial Life & Annuity Equity DDM (Normalized New-Business Strain)"
+            if is_life_ins
+            else "Actuarial P&C Insurer Equity DDM (Ex-AOCI Book Value & Float)"
+        )
+        ins_sub_raw = str(dcf.get("insurer_subtype") or ("LIFE_ANNUITY" if is_life_ins else "PNC_REINSURANCE"))
+        ins_sub_label = {"LIFE_ANNUITY": "Life & Annuity", "PNC_REINSURANCE": "Property & Casualty"}.get(
+            ins_sub_raw, ins_sub_raw.replace("_", " ").title()
+        )
+        std_label = f"Cost of Equity (Ke via CAPM) — {ins_sub_label}"
+        bv_lbl = "Ex-AOCI Common BVPS (Ex-NCI)" if bool(dcf.get("used_ex_aoci_bv")) else "Common Book Value per Share (Ex-NCI)"
+        mult_lbl = "Justified P / Ex-AOCI Book Multiple" if bool(dcf.get("used_ex_aoci_bv")) else "Justified Price-to-Book (P/B)"
+        output_items = [
+            ("Actuarial Excess-Return Fair Value per Share", implied_price, cfmt_price, True),
+            ("Current Market Price (CMP)", cmp, cfmt_price, False),
+            ("Implied Upside / (Downside)", upside, PCT_FMT, True),
+            ("Valuation Outlook", verdict_text, None, True),
+            ("Valuation Methodology", method_label, None, False),
+            ("Discount Rate Standard", std_label, None, False),
+            ("Cost of Equity (Ke)", ke_val, PCT_FMT, False),
+            ("Long-Term Terminal Growth Rate (g)", g_val, PCT_FMT, False),
+            (bv_lbl, bvps_val, cfmt_price, False),
+            (mult_lbl, just_pb, MULT_FMT, False),
+            ("Justified P/B Fair Value", just_price, cfmt_price, False),
+            ("Policyholder Float-to-Equity Ratio", float(dcf.get("float_to_equity") or 0.0), MULT_FMT, False),
+        ]
+        if float(dcf.get("claims_loss_ratio") or 0.0) > 0:
+            output_items.append(("Historical Claims & Loss Adjustment Ratio", float(dcf.get("claims_loss_ratio") or 0.0), PCT_FMT, False))
+        if dcf.get("catastrophe_stress_price") is not None:
+            output_items.append((
+                "Catastrophe (+250 bps Claims / +50 bps Ke) Stress Value",
+                float(dcf.get("catastrophe_stress_price") or 0.0),
+                cfmt_price,
+                False,
+            ))
+    elif is_reit:
+        output_items = [
+            ("Distributable AFFO / NDCF Fair Value per Unit", implied_price, cfmt_price, True),
+            ("Current Market Unit Price (CMP)", cmp, cfmt_price, False),
+            ("Implied Upside / (Downside)", upside, PCT_FMT, True),
+            ("Valuation Outlook", verdict_text, None, True),
+            ("Valuation Methodology", "REIT / InvIT Distributable AFFO (NDCF) & Cap-Rate GAV/NAV", None, False),
+            ("Discount Rate Standard", "Cost of Equity (Ke via CAPM) — Real Asset Equity", None, False),
+            ("Cost of Equity (Ke)", ke_val, PCT_FMT, False),
+            ("Long-Term Terminal Growth Rate (g)", g_val, PCT_FMT, False),
+            ("Current FFO per Unit", float(dcf.get("ffo_per_unit") or 0.0), cfmt_price, False),
+            ("Current AFFO per Unit", float(dcf.get("affo_per_unit") or 0.0), cfmt_price, False),
+            ("Implied Price / AFFO Multiple", just_pb, MULT_FMT, False),
+            ("Cap-Rate NAV per Unit (Real-Asset Cross-Check)", float(dcf.get("cap_rate_nav_per_unit") or just_price), cfmt_price, True),
+            ("Benchmark Real-Asset Cap Rate", float(dcf.get("benchmark_cap_rate") or 0.0), PCT_FMT, False),
+            ("+75 bps Cap-Rate Stress NAV per Unit", float(dcf.get("cap_rate_stress_price") or 0.0), cfmt_price, False),
+        ]
+    else:
+        output_items = [
+            ("Multi-Stage DDM / FCFE Fair Value per Share", implied_price, cfmt_price, True),
+            ("Current Market Price (CMP)", cmp, cfmt_price, False),
+            ("Implied Upside / (Downside)", upside, PCT_FMT, True),
+            ("Valuation Outlook", verdict_text, None, True),
+            (
+                "Valuation Methodology",
+                "Damodaran Multi-Stage Wholesale NBFC FCFE & DDM"
+                if (is_fin and is_nbfc)
+                else (
+                    "Damodaran Multi-Stage Regulatory Capital FCFE & DDM"
+                    if is_fin
+                    else "Multi-Stage Dividend Discount (DDM) & Corporate FCFE Model"
+                ),
+                None,
+                False,
+            ),
+            ("Discount Rate Standard", f"Cost of Equity (Ke via CAPM) — {lender_sub_label}" if is_fin else "Cost of Equity (Ke via CAPM)", None, False),
+            ("Cost of Equity (Ke)", ke_val, PCT_FMT, False),
+            ("Long-Term Terminal Growth Rate (g)", g_val, PCT_FMT, False),
+            ("Book Value per Share (BVPS)", bvps_val, cfmt_price, False),
+            ("Justified Price-to-Book (P/B)", just_pb, MULT_FMT, False),
+            ("Justified P/B Fair Value", just_price, cfmt_price, False),
+        ]
+        if is_fin and is_nbfc and dcf.get("credit_cost_stress_price") is not None:
+            output_items.append((
+                "NBFC Wholesale Leverage & Credit-Cost Stress Fair Value",
+                float(dcf.get("credit_cost_stress_price") or 0.0),
+                cfmt_price,
+                False,
+            ))
     if not is_fin and method_comp and method_comp.get("can_switch"):
         fcff_ref_price = method_comp.get("fcff_implied_price", 0.0)
         fcff_ref_wacc = method_comp.get("fcff_discount_rate", data.get("wacc", {}).get("corporate_wacc", 0.10))
@@ -2863,8 +3586,7 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
 
     # Section 3: Monte Carlo Risk Distribution Summary
     r += 1
-    n_mc_sims = mc.get("actual_iterations") or mc.get("total_simulations") or 10000
-    _set_banner(ws, r, 2, 5, f"Monte Carlo Risk Assessment ({n_mc_sims:,} Iterations)")
+    _set_banner(ws, r, 2, 5, "Monte Carlo Risk Assessment")
     r += 1
 
     mc_median = mc_stats.get("median", 0.0)
@@ -2924,6 +3646,11 @@ def _build_bank_historicals(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str
     ws.views.sheetView[0].showGridLines = True
 
     company = data.get("company", {})
+    dcf_meta = data.get("dcf_result", {})
+    is_ins_hist = (
+        str(company.get("model_type") or dcf_meta.get("model_type") or "") in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM")
+        or bool(dcf_meta.get("is_insurance"))
+    )
     currency = company.get("currency", "USD")
     historicals = data.get("historicals", {})
     cfmt_large = _get_currency_fmt_large(currency)
@@ -3110,14 +3837,19 @@ def _build_bank_historicals(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str
     raw_divs = _get_vals(inc_stmt, "Cash Dividends Paid", historicals.get("dividends_paid"))
     row_divs = _write_statement_row("Cash Dividends Paid to Common Shareholders", raw_divs, cfmt_large)
     row_payout = _write_statement_row("Dividend Payout Ratio (%)", [], PCT_FMT, is_margin_of=(row_divs, row_ni))
-    row_ret_cap = _write_statement_row("Tier-1 Regulatory Capital Retained (Retained Earnings Addition)", [], cfmt_large, is_bold=True,
-                                       formula_subtraction=(row_ni, row_divs) if any(raw_divs) else None)
+    row_ret_cap = _write_statement_row(
+        "Solvency Capital Retained (Net Income − Dividends)" if is_ins_hist else "Tier-1 Regulatory Capital Retained (Retained Earnings Addition)",
+        [],
+        cfmt_large,
+        is_bold=True,
+        formula_subtraction=(row_ni, row_divs) if any(raw_divs) else None,
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # PART II: BANKING BALANCE SHEET & CAPITAL STRUCTURE
     # ═══════════════════════════════════════════════════════════════════════════
     r += 1
-    _write_sub_banner("Part II: Banking Balance Sheet & Capital Adequacy")
+    _write_sub_banner("Part II: Insurance Balance Sheet, Float & Solvency Capital" if is_ins_hist else "Part II: Banking Balance Sheet & Capital Adequacy")
 
     raw_sc = _get_vals(bs_stmt, "Equity Share Capital")
     row_sc = _write_statement_row("Equity Share Capital (Common Stock)", raw_sc, cfmt_large)
@@ -3128,18 +3860,27 @@ def _build_bank_historicals(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str
         raw_res = [max(0.0, float(eq - sc)) for eq, sc in zip(raw_equity, raw_sc)]
     row_res = _write_statement_row("Reserves, Surplus & Retained Earnings", raw_res, cfmt_large)
 
-    row_equity = _write_statement_row("Total Common Stockholders' Equity (Tier-1 Book Value)", raw_equity, cfmt_large, is_bold=True,
-                                      formula_sum=[row_sc, row_res] if any(raw_sc) and any(raw_res) else None)
+    row_equity = _write_statement_row(
+        "Common Stockholders' Equity (GAAP Book Value Ex-NCI)" if is_ins_hist else "Total Common Stockholders' Equity (Tier-1 Book Value)",
+        raw_equity,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_sc, row_res] if any(raw_sc) and any(raw_res) else None,
+    )
 
     row_bvps = _write_statement_row("Book Value per Share (BVPS)", [], cfmt_price, is_bold=True,
                                     is_margin_of=(row_equity, row_shares) if any(raw_shares) else None)
 
     raw_debt = _get_vals(bs_stmt, "Total Debt")
-    row_debt = _write_statement_row("Wholesale Borrowings & Subordinated Debt", raw_debt, cfmt_large)
+    row_debt = _write_statement_row("Surplus Notes & Financial Borrowings" if is_ins_hist else "Wholesale Borrowings & Subordinated Debt", raw_debt, cfmt_large)
 
     raw_tot_assets = _get_vals(bs_stmt, "Total Assets")
     raw_dep = [max(0.0, float(a - e - d)) for a, e, d in zip(raw_tot_assets, raw_equity, raw_debt)]
-    row_dep = _write_statement_row("Customer Deposits, Policy Liabilities & Other Liabilities", raw_dep, cfmt_large)
+    row_dep = _write_statement_row(
+        "Technical Reserves, Unearned Premiums & Policyholder Float" if is_ins_hist else "Customer Deposits, Policy Liabilities & Other Liabilities",
+        raw_dep,
+        cfmt_large,
+    )
 
     row_tot_liab = _write_statement_row("Total Liabilities (Deposits, Borrowings & Payables)", [], cfmt_large, is_bold=True,
                                        formula_sum=[row_debt, row_dep] if any(raw_dep) else None)
@@ -3153,12 +3894,20 @@ def _build_bank_historicals(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str
     row_cash = _write_statement_row("Cash, Central Bank Reserves & Interbank Balances", raw_cash, cfmt_large)
 
     raw_inv = _get_vals(bs_stmt, "Investments & Financial Assets", _get_vals(bs_stmt, "Investments"))
-    row_inv = _write_statement_row("Investment Securities & Marketable Financial Assets", raw_inv, cfmt_large)
+    row_inv = _write_statement_row(
+        "Investable Float Securities & Fixed-Income Portfolio" if is_ins_hist else "Investment Securities & Marketable Financial Assets",
+        raw_inv,
+        cfmt_large,
+    )
 
     raw_ppe = _get_vals(bs_stmt, "Fixed Assets (Net PPE)")
     raw_gw = _get_vals(bs_stmt, "Intangible Assets & Goodwill")
     raw_loans = [max(0.0, float(a - c - inv - p - g)) for a, c, inv, p, g in zip(raw_tot_assets, raw_cash, raw_inv, raw_ppe, raw_gw)]
-    row_loans = _write_statement_row("Net Loans, Advances & Customer Receivables", raw_loans, cfmt_large)
+    row_loans = _write_statement_row(
+        "Premiums Receivable, Reinsurance & Other Policy Assets" if is_ins_hist else "Net Loans, Advances & Customer Receivables",
+        raw_loans,
+        cfmt_large,
+    )
 
     row_earning = _write_statement_row("Total Earning & Financial Assets", [], cfmt_large, is_bold=True,
                                        formula_sum=[row_cash, row_inv, row_loans] if any(raw_cash) and any(raw_inv) else None)
@@ -3328,16 +4077,22 @@ def _build_bank_cost_of_equity(wb: Workbook, data: Dict[str, Any]) -> Dict[str, 
     market_return = macro.get("market_return", 0.13 if company.get("market") == "IN" else 0.10)
     beta = market_data.get("beta", 1.0)
     dcf = data.get("dcf_result", {})
+    model_type = str(company.get("model_type") or dcf.get("model_type") or ("BANKING_DDM" if is_fin else "STANDARD_FCFF"))
+    is_ins = model_type in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM") or bool(dcf.get("is_insurance"))
+    is_reit = model_type == "REIT_INVIT_AFFO" or bool(dcf.get("is_reit"))
     eff_term_g = dcf.get("effective_terminal_growth")
     terminal_growth = eff_term_g if eff_term_g is not None else (overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025))
 
     ws["B2"].value = "Cost of Equity (Ke) via Capital Asset Pricing Model (CAPM)"
     ws["B2"].font = FONT_TITLE
-    ws["B3"].value = (
-        "FIG Capital Structure Assessment — Direct Equity Valuation Framework"
-        if is_fin
-        else "Corporate Direct Equity Valuation — CAPM Cost of Equity Framework"
-    )
+    if is_ins:
+        ws["B3"].value = "Insurance Solvency & Policyholder Float — Direct Equity CAPM Framework"
+    elif is_reit:
+        ws["B3"].value = "REIT / InvIT Distributable Cash Flow (AFFO / NDCF) — Direct Equity CAPM Framework"
+    elif is_fin:
+        ws["B3"].value = "FIG Capital Structure Assessment — Direct Equity Valuation Framework"
+    else:
+        ws["B3"].value = "Corporate Direct Equity Valuation — CAPM Cost of Equity Framework"
     ws["B3"].font = FONT_SUBTITLE
     ws.row_dimensions[2].height = 26
     ws.row_dimensions[3].height = 18
@@ -3406,13 +4161,35 @@ def _build_bank_cost_of_equity(wb: Workbook, data: Dict[str, Any]) -> Dict[str, 
         17,
         2,
         5,
-        "Why WACC Is Omitted for Financial Institutions"
-        if is_fin
-        else "Direct Equity Valuation (DDM / FCFE) vs. Enterprise WACC Note",
+        "Why Policyholder Reserves Are Treated Separately from Financial Debt"
+        if is_ins
+        else (
+            "Why Distributable AFFO / NDCF Is Discounted at Equity Cost of Capital (Ke)"
+            if is_reit
+            else (
+                "Why WACC Is Omitted for Financial Institutions"
+                if is_fin
+                else "Direct Equity Valuation (DDM / FCFE) vs. Enterprise WACC Note"
+            )
+        ),
     )
     ws.merge_cells("B18:E21")
     note_cell = ws["B18"]
-    if is_fin:
+    if is_ins:
+        note_cell.value = (
+            "In P&C and Life insurers, unearned premiums, claims reserves, and policyholder liabilities constitute "
+            "investable float rather than corporate financing debt. Valuation is conducted on an Ex-AOCI Common "
+            "Equity basis using the CAPM Cost of Equity (Ke) to discount distributable equity earnings after solvency "
+            "capital retention, capturing underwriting float and stripping mark-to-market bond AOCI volatility."
+        )
+    elif is_reit:
+        note_cell.value = (
+            "In REITs and InvITs, high non-cash real estate depreciation depresses accounting EBIT and GAAP Net Income, "
+            "while mandatory 90%+ NDCF payout rules govern unitholder returns. Distributable AFFO (FFO less recurring "
+            "maintenance CapEx) after acquisition retention is discounted directly at CAPM Cost of Equity (Ke) and "
+            "cross-checked against institutional Cap-Rate Gross Asset Value (NOI / Cap Rate) less Net Debt."
+        )
+    elif is_fin:
         note_cell.value = (
             "In commercial banks, NBFCs, and financial institutions, customer deposits and wholesale borrowings "
             "function as operational raw materials (inventory) used to fund earning assets (loans and advances), "
@@ -3451,47 +4228,76 @@ def _build_bank_cost_of_equity(wb: Workbook, data: Dict[str, Any]) -> Dict[str, 
 
 
 def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str, str], hist_links: Optional[Dict[str, str]] = None):
-    ws = wb.create_sheet("DDM & FCFE Model")
-    ws.sheet_properties.tabColor = TAB_DCF
-    ws.views.sheetView[0].showGridLines = True
-
     company = data.get("company", {})
     currency = company.get("currency", "USD")
     market_data = data.get("market_data", {})
     dcf = data.get("dcf_result", {})
+    is_fin = bool(company.get("is_financial", True))
+    model_type = str(
+        company.get("model_type")
+        or dcf.get("model_type")
+        or ("BANKING_DDM" if is_fin else "STANDARD_FCFF")
+    )
+    is_ins = model_type in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM") or bool(dcf.get("is_insurance"))
+    is_reit = model_type == "REIT_INVIT_AFFO" or bool(dcf.get("is_reit"))
+
+    sheet_name = "REIT AFFO Model" if is_reit else "DDM & FCFE Model"
+    ws = wb.create_sheet(sheet_name)
+    ws.sheet_properties.tabColor = TAB_DCF
+    ws.views.sheetView[0].showGridLines = True
+
     cfmt_large = _get_currency_fmt_large(currency)
     cfmt_price = _get_currency_fmt_price(currency)
 
     n_proj = len(dcf.get("projected_revenue", [0] * 5))
     growth_schedule = dcf.get("growth_schedule", [0.10] * n_proj)
     roe_schedule = dcf.get("roe_schedule", dcf.get("margin_schedule", [0.14] * n_proj))
-    base_net_income = dcf.get("base_net_income", data.get("historicals", {}).get("net_income", [1e9])[-1])
-    base_bve = dcf.get("base_bve", data.get("historicals", {}).get("book_value", [5e9])[-1])
-    current_price = market_data.get("current_price", 0.0)
-    shares_out = market_data.get("shares_outstanding", 1.0)
-    bvps = dcf.get("bvps", base_bve / shares_out if shares_out > 0 else 0.0)
-
-    is_fin = bool(company.get("is_financial", True))
+    base_net_income = float(
+        (dcf.get("base_revenue") if is_reit else dcf.get("base_net_income"))
+        or data.get("historicals", {}).get("revenue" if is_reit else "net_income", [1e9])[-1]
+        or 0.0
+    )
+    base_bve = float(dcf.get("base_bve", data.get("historicals", {}).get("book_value", [5e9])[-1]) or 0.0)
+    current_price = float(market_data.get("current_price", 0.0) or 0.0)
+    shares_out = float(dcf.get("shares_used") or market_data.get("diluted_valuation_shares") or market_data.get("shares_outstanding", 1.0) or 1.0)
+    bvps = float(dcf.get("bvps", base_bve / shares_out if shares_out > 0 else 0.0) or 0.0)
+    use_mid_year_flag = bool(dcf.get("use_mid_year", True))
+    term_g_val = float(dcf.get("terminal_growth", data.get("macro", {}).get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025)) or 0.025)
+    start_g_val = float(growth_schedule[0]) if growth_schedule else 0.10
+    base_roe_val = float(dcf.get("base_roe", roe_schedule[0] if roe_schedule else 0.14) or 0.14)
+    target_roe_val = float(dcf.get("target_roe", roe_schedule[-1] if roe_schedule else 0.14) or 0.14)
 
     # Title Block
-    ws["B2"].value = (
-        "Multi-Stage Regulatory Capital FCFE & Dividend Discount Model"
-        if is_fin
-        else "Multi-Stage Dividend Discount (DDM) & Corporate FCFE Model"
-    )
+    if is_ins:
+        ws["B2"].value = "Multi-Stage Insurance Actuarial Excess-Return & Float DDM"
+        ws["B3"].value = f"Ex-AOCI Equity Valuation with Policyholder Float & Solvency Retention — {company.get('ticker', '')}"
+    elif is_reit:
+        ws["B2"].value = "Multi-Stage REIT / InvIT Distributable AFFO (NDCF) Valuation Model"
+        ws["B3"].value = f"Property AFFO Cash Flow Valuation & Institutional Cap-Rate GAV/NAV Cross-Check — {company.get('ticker', '')}"
+    else:
+        ws["B2"].value = (
+            "Multi-Stage Regulatory Capital FCFE & Dividend Discount Model"
+            if is_fin
+            else "Multi-Stage Dividend Discount (DDM) & Corporate FCFE Model"
+        )
+        ws["B3"].value = (
+            f"Per-Share Equity Valuation with Tier-1 Capital Reinvestment — {company.get('ticker', '')}"
+            if is_fin
+            else f"Direct Equity Cash Flow Valuation & Justified P/B Cross-Check — {company.get('ticker', '')}"
+        )
     ws["B2"].font = FONT_TITLE
-    ws["B3"].value = (
-        f"Per-Share Equity Valuation with Tier-1 Capital Reinvestment — {company.get('ticker', '')}"
-        if is_fin
-        else f"Direct Equity Cash Flow Valuation & Justified P/B Cross-Check — {company.get('ticker', '')}"
-    )
     ws["B3"].font = FONT_SUBTITLE
     ws.row_dimensions[2].height = 26
     ws.row_dimensions[3].height = 18
 
     # Table Header
     r = 5
-    _set_banner(ws, r, 2, 3 + n_proj, "Forecast Schedules & Free Cash Flow to Equity (FCFE)")
+    banner_title = (
+        "Forecast Schedules & Distributable AFFO / NDCF Cash Flows"
+        if is_reit
+        else ("Forecast Schedules & Solvency Distributable Earnings (FCFE)" if is_ins else "Forecast Schedules & Free Cash Flow to Equity (FCFE)")
+    )
+    _set_banner(ws, r, 2, 3 + n_proj, banner_title)
     r += 1
 
     col_headers = ["Metric / Forecast Line Item", "Base (FY0)"] + [f"Year {i+1}" for i in range(n_proj)]
@@ -3499,8 +4305,8 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     header_row = r
     r += 1
 
-    # 1. Net Income Growth Rate (Row 7)
-    ws.cell(row=r, column=2, value="Net Income Growth Rate (g)").font = FONT_LABEL_BOLD
+    # 1. Growth Rate (Row 7)
+    ws.cell(row=r, column=2, value="Property Revenue / FFO Growth Rate (g)" if is_reit else "Net Income Growth Rate (g)").font = FONT_LABEL_BOLD
     ws.cell(row=r, column=2).border = THIN_BORDER
     ws.cell(row=r, column=3, value="-").alignment = ALIGN_CENTER
     ws.cell(row=r, column=3).border = THIN_BORDER
@@ -3514,14 +4320,18 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     growth_row = r
     r += 1
 
-    # 2. Net Income Projections (Row 8) Live Formula: =Prev_NI * (1 + g)
-    ws.cell(row=r, column=2, value="Projected Net Income (Profit After Tax)").font = FONT_LABEL_BOLD
+    # 2. Base Flow Projections (NI for Bank/Ins/Corp; Rental Revenue for REIT)
+    ws.cell(
+        row=r,
+        column=2,
+        value="Projected Rental / Property Revenue" if is_reit else ("Normalized Operating Net Income" if is_ins else "Projected Net Income (Profit After Tax)"),
+    ).font = FONT_LABEL_BOLD
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
     ws.cell(row=r, column=2).border = THIN_BORDER
 
     base_ni_val = (
         f"=IF({hist_links['net_income_cell']}>0, {hist_links['net_income_cell']}, {base_net_income})"
-        if hist_links and "net_income_cell" in hist_links
+        if (not is_ins and not is_reit and hist_links and "net_income_cell" in hist_links)
         else base_net_income
     )
     base_ni_cell = ws.cell(row=r, column=3, value=base_ni_val)
@@ -3544,11 +4354,15 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     ni_row = r
     r += 1
 
-    # 3. Target ROE Schedule (Row 9)
-    ws.cell(row=r, column=2, value="Return on Equity (ROE %)").font = FONT_LABEL
+    # 3. ROE / AFFO Margin Schedule
+    ws.cell(
+        row=r,
+        column=2,
+        value="Distributable AFFO Margin (% of Revenue)" if is_reit else ("Ex-AOCI Return on Equity (ROE %)" if is_ins else "Return on Equity (ROE %)"),
+    ).font = FONT_LABEL
     ws.cell(row=r, column=2).fill = ALT_ROW_FILL
     ws.cell(row=r, column=2).border = THIN_BORDER
-    ws.cell(row=r, column=3, value=roe_schedule[0]).number_format = PCT_FMT
+    ws.cell(row=r, column=3, value=base_roe_val).number_format = PCT_FMT
     ws.cell(row=r, column=3).font = FONT_DATA
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
     ws.cell(row=r, column=3).border = THIN_BORDER
@@ -3564,22 +4378,51 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     roe_row = r
     r += 1
 
-    # 4. Retention Rate: b = g / ROE (Row 10)
-    ws.cell(
-        row=r,
-        column=2,
-        value="Regulatory Capital Retention Rate (b = g / ROE)"
-        if is_fin
-        else "Equity Retention / Reinvestment Rate (b = g / ROE)",
-    ).font = FONT_LABEL
+    # Optional REIT row: Projected Adjusted FFO (AFFO = Revenue * AFFO Margin)
+    affo_row = ni_row
+    if is_reit:
+        ws.cell(row=r, column=2, value="Projected Adjusted FFO (AFFO = Revenue × Margin)").font = FONT_LABEL_BOLD
+        ws.cell(row=r, column=2).border = THIN_BORDER
+        ws.cell(row=r, column=3, value=float(dcf.get("base_affo") or (base_net_income * base_roe_val))).number_format = cfmt_large
+        ws.cell(row=r, column=3).font = FONT_DATA_BOLD
+        ws.cell(row=r, column=3).alignment = ALIGN_RIGHT
+        ws.cell(row=r, column=3).border = THIN_BORDER
+        for i in range(n_proj):
+            col = 4 + i
+            cur_letter = get_column_letter(col)
+            c = ws.cell(row=r, column=col, value=f"={cur_letter}{ni_row}*{cur_letter}{roe_row}")
+            c.font = FONT_DATA_BOLD
+            c.number_format = cfmt_large
+            c.alignment = ALIGN_RIGHT
+            c.border = THIN_BORDER
+        affo_row = r
+        r += 1
+
+    # 4. Retention Rate
+    ret_lbl = (
+        "Growth & Portfolio Reinvestment Retention (b)"
+        if is_reit
+        else (
+            "Solvency Reserve & Growth Retention (b = g / ROE)"
+            if is_ins
+            else ("Regulatory Capital Retention Rate (b = g / ROE)" if is_fin else "Equity Retention / Reinvestment Rate (b = g / ROE)")
+        )
+    )
+    ws.cell(row=r, column=2, value=ret_lbl).font = FONT_LABEL
     ws.cell(row=r, column=2).border = THIN_BORDER
     ws.cell(row=r, column=3, value="-").alignment = ALIGN_CENTER
     ws.cell(row=r, column=3).border = THIN_BORDER
 
+    last_bank_col = get_column_letter(3 + n_proj)
     for i in range(n_proj):
         col = 4 + i
         cur_letter = get_column_letter(col)
-        c = ws.cell(row=r, column=col, value=f"=MIN(0.95, MAX(0.05, {cur_letter}{growth_row}/{cur_letter}{roe_row}))")
+        next_g_ref = f"{get_column_letter(col + 1)}{growth_row}" if i < n_proj - 1 else ke_links["g_cell"]
+        if is_reit:
+            ret_formula = f"=MIN(0.25, MAX(0.05, MAX(0, {next_g_ref}-0.70*{ke_links['g_cell']})/0.12))"
+        else:
+            ret_formula = f"=MIN(0.85, MAX(0.05, {next_g_ref}/MAX({cur_letter}{roe_row}, ${last_bank_col}${roe_row}, 0.95*{cur_letter}{growth_row})))"
+        c = ws.cell(row=r, column=col, value=ret_formula)
         c.font = FONT_DATA
         c.number_format = PCT_FMT
         c.alignment = ALIGN_RIGHT
@@ -3587,13 +4430,13 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     retention_row = r
     r += 1
 
-    # 5. Equity Capital Retained (Row 11) = NI * b
+    # 5. Equity Capital / AFFO Retained
     ws.cell(
         row=r,
         column=2,
-        value="(−) Tier-1 Regulatory Capital Retained"
-        if is_fin
-        else "(−) Retained Earnings Reinvested for Growth",
+        value="(−) Acquisition & Property Maintenance Retention"
+        if is_reit
+        else ("(−) Policyholder & Solvency Capital Retained" if is_ins else ("(−) Tier-1 Regulatory Capital Retained" if is_fin else "(−) Retained Earnings Reinvested for Growth")),
     ).font = FONT_LABEL
     ws.cell(row=r, column=2).fill = ALT_ROW_FILL
     ws.cell(row=r, column=2).border = THIN_BORDER
@@ -3601,10 +4444,11 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
     ws.cell(row=r, column=3).border = THIN_BORDER
 
+    flow_source_row = affo_row if is_reit else ni_row
     for i in range(n_proj):
         col = 4 + i
         cur_letter = get_column_letter(col)
-        c = ws.cell(row=r, column=col, value=f"={cur_letter}{ni_row}*{cur_letter}{retention_row}")
+        c = ws.cell(row=r, column=col, value=f"={cur_letter}{flow_source_row}*{cur_letter}{retention_row}")
         c.font = FONT_DATA
         c.fill = ALT_ROW_FILL
         c.number_format = cfmt_large
@@ -3613,13 +4457,13 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     reinvest_row = r
     r += 1
 
-    # 6. Free Cash Flow to Equity (FCFE / Distributable Dividends) (Row 12) = NI - Retained
+    # 6. Distributable Cash Flow (FCFE / NDCF)
     ws.cell(
         row=r,
         column=2,
-        value="Free Cash Flow to Equity (FCFE / Distributable)"
-        if is_fin
-        else "Free Cash Flow to Equity (FCFE / Distributable Dividends)",
+        value="Distributable Unitholder AFFO (NDCF)"
+        if is_reit
+        else ("Free Cash Flow to Equity (FCFE / Distributable)" if is_fin else "Free Cash Flow to Equity (FCFE / Distributable Dividends)"),
     ).font = FONT_TOTAL
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
     ws.cell(row=r, column=2).border = TOTAL_BORDER
@@ -3630,7 +4474,7 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     for i in range(n_proj):
         col = 4 + i
         cur_letter = get_column_letter(col)
-        c = ws.cell(row=r, column=col, value=f"={cur_letter}{ni_row}-{cur_letter}{reinvest_row}")
+        c = ws.cell(row=r, column=col, value=f"={cur_letter}{flow_source_row}-{cur_letter}{reinvest_row}")
         c.font = FONT_TOTAL
         c.fill = HIGHLIGHT_FILL
         c.number_format = cfmt_large
@@ -3639,12 +4483,16 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     fcfe_row = r
     r += 1
 
-    # 7. Cumulative Book Value of Equity (Row 13) = Prev_BVE + Reinvested
-    ws.cell(row=r, column=2, value="Book Value of Equity (Cumulative)").font = FONT_LABEL
+    # 7. Cumulative Equity / Real-Asset NAV Base
+    ws.cell(
+        row=r,
+        column=2,
+        value="Cap-Rate Net Asset Value + Retained AFFO (Memo)" if is_reit else ("Ex-AOCI Book Value of Equity (Cumulative)" if is_ins else "Book Value of Equity (Cumulative)"),
+    ).font = FONT_LABEL
     ws.cell(row=r, column=2).border = THIN_BORDER
     base_bve_val = (
         f"=IF({hist_links['book_value_cell']}>0, {hist_links['book_value_cell']}, {base_bve})"
-        if hist_links and "book_value_cell" in hist_links
+        if (not is_ins and not is_reit and hist_links and "book_value_cell" in hist_links)
         else base_bve
     )
     base_bve_cell = ws.cell(row=r, column=3, value=base_bve_val)
@@ -3673,10 +4521,11 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
     ws.cell(row=r, column=3).border = THIN_BORDER
 
+    first_bank_t = 0.5 if use_mid_year_flag else 1.0
     for i in range(n_proj):
         col = 4 + i
         if i == 0:
-            c = ws.cell(row=r, column=col, value=0.5)
+            c = ws.cell(row=r, column=col, value=first_bank_t)
         else:
             prev_letter = get_column_letter(col - 1)
             c = ws.cell(row=r, column=col, value=f"={prev_letter}{r}+1")
@@ -3727,21 +4576,40 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
 
     # Terminal Value Calculation Section
     r += 1
-    _set_banner(ws, r, 2, 5, "Calculation of Terminal Value (Gordon Growth on FCFE)")
+    _set_banner(
+        ws,
+        r,
+        2,
+        5,
+        "Calculation of Terminal Value (Gordon Growth on Distributable AFFO / NDCF)"
+        if is_reit
+        else "Calculation of Terminal Value (Gordon Growth on FCFE)",
+    )
     r += 1
 
     tv_start_row = r
     last_col_letter = get_column_letter(3 + n_proj)
 
-    tv_rows = [
-        ("Long-Term Terminal Growth Rate (g)", f"=MIN({ke_links['g_cell']}, {ke_links['ke_cell']}-0.02)", PCT_FMT, False),
-        ("Steady-State Terminal ROE", f"={last_col_letter}{roe_row}", PCT_FMT, False),
-        ("Terminal Reinvestment Rate (g / ROE)", f"=MIN(0.95, MAX(0.05, D{tv_start_row}/D{tv_start_row+1}))", PCT_FMT, False),
-        ("Normalized Terminal Year Net Income", f"={last_col_letter}{ni_row}*(1+D{tv_start_row})", cfmt_large, False),
-        ("Normalized Terminal Year FCFE", f"=D{tv_start_row+3}*(1-D{tv_start_row+2})", cfmt_large, False),
-        ("Terminal Equity Value at Year N", f"=IF({ke_links['ke_cell']}>D{tv_start_row}, D{tv_start_row+4}/({ke_links['ke_cell']}-D{tv_start_row}), 0)", cfmt_large, True),
-        ("Present Value of Terminal Value", f"=D{tv_start_row+5}*{last_col_letter}{df_row}", cfmt_large, True),
-    ]
+    if is_reit:
+        tv_rows = [
+            ("Long-Term Terminal Growth Rate (g)", f"=MIN({ke_links['g_cell']}, {ke_links['ke_cell']}-0.02)", PCT_FMT, False),
+            ("Steady-State Terminal AFFO Margin (%)", f"={last_col_letter}{roe_row}", PCT_FMT, False),
+            ("Terminal Portfolio Growth Retention Rate (b)", f"=MIN(0.25, MAX(0.05, MAX(0, D{tv_start_row}-0.70*D{tv_start_row})/0.12))", PCT_FMT, False),
+            ("Normalized Terminal Year AFFO", f"={last_col_letter}{flow_source_row}*(1+D{tv_start_row})", cfmt_large, False),
+            ("Normalized Terminal Year Distributable AFFO (NDCF)", f"=D{tv_start_row+3}*(1-D{tv_start_row+2})", cfmt_large, False),
+            ("Terminal Equity Value at Year N", f"=IF({ke_links['ke_cell']}>D{tv_start_row}, D{tv_start_row+4}/({ke_links['ke_cell']}-D{tv_start_row}), 0)", cfmt_large, True),
+            ("Present Value of Terminal Value", f"=D{tv_start_row+5}*{last_col_letter}{df_row}", cfmt_large, True),
+        ]
+    else:
+        tv_rows = [
+            ("Long-Term Terminal Growth Rate (g)", f"=MIN({ke_links['g_cell']}, {ke_links['ke_cell']}-0.02)", PCT_FMT, False),
+            ("Steady-State Terminal ROE", f"={last_col_letter}{roe_row}", PCT_FMT, False),
+            ("Terminal Reinvestment Rate (g / ROE)", f"=MIN(0.95, MAX(0.05, D{tv_start_row}/D{tv_start_row+1}))", PCT_FMT, False),
+            ("Normalized Terminal Year Net Income", f"={last_col_letter}{ni_row}*(1+D{tv_start_row})", cfmt_large, False),
+            ("Normalized Terminal Year FCFE", f"=D{tv_start_row+3}*(1-D{tv_start_row+2})", cfmt_large, False),
+            ("Terminal Equity Value at Year N", f"=IF({ke_links['ke_cell']}>D{tv_start_row}, D{tv_start_row+4}/({ke_links['ke_cell']}-D{tv_start_row}), 0)", cfmt_large, True),
+            ("Present Value of Terminal Value", f"=D{tv_start_row+5}*{last_col_letter}{df_row}", cfmt_large, True),
+        ]
 
     for label, formula_val, fmt, is_bold in tv_rows:
         fill = HIGHLIGHT_FILL if is_bold else (ALT_ROW_FILL if r % 2 == 0 else None)
@@ -3763,19 +4631,34 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
 
     # Equity Valuation Summary Section
     r += 1
-    _set_banner(ws, r, 2, 5, "Valuation Summary & Implied Fair Value per Share")
+    _set_banner(ws, r, 2, 5, "Valuation Summary & Implied Fair Value per Unit" if is_reit else "Valuation Summary & Implied Fair Value per Share")
     r += 1
 
     first_col = get_column_letter(4)
     last_col = get_column_letter(3 + n_proj)
     val_start_row = r
 
+    val_shares_ref_or_num = (
+        f"={hist_links['val_shares_cell']}"
+        if (not is_reit and not is_ins and hist_links and "val_shares_cell" in hist_links)
+        else shares_out
+    )
     val_summary_rows = [
-        ("Cumulative Present Value of 5-Yr FCFEs", f"=SUM({first_col}{pv_fcfe_row}:{last_col}{pv_fcfe_row})", cfmt_large, False),
+        (
+            f"Cumulative Present Value of {n_proj}-Yr Distributable AFFO" if is_reit else f"Cumulative Present Value of {n_proj}-Yr FCFEs",
+            f"=SUM({first_col}{pv_fcfe_row}:{last_col}{pv_fcfe_row})",
+            cfmt_large,
+            False,
+        ),
         ("Present Value of Terminal Equity Value", f"=D{pv_tv_row}", cfmt_large, False),
         ("Total Implied Equity Value", f"=D{val_start_row}+D{val_start_row+1}", cfmt_large, True),
-        ("(÷) Diluted Shares Outstanding", shares_out, INT_FMT, False),
-        ("Multi-Stage DDM / FCFE Fair Value per Share", f"=MAX(0, D{val_start_row+2}/D{val_start_row+3})", cfmt_price, True),
+        ("(÷) Diluted Units Outstanding" if is_reit else "(÷) Diluted Shares Outstanding", val_shares_ref_or_num, INT_FMT, False),
+        (
+            "Distributable AFFO Fair Value per Unit" if is_reit else ("Actuarial Equity Fair Value per Share" if is_ins else "Multi-Stage DDM / FCFE Fair Value per Share"),
+            f"=MAX(0, D{val_start_row+2}/D{val_start_row+3})",
+            cfmt_price,
+            True,
+        ),
         ("Current Market Price (CMP)", current_price, cfmt_price, False),
         ("Implied Upside / (Downside)", f"=IF(D{val_start_row+5}>0, (D{val_start_row+4}-D{val_start_row+5})/D{val_start_row+5}, 0)", PCT_FMT, True),
     ]
@@ -3796,19 +4679,41 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
         ws.row_dimensions[r].height = 22 if is_bold else 19
         r += 1
 
-    # Cross-Check Section (Justified P/B Model)
+    # Cross-Check Section (Cap-Rate NAV for REITs; Justified P/B for Banks/Insurers/Corp)
     r += 1
-    _set_banner(ws, r, 2, 5, "Cross-Check: Justified Price-to-Book (P/B) Model")
+    _set_banner(
+        ws,
+        r,
+        2,
+        5,
+        "Cross-Check: Institutional Cap-Rate GAV & Net Asset Value (NAV)"
+        if is_reit
+        else ("Cross-Check: Justified Price-to-Ex-AOCI Book (P/B) Model" if is_ins else "Cross-Check: Justified Price-to-Book (P/B) Model"),
+    )
     r += 1
     pb_start_row = r
 
-    bvps_formula = f"=IF(D{val_start_row+3}>0, C{bve_row}/D{val_start_row+3}, {bvps})"
-
-    pb_rows = [
-        ("Current Book Value per Share (BVPS)", bvps_formula, cfmt_price, False),
-        ("Justified P/B Multiplier = (ROE − g) / (Ke − g)", f"=IF({ke_links['ke_cell']}>D{tv_start_row}, MAX(0.2, (D{tv_start_row+1}-D{tv_start_row})/({ke_links['ke_cell']}-D{tv_start_row})), 1.0)", MULT_FMT, True),
-        ("Justified P/B Implied Fair Value per Share", f"=D{pb_start_row}*D{pb_start_row+1}", cfmt_price, True),
-    ]
+    if is_reit:
+        noi_val = float(dcf.get("noi") or 0.0)
+        cap_rate_val = float(dcf.get("benchmark_cap_rate") or 0.06)
+        gav_val = float(dcf.get("gav") or (noi_val / cap_rate_val if cap_rate_val > 0 else 0.0))
+        nav_eq_val = float(dcf.get("base_bve") or 0.0)
+        net_bridge_val = max(0.0, gav_val - nav_eq_val)
+        pb_rows = [
+            ("Estimated Annual Property NOI", noi_val, cfmt_large, False),
+            ("Benchmark Real-Asset Cap Rate (%)", cap_rate_val, PCT_FMT, False),
+            ("Implied Gross Asset Value (GAV = NOI / Cap Rate)", f"=D{pb_start_row}/D{pb_start_row+1}", cfmt_large, False),
+            ("(−) Net Debt, Preferred & Minority Interest Bridge", net_bridge_val, cfmt_large, False),
+            ("Cap-Rate Implied Net Asset Value (NAV)", f"=MAX(0, D{pb_start_row+2}-D{pb_start_row+3})", cfmt_large, True),
+            ("Cap-Rate NAV Fair Value per Unit", f"=IF(D{val_start_row+3}>0, D{pb_start_row+4}/D{val_start_row+3}, 0)", cfmt_price, True),
+        ]
+    else:
+        bvps_formula = f"=IF(D{val_start_row+3}>0, C{bve_row}/D{val_start_row+3}, {bvps})"
+        pb_rows = [
+            ("Ex-AOCI Book Value per Share (BVPS)" if is_ins else "Current Book Value per Share (BVPS)", bvps_formula, cfmt_price, False),
+            ("Justified P/B Multiplier = (ROE − g) / (Ke − g)", f"=IF({ke_links['ke_cell']}>D{tv_start_row}, MAX(0.2, (D{tv_start_row+1}-D{tv_start_row})/({ke_links['ke_cell']}-D{tv_start_row})), 1.0)", MULT_FMT, True),
+            ("Justified P/B Implied Fair Value per Share", f"=D{pb_start_row}*D{pb_start_row+1}", cfmt_price, True),
+        ]
 
     for label, val, fmt, is_bold in pb_rows:
         fill = HIGHLIGHT_FILL if is_bold else (ALT_ROW_FILL if r % 2 == 0 else None)
@@ -3832,19 +4737,23 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     chart_col_letter = get_column_letter(4 + n_proj + 1)
     proj_cats_ref = Reference(ws, min_col=4, min_row=header_row, max_col=3 + n_proj, max_row=header_row)
 
-    # Chart 3: Projected FCFE Trajectory
+    # Chart 3: Projected Distributable Cash Trajectory
     try:
         chart_fcfe = BarChart()
         chart_fcfe.type = "col"
         chart_fcfe.style = 10
-        chart_fcfe.title = f"Projected Free Cash Flow to Equity (FCFE) ({currency})"
-        chart_fcfe.y_axis.title = f"FCFE ({currency})"
+        chart_fcfe.title = (
+            f"Projected Distributable Unitholder AFFO / NDCF ({currency})"
+            if is_reit
+            else f"Projected Free Cash Flow to Equity (FCFE) ({currency})"
+        )
+        chart_fcfe.y_axis.title = f"NDCF ({currency})" if is_reit else f"FCFE ({currency})"
         chart_fcfe.x_axis.title = "Forecast Period"
         chart_fcfe.width = 18
         chart_fcfe.height = 12
 
         data_fcfe_ref = Reference(ws, min_col=4, min_row=fcfe_row, max_col=3 + n_proj, max_row=fcfe_row)
-        s_fcfe = Series(data_fcfe_ref, title="FCFE (Distributable Cash)")
+        s_fcfe = Series(data_fcfe_ref, title="Distributable AFFO (NDCF)" if is_reit else "FCFE (Distributable Cash)")
         chart_fcfe.series.append(s_fcfe)
         chart_fcfe.set_categories(proj_cats_ref)
 
@@ -3852,22 +4761,26 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
     except Exception as e:
         logger.warning("Could not add FCFE chart to Bank DDM Model: %s", e)
 
-    # Chart 4: Projected Net Income & Reinvestment Trajectory
+    # Chart 4: Projected Earnings / AFFO & Reinvestment Trajectory
     try:
         chart_ni = BarChart()
         chart_ni.type = "col"
         chart_ni.style = 11
-        chart_ni.title = f"Projected Net Income & Regulatory Capital Retained ({currency})"
+        chart_ni.title = (
+            f"Projected Adjusted FFO & Portfolio Growth Retained ({currency})"
+            if is_reit
+            else f"Projected Net Income & Capital Retained ({currency})"
+        )
         chart_ni.y_axis.title = f"Amount ({currency})"
         chart_ni.x_axis.title = "Forecast Period"
         chart_ni.width = 18
         chart_ni.height = 12
 
-        data_ni_proj = Reference(ws, min_col=4, min_row=ni_row, max_col=3 + n_proj, max_row=ni_row)
+        data_ni_proj = Reference(ws, min_col=4, min_row=flow_source_row, max_col=3 + n_proj, max_row=flow_source_row)
         data_reinv_proj = Reference(ws, min_col=4, min_row=reinvest_row, max_col=3 + n_proj, max_row=reinvest_row)
 
-        s_ni_proj = Series(data_ni_proj, title="Net Income")
-        s_reinv = Series(data_reinv_proj, title="Capital Retained")
+        s_ni_proj = Series(data_ni_proj, title="Projected AFFO" if is_reit else "Net Income")
+        s_reinv = Series(data_reinv_proj, title="Growth Retained" if is_reit else "Capital Retained")
         chart_ni.series.append(s_ni_proj)
         chart_ni.series.append(s_reinv)
         chart_ni.set_categories(proj_cats_ref)
@@ -3883,8 +4796,35 @@ def _build_bank_ddm_model(wb: Workbook, data: Dict[str, Any], ke_links: Dict[str
         ws.column_dimensions[get_column_letter(c)].width = 22
     ws.freeze_panes = "C6"
 
+    return {
+        "sheet_name": sheet_name,
+        "is_ins": is_ins,
+        "is_reit": is_reit,
+        "price_cell": f"'{sheet_name}'!D{val_start_row+4}",
+        "upside_cell": f"'{sheet_name}'!D{val_start_row+6}",
+        "eq_cell": f"'{sheet_name}'!D{val_start_row+2}",
+        "tg_cell": f"'{sheet_name}'!D{tv_start_row}",
+        "ke_cell": ke_links["ke_cell"],
+        "g_cell": ke_links["g_cell"],
+        "ni_row": ni_row,
+        "roe_row": roe_row,
+        "affo_row": affo_row,
+        "bve_row": bve_row,
+        "period_row": period_row,
+        "shares_row": val_start_row + 3,
+        "price_row": val_start_row + 4,
+        "n_proj": n_proj,
+        "start_growth": start_g_val,
+        "base_roe": base_roe_val,
+        "target_roe": target_roe_val,
+        "terminal_growth": term_g_val,
+        "base_ni": base_net_income,
+        "shares_out": shares_out,
+        "use_mid_year": use_mid_year_flag,
+    }
 
-def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any]):
+
+def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any], ddm_links: Optional[Dict[str, Any]] = None):
     ws = wb.create_sheet("Sensitivity")
     ws.sheet_properties.tabColor = TAB_SENS
     ws.views.sheetView[0].showGridLines = True
@@ -3894,132 +4834,274 @@ def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any]):
     market_data = data.get("market_data", {})
     dcf = data.get("dcf_result", {})
     sens = data.get("sensitivity", {})
+    ddm_links = ddm_links or {}
+    model_type = str(company.get("model_type") or dcf.get("model_type") or "BANKING_DDM")
+    is_ins = bool(ddm_links.get("is_ins")) or model_type in ("INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM") or bool(dcf.get("is_insurance"))
+    is_reit = bool(ddm_links.get("is_reit")) or model_type == "REIT_INVIT_AFFO" or bool(dcf.get("is_reit"))
+    model_sheet = str(ddm_links.get("sheet_name") or ("REIT AFFO Model" if is_reit else "DDM & FCFE Model"))
     cfmt_price = _get_currency_fmt_price(currency)
+    cfmt_large = _get_currency_fmt_large(currency)
 
     # Title Banner
-    _set_banner(ws, 2, 2, 8, "Valuation Sensitivity Analysis (2D Scenario Price Matrix)")
+    _set_banner(ws, 2, 2, 8, "Valuation Sensitivity Analysis (2D Dynamic Formula Scenario Matrices)")
 
     # Reference Values Block
-    ws.cell(row=4, column=2, value="Current Share Price:").font = FONT_LABEL_BOLD
+    ws.cell(row=4, column=2, value="Current Unit Price:" if is_reit else "Current Share Price:").font = FONT_LABEL_BOLD
     cmp_cell = ws.cell(row=4, column=3, value=market_data.get("current_price", 0))
     cmp_cell.font = FONT_DATA_BOLD
     cmp_cell.number_format = cfmt_price
 
-    ws.cell(row=4, column=5, value="Base DDM Fair Value:").font = FONT_LABEL_BOLD
-    dcf_cell = ws.cell(row=4, column=6, value=dcf.get("implied_price", 0))
+    ws.cell(row=4, column=5, value="Base AFFO Fair Value:" if is_reit else ("Base Actuarial Fair Value:" if is_ins else "Base DDM Fair Value:")).font = FONT_LABEL_BOLD
+    base_fv_val = f"={ddm_links['price_cell']}" if ddm_links.get("price_cell") else dcf.get("implied_price", 0)
+    dcf_cell = ws.cell(row=4, column=6, value=base_fv_val)
     dcf_cell.font = FONT_DATA_BOLD
     dcf_cell.number_format = cfmt_price
 
     r = 6
-    _set_banner(ws, r, 2, 7, "Matrix 1: Net Income Growth Rate (Columns) vs Cost of Equity (Rows)")
-    r += 1
+    bank_tables = []
 
-    grid_data = sens.get("growth_wacc", {})
+    def _render_bank_matrix_shell(title: str, corner_lbl: str, ke_vals: list, col_vals: list, grid_vals: list, mode: str) -> int:
+        nonlocal r
+        _set_banner(ws, r, 2, 2 + len(col_vals), title)
+        r += 1
+        ws.row_dimensions[r].height = 22
+        corner_cell = ws.cell(row=r, column=2, value=corner_lbl)
+        corner_cell.font = FONT_HEADER
+        corner_cell.fill = HEADER_FILL
+        corner_cell.alignment = ALIGN_CENTER
+        corner_cell.border = THIN_BORDER
+
+        for j, c_val in enumerate(col_vals):
+            col = 3 + j
+            c = ws.cell(row=r, column=col, value=float(c_val))
+            c.font = FONT_HEADER
+            c.fill = HEADER_FILL
+            c.number_format = PCT_FMT
+            c.alignment = ALIGN_CENTER
+            c.border = THIN_BORDER
+        hdr_r = r
+        r += 1
+        d_start_r = r
+
+        for row_idx, ke_val in enumerate(ke_vals):
+            fill = ALT_ROW_FILL if row_idx % 2 == 0 else None
+            lbl = ws.cell(row=r, column=2, value=float(ke_val))
+            lbl.font = FONT_HEADER
+            lbl.fill = HEADER_FILL
+            lbl.border = THIN_BORDER
+            lbl.number_format = PCT_FMT
+            lbl.alignment = ALIGN_CENTER
+
+            for col_idx, _ in enumerate(col_vals):
+                val = grid_vals[row_idx][col_idx] if row_idx < len(grid_vals) and col_idx < len(grid_vals[row_idx]) else 0.0
+                cell = ws.cell(row=r, column=3 + col_idx, value=float(val))
+                cell.font = FONT_DATA_BOLD if (row_idx == len(ke_vals) // 2 and col_idx == len(col_vals) // 2) else FONT_DATA
+                cell.fill = fill or PatternFill(fill_type=None)
+                cell.border = THIN_BORDER
+                cell.number_format = cfmt_price
+                cell.alignment = ALIGN_RIGHT
+            ws.row_dimensions[r].height = 20
+            r += 1
+
+        d_end_r = r - 1
+        color_scale = ColorScaleRule(
+            start_type="min", start_color="FCA5A5",
+            mid_type="percentile", mid_value=50, mid_color="FEF08A",
+            end_type="max", end_color="86EFAC",
+        )
+        last_col_l = get_column_letter(2 + len(col_vals))
+        ws.conditional_formatting.add(f"C{d_start_r}:{last_col_l}{d_end_r}", color_scale)
+        bank_tables.append({
+            "mode": mode,
+            "ke_vals": ke_vals,
+            "col_vals": col_vals,
+            "hdr_r": hdr_r,
+            "data_start_r": d_start_r,
+        })
+        r += 2
+        return r
+
+    # Matrix 1: Growth Rate vs Ke
+    grid_data = sens.get("growth_wacc", {}) or {}
     ke_range = grid_data.get("wacc_range", [0.08, 0.09, 0.10, 0.11, 0.12])
     g_range = grid_data.get("growth_range", [0.08, 0.09, 0.10, 0.11, 0.12])
-    grid = grid_data.get("price_grid") or grid_data.get("grid", [[0]*5]*5)
-
-    # Header Row
-    ws.row_dimensions[r].height = 22
-    corner_cell = ws.cell(row=r, column=2, value="Cost of Equity (Ke) \\ Growth (g)")
-    corner_cell.font = FONT_HEADER
-    corner_cell.fill = HEADER_FILL
-    corner_cell.alignment = ALIGN_CENTER
-    corner_cell.border = THIN_BORDER
-
-    for j, g_val in enumerate(g_range):
-        col = 3 + j
-        c = ws.cell(row=r, column=col, value=g_val)
-        c.font = FONT_HEADER
-        c.fill = HEADER_FILL
-        c.number_format = PCT_FMT
-        c.alignment = ALIGN_CENTER
-        c.border = THIN_BORDER
-    r += 1
-
-    m1_start_r = r
-    for row_idx, ke_val in enumerate(ke_range):
-        fill = ALT_ROW_FILL if row_idx % 2 == 0 else None
-        lbl = ws.cell(row=r, column=2, value=ke_val)
-        lbl.font = FONT_HEADER
-        lbl.fill = HEADER_FILL
-        lbl.border = THIN_BORDER
-        lbl.number_format = PCT_FMT
-        lbl.alignment = ALIGN_CENTER
-
-        for col_idx, g_val in enumerate(g_range):
-            val = grid[row_idx][col_idx] if row_idx < len(grid) and col_idx < len(grid[row_idx]) else 0.0
-            cell = ws.cell(row=r, column=3 + col_idx, value=val)
-            cell.font = FONT_DATA
-            cell.fill = fill or PatternFill(fill_type=None)
-            cell.border = THIN_BORDER
-            cell.number_format = cfmt_price
-            cell.alignment = ALIGN_RIGHT
-        ws.row_dimensions[r].height = 20
-        r += 1
-
-    m1_end_r = r - 1
-
-    # Apply 3-color scale
-    color_scale = ColorScaleRule(
-        start_type="min", start_color="FCA5A5",  # soft red
-        mid_type="percentile", mid_value=50, mid_color="FEF08A",  # soft yellow
-        end_type="max", end_color="86EFAC",  # soft green
+    grid = grid_data.get("price_grid") or grid_data.get("grid", [[0] * 5] * 5)
+    _render_bank_matrix_shell(
+        "Matrix 1: Property Revenue / AFFO Growth (Columns) vs Cost of Equity (Rows)"
+        if is_reit
+        else "Matrix 1: Net Income Growth Rate (Columns) vs Cost of Equity (Rows)",
+        "Cost of Equity (Ke) \\ Growth (g)",
+        ke_range,
+        g_range,
+        grid,
+        mode="ni_growth",
     )
-    last_g_col_letter = get_column_letter(2 + len(g_range))
-    ws.conditional_formatting.add(f"C{m1_start_r}:{last_g_col_letter}{m1_end_r}", color_scale)
 
-    # Matrix 2: Target ROE vs Ke
-    r += 2
-    _set_banner(ws, r, 2, 7, "Matrix 2: Target Return on Equity (ROE) (Columns) vs Cost of Equity (Rows)")
-    r += 1
-
-    roe_data = sens.get("margin_wacc", {})
+    # Matrix 2: Target ROE / AFFO Margin vs Ke
+    roe_data = sens.get("margin_wacc", {}) or {}
     ke_range2 = roe_data.get("wacc_range", [0.08, 0.09, 0.10, 0.11, 0.12])
     roe_range = roe_data.get("margin_range") or roe_data.get("roe_range", [0.10, 0.12, 0.14, 0.16, 0.18])
-    grid2 = roe_data.get("price_grid") or roe_data.get("grid", [[0]*5]*5)
+    grid2 = roe_data.get("price_grid") or roe_data.get("grid", [[0] * 5] * 5)
+    _render_bank_matrix_shell(
+        "Matrix 2: Target AFFO Margin (%) (Columns) vs Cost of Equity (Rows)"
+        if is_reit
+        else ("Matrix 2: Target Ex-AOCI ROE (%) (Columns) vs Cost of Equity (Rows)" if is_ins else "Matrix 2: Target Return on Equity (ROE) (Columns) vs Cost of Equity (Rows)"),
+        "Cost of Equity (Ke) \\ Target AFFO Margin" if is_reit else "Cost of Equity (Ke) \\ Target ROE",
+        ke_range2,
+        roe_range,
+        grid2,
+        mode="target_roe",
+    )
 
-    ws.row_dimensions[r].height = 22
-    corner_cell2 = ws.cell(row=r, column=2, value="Cost of Equity (Ke) \\ Target ROE")
-    corner_cell2.font = FONT_HEADER
-    corner_cell2.fill = HEADER_FILL
-    corner_cell2.alignment = ALIGN_CENTER
-    corner_cell2.border = THIN_BORDER
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Multi-Year Equity Sensitivity Calculation Audit Engine
+    # ═══════════════════════════════════════════════════════════════════════════
+    if bank_tables and ddm_links.get("price_cell"):
+        n_proj = int(ddm_links.get("n_proj") or 5)
+        ni_row = int(ddm_links.get("ni_row") or 8)
+        period_row = int(ddm_links.get("period_row") or 14)
+        shares_row = int(ddm_links.get("shares_row") or 29)
+        last_bank_col = get_column_letter(3 + n_proj)
 
-    for j, roe_val in enumerate(roe_range):
-        col = 3 + j
-        c = ws.cell(row=r, column=col, value=roe_val)
-        c.font = FONT_HEADER
-        c.fill = HEADER_FILL
-        c.number_format = PCT_FMT
-        c.alignment = ALIGN_CENTER
-        c.border = THIN_BORDER
-    r += 1
+        _set_banner(ws, r, 2, 5, f"Sensitivity Calibration Parameters (Linked to {model_sheet})")
+        r += 1
+        p_rows: Dict[str, int] = {}
+        bank_params = [
+            ("base_ni", "Base Year Property Revenue (FY0)" if is_reit else "Base Year Net Income (FY0)", f"='{model_sheet}'!C{ni_row}", cfmt_large),
+            ("start_g", "Base Starting Growth Rate", float(ddm_links.get("start_growth") or 0.10), PCT_FMT),
+            ("base_roe", "Base Year AFFO Margin (%)" if is_reit else "Base Year Return on Equity", float(ddm_links.get("base_roe") or 0.14), PCT_FMT),
+            ("target_roe", "Target AFFO Margin (%)" if is_reit else "Base Target Return on Equity", float(ddm_links.get("target_roe") or 0.14), PCT_FMT),
+            ("term_g", "Terminal Growth Rate (g)", f"={ddm_links['g_cell']}", PCT_FMT),
+        ]
+        for pk, plbl, pval, pfmt in bank_params:
+            ws.cell(row=r, column=2, value=plbl).font = FONT_LABEL
+            ws.cell(row=r, column=2).border = THIN_BORDER
+            pc = ws.cell(row=r, column=3, value=pval)
+            pc.font = FONT_DATA_BOLD
+            pc.number_format = pfmt
+            pc.alignment = ALIGN_RIGHT
+            pc.border = THIN_BORDER
+            p_rows[pk] = r
+            r += 1
 
-    m2_start_r = r
-    for row_idx, ke_val in enumerate(ke_range2):
-        fill = ALT_ROW_FILL if row_idx % 2 == 0 else None
-        lbl = ws.cell(row=r, column=2, value=ke_val)
-        lbl.font = FONT_HEADER
-        lbl.fill = HEADER_FILL
-        lbl.border = THIN_BORDER
-        lbl.number_format = PCT_FMT
-        lbl.alignment = ALIGN_CENTER
+        r += 1
+        c_bni = f"$C${p_rows['base_ni']}"
+        c_bsg = f"$C${p_rows['start_g']}"
+        c_broe = f"$C${p_rows['base_roe']}"
+        c_troe = f"$C${p_rows['target_roe']}"
+        c_tg = f"$C${p_rows['term_g']}"
+        c_sh = f"'{model_sheet}'!$D${shares_row}"
 
-        for col_idx, roe_val in enumerate(roe_range):
-            val = grid2[row_idx][col_idx] if row_idx < len(grid2) and col_idx < len(grid2[row_idx]) else 0.0
-            cell = ws.cell(row=r, column=3 + col_idx, value=val)
-            cell.font = FONT_DATA
-            cell.fill = fill or PatternFill(fill_type=None)
-            cell.border = THIN_BORDER
-            cell.number_format = cfmt_price
-            cell.alignment = ALIGN_RIGHT
-        ws.row_dimensions[r].height = 20
+        ni_cols = [get_column_letter(9 + k) for k in range(n_proj)]
+        pv_cols = [get_column_letter(9 + n_proj + k) for k in range(n_proj)]
+        col_sum_pv = get_column_letter(9 + 2 * n_proj)
+        col_pv_tv = get_column_letter(10 + 2 * n_proj)
+        col_px_out = get_column_letter(11 + 2 * n_proj)
+
+        hdrs = (
+            [
+                "Scenario ID",
+                "Ke",
+                "Start g",
+                "Target Margin" if is_reit else "Target ROE",
+                "Eff. Start g" if (is_ins or is_reit) else "Clamped Start g",
+                "Fade Exp",
+                "Eff. Base Margin" if is_reit else "Eff. Base ROE",
+            ]
+            + [f"{'Rev' if is_reit else 'NI'} Yr{k+1}" for k in range(n_proj)]
+            + [f"PV({'NDCF' if is_reit else 'FCFE'}) Yr{k+1}" for k in range(n_proj)]
+            + [f"Sum PV({'NDCF' if is_reit else 'FCFE'})", "PV(Terminal Equity)", "Implied Price"]
+        )
+        _set_banner(
+            ws,
+            r,
+            2,
+            1 + len(hdrs),
+            f"Multi-Year {'REIT AFFO' if is_reit else ('Insurance DDM' if is_ins else 'Bank DDM / FCFE')} Sensitivity Audit Engine (Live Formulas)",
+        )
+        r += 1
+        _set_table_headers(ws, r, hdrs, start_col=2)
         r += 1
 
-    m2_end_r = r - 1
-    last_roe_col_letter = get_column_letter(2 + len(roe_range))
-    ws.conditional_formatting.add(f"C{m2_start_r}:{last_roe_col_letter}{m2_end_r}", color_scale)
+        step_den = max(1, n_proj - 1)
+        for t_idx, spec in enumerate(bank_tables, start=1):
+            mode = spec["mode"]
+            hdr_r = spec["hdr_r"]
+            d_start = spec["data_start_r"]
+            for i in range(len(spec["ke_vals"])):
+                grid_r = d_start + i
+                for j in range(len(spec["col_vals"])):
+                    grid_col = 3 + j
+                    grid_col_l = get_column_letter(grid_col)
+                    aud_r = r
+
+                    ke_ref = f"$B{grid_r}"
+                    col_ref = f"{grid_col_l}${hdr_r}"
+
+                    sg_in_f = f"={col_ref}" if mode == "ni_growth" else f"={c_bsg}"
+                    if is_reit:
+                        troe_in_f = f"=MAX(0.08, MIN(0.85, {col_ref}))" if mode == "target_roe" else f"=MAX(0.08, MIN(0.85, {c_troe}))"
+                        clamped_sg_f = f"=D{aud_r}"
+                        eff_broe_f = f"={c_broe}"
+                    elif is_ins:
+                        troe_in_f = f"=MAX(0.05, MIN(0.35, {col_ref}))" if mode == "target_roe" else f"=MAX(0.05, MIN(0.35, {c_troe}))"
+                        clamped_sg_f = f"=D{aud_r}"
+                        eff_broe_f = f"={c_broe}"
+                    else:
+                        troe_in_f = f"=MAX(0.05, MIN(0.35, {col_ref}))" if mode == "target_roe" else f"=MAX(0.05, MIN(0.35, {c_troe}))"
+                        clamped_sg_f = f"=MAX(-0.05, MIN(0.35, D{aud_r}))"
+                        eff_broe_f = f"=IF(MAX(0.05, MIN(0.35, {c_broe})) < E{aud_r}*0.90, E{aud_r}, MAX(0.05, MIN(0.35, {c_broe})))"
+                    fade_exp_f = f"=1+0.35*MIN(1, MAX(0, (F{aud_r}-{c_tg}-0.03)/0.06))"
+
+                    ws.cell(row=aud_r, column=2, value=f"BM{t_idx}-R{i+1}C{j+1}").font = FONT_DATA
+                    ws.cell(row=aud_r, column=3, value=f"={ke_ref}").number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=4, value=sg_in_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=5, value=troe_in_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=6, value=clamped_sg_f).number_format = PCT_FMT
+                    ws.cell(row=aud_r, column=7, value=fade_exp_f).number_format = NUM_2DEC_FMT
+                    ws.cell(row=aud_r, column=8, value=eff_broe_f).number_format = PCT_FMT
+
+                    for k in range(n_proj):
+                        if k == 0:
+                            g_k_expr = f"F{aud_r}"
+                            prev_ni_ref = c_bni
+                        else:
+                            g_k_expr = f"(F{aud_r}-(F{aud_r}-{c_tg})*(({k}/{step_den})^G{aud_r}))"
+                            prev_ni_ref = f"{ni_cols[k-1]}{aud_r}"
+                        ws.cell(row=aud_r, column=9 + k, value=f"={prev_ni_ref}*(1+{g_k_expr})").number_format = cfmt_large
+
+                        if k + 1 < n_proj:
+                            g_next_expr = f"(F{aud_r}-(F{aud_r}-{c_tg})*(({k+1}/{step_den})^G{aud_r}))"
+                        else:
+                            g_next_expr = c_tg
+                        roe_k_expr = f"(H{aud_r}+(E{aud_r}-H{aud_r})*({k}/{step_den}))" if n_proj > 1 else f"H{aud_r}"
+                        t_ref = f"'{model_sheet}'!${get_column_letter(4+k)}${period_row}"
+                        if is_reit:
+                            ret_k_expr = f"MIN(0.25, MAX(0.05, MAX(0, ({g_next_expr})-0.70*{c_tg})/0.12))"
+                            pv_k_f = f"=({ni_cols[k]}{aud_r}*{roe_k_expr}*(1-{ret_k_expr}))/((1+C{aud_r})^{t_ref})"
+                        else:
+                            ret_k_expr = f"MIN(0.85, MAX(0.05, ({g_next_expr})/MAX({roe_k_expr}, E{aud_r}, 0.95*({g_k_expr}))))"
+                            pv_k_f = f"=({ni_cols[k]}{aud_r}*(1-{ret_k_expr}))/((1+C{aud_r})^{t_ref})"
+                        ws.cell(row=aud_r, column=9 + n_proj + k, value=pv_k_f).number_format = cfmt_large
+
+                    ws.cell(row=aud_r, column=9 + 2 * n_proj, value=f"=SUM({pv_cols[0]}{aud_r}:{pv_cols[-1]}{aud_r})").number_format = cfmt_large
+
+                    eff_tg_expr = f"IF((C{aud_r}-{c_tg})<0.020, C{aud_r}-0.020, {c_tg})"
+                    last_t_ref = f"'{model_sheet}'!${last_bank_col}${period_row}"
+                    if is_reit:
+                        term_ret_expr = f"MIN(0.25, MAX(0.05, MAX(0, 0.30*({eff_tg_expr}))/0.12))"
+                        term_fcfe_expr = f"({ni_cols[-1]}{aud_r}*E{aud_r}*(1+{eff_tg_expr})*(1-{term_ret_expr}))"
+                    else:
+                        term_ret_expr = f"MIN(0.95, MAX(0.05, ({eff_tg_expr})/MAX(E{aud_r}, 0.0001)))"
+                        term_fcfe_expr = f"({ni_cols[-1]}{aud_r}*(1+{eff_tg_expr})*(1-{term_ret_expr}))"
+                    tv_expr = f"IF(C{aud_r}>{c_tg}, ({term_fcfe_expr})/MAX(0.020, C{aud_r}-{c_tg}), 0)"
+                    ws.cell(row=aud_r, column=10 + 2 * n_proj, value=f"={tv_expr}/((1+C{aud_r})^{last_t_ref})").number_format = cfmt_large
+
+                    px_out_f = f"=IF(C{aud_r}<={c_tg}, 0, MAX(0, ({col_sum_pv}{aud_r}+{col_pv_tv}{aud_r})/{c_sh}))"
+                    ws.cell(row=aud_r, column=11 + 2 * n_proj, value=px_out_f).number_format = cfmt_price
+
+                    ws.cell(row=grid_r, column=grid_col).value = f"={col_px_out}{aud_r}"
+                    r += 1
 
     ws.column_dimensions["A"].width = 3
     _auto_fit_columns(ws, min_width=16, max_width=32)
@@ -4431,6 +5513,20 @@ def _evaluate_workbook_formulas(wb: Workbook) -> Dict[tuple, Any]:
                             mask = mask & _match_criteria(next_arr, args[k_idx + 1])
                     return int(np.sum(mask))
 
+                if fname_u == "AND":
+                    return all(bool(a) for a in args)
+                if fname_u == "OR":
+                    return any(bool(a) for a in args)
+                if fname_u == "NOT":
+                    return not bool(args[0]) if args else False
+                if fname_u == "ABS":
+                    v = float(args[0]) if args and isinstance(args[0], (int, float)) else 0.0
+                    return abs(v)
+                if fname_u == "POWER":
+                    b = float(args[0]) if args and isinstance(args[0], (int, float)) else 0.0
+                    e = float(args[1]) if len(args) > 1 and isinstance(args[1], (int, float)) else 1.0
+                    return float(b ** e)
+
                 return 0.0
             consume()
             return 0.0
@@ -4486,13 +5582,13 @@ def _populate_formula_caches(wb: Workbook, raw_buffer: BytesIO) -> BytesIO:
                         fattrs = m.group("fattrs")
                         formula = m.group("formula")
                         val = evaluated_map.get((sh_title, coord), 0.0)
-                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(float(val)):
                             clean_attrs = re.sub(r'\s+t="[^"]*"', "", attrs)
                             v_str = str(int(val)) if isinstance(val, int) else f"{float(val):.12g}"
                             return f'<c r="{coord}"{clean_attrs}><f{fattrs}>{formula}</f><v>{v_str}</v></c>'
                         else:
                             clean_attrs = re.sub(r'\s+t="[^"]*"', "", attrs) + ' t="str"'
-                            v_str = _xml_escape(str(val))
+                            v_str = "#NUM!" if isinstance(val, float) and not math.isfinite(val) else _xml_escape(str(val))
                             return f'<c r="{coord}"{clean_attrs}><f{fattrs}>{formula}</f><v>{v_str}</v></c>'
 
                     xml_str = _CELL_FORMULA_XML_RE.sub(_replace_cell, xml_str)
@@ -4501,6 +5597,56 @@ def _populate_formula_caches(wb: Workbook, raw_buffer: BytesIO) -> BytesIO:
 
     out_buffer.seek(0)
     return out_buffer
+
+
+def _build_unsupported_cover(wb: Workbook, data: Dict[str, Any]):
+    """Build a fail-closed Cover notice workbook when a security/sector is UNSUPPORTED_MODEL."""
+    ws = wb.active
+    ws.title = "Cover"
+    ws.sheet_properties.tabColor = TAB_COVER
+    ws.views.sheetView[0].showGridLines = True
+
+    company = data.get("company", {})
+    validation = data.get("validation_gate") or data.get("validation") or {}
+    suitability = data.get("model_suitability") or company.get("model_suitability") or validation.get("model_suitability") or {}
+
+    ws["B2"].value = f"{company.get('name', company.get('ticker', 'Security'))} ({company.get('ticker', '')})"
+    ws["B2"].font = FONT_TITLE
+    ws["B3"].value = "Valuation Gate Notice — Unsupported Sector / Model Methodology Blocked (Fail-Closed)"
+    ws["B3"].font = FONT_SUBTITLE
+
+    _set_banner(ws, 5, 2, 5, "Validation Gate & Model Suitability Decision")
+    rows = [
+        ("Validation Status", str(validation.get("validation_status") or "UNSUPPORTED_MODEL")),
+        ("Detected Model Family", str(suitability.get("model_family") or "UNSUPPORTED_MODEL")),
+        ("Sector / Industry", f"{company.get('sector', 'Unknown')} / {company.get('industry', 'Unknown')}"),
+        ("Block / Routing Reason", str(suitability.get("reason") or validation.get("model_suitability_note") or "Corporate FCFF DCF and Bank DDM are economically invalid for this sector.")),
+        ("Required Valuation Methodology", str(suitability.get("recommended_methodology") or "Sector-Specific Valuation (Embedded Value for Insurance; NAV / P-AFFO for REIT/InvIT)")),
+        ("Valuation Export Status", "DCF Model, Sensitivity, and Monte Carlo sheets omitted cleanly (fail-closed gate active)."),
+    ]
+    r = 6
+    for lbl, val in rows:
+        lc = ws.cell(row=r, column=2, value=lbl)
+        lc.font = FONT_LABEL_BOLD
+        lc.fill = BLOCKED_FILL if "Status" in lbl or "Blocked" in val else ALT_ROW_FILL
+        lc.border = THIN_BORDER
+        vc = ws.cell(row=r, column=3, value=val)
+        row_fill = BLOCKED_FILL if r == 6 else (ALT_ROW_FILL if r % 2 == 0 else PatternFill(fill_type=None))
+        vc.font = FONT_DATA_BOLD if r == 6 else FONT_DATA
+        vc.fill = row_fill
+        vc.border = THIN_BORDER
+        vc.alignment = ALIGN_LEFT
+        for c in (4, 5):
+            ws.cell(row=r, column=c).border = THIN_BORDER
+            ws.cell(row=r, column=c).fill = row_fill
+        ws.row_dimensions[r].height = 22
+        r += 1
+
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 34
+    ws.column_dimensions["C"].width = 76
+    ws.column_dimensions["D"].width = 14
+    ws.column_dimensions["E"].width = 14
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4512,7 +5658,8 @@ def generate_excel_report(analysis_data: Dict[str, Any]) -> BytesIO:
     Generate a professional Damodaran-grade Excel workbook (.xlsx)
     from the valuation analysis data.
 
-    Supports dual routing:
+    Supports dual routing and fail-closed validation gating:
+      - UNSUPPORTED_MODEL (Insurance / REIT / InvIT): Fail-closed Gate Notice Cover only
       - Non-Financials: Multi-Stage FCFF & WACC (Matching HUL FINAL MODEL.xlsx)
       - Financial Institutions (Banks/NBFCs): Multi-Stage FCFE & Regulatory Capital Model
 
@@ -4525,44 +5672,51 @@ def generate_excel_report(analysis_data: Dict[str, Any]) -> BytesIO:
     wb = Workbook()
 
     try:
-        is_financial = (
-            analysis_data.get("company", {}).get("is_financial", False)
-            or analysis_data.get("diagnostics", {}).get("is_financial", False)
-            or analysis_data.get("dcf_result", {}).get("is_financial", False)
-        )
-        model_type = (
-            analysis_data.get("company", {}).get("model_type")
-            or analysis_data.get("diagnostics", {}).get("model_type")
-            or analysis_data.get("dcf_result", {}).get("model_type")
-            or ("BANKING_DDM" if is_financial else "STANDARD_FCFF")
-        )
-
-        if is_financial or model_type == "BANKING_DDM":
-            logger.info("Generating dedicated Financial Services (Bank/NBFC) Excel Workbook")
-            _build_bank_cover(wb, analysis_data)
-            hist_links = _build_bank_historicals(wb, analysis_data)
-            ke_links = _build_bank_cost_of_equity(wb, analysis_data)
-            _build_bank_ddm_model(wb, analysis_data, ke_links, hist_links)
-            _build_bank_sensitivity(wb, analysis_data)
-            _build_monte_carlo(wb, analysis_data)
-        elif model_type == "CORPORATE_DDM":
-            logger.info("Generating customized Corporate DDM / FCFE Excel Workbook")
-            _build_bank_cover(wb, analysis_data)
-            hist_links = _build_historicals(wb, analysis_data)
-            ke_links = _build_bank_cost_of_equity(wb, analysis_data)
-            _build_bank_ddm_model(wb, analysis_data, ke_links, hist_links if isinstance(hist_links, dict) else None)
-            _build_bank_sensitivity(wb, analysis_data)
-            _build_monte_carlo(wb, analysis_data)
+        validation = analysis_data.get("validation_gate") or analysis_data.get("validation") or {}
+        val_status = str(validation.get("validation_status") or "")
+        suitability = analysis_data.get("model_suitability") or analysis_data.get("company", {}).get("model_suitability") or {}
+        if val_status == "UNSUPPORTED_MODEL" or suitability.get("supported") is False or suitability.get("validation_status") == "UNSUPPORTED_MODEL":
+            logger.info("Generating fail-closed UNSUPPORTED_MODEL Gate Notice Excel Workbook")
+            _build_unsupported_cover(wb, analysis_data)
         else:
-            # Ensure Cover is the first sheet, then build dependent sheets and link Cover formulas
-            ws_cover = wb.active
-            ws_cover.title = "Cover"
-            hist_links = _build_historicals(wb, analysis_data)
-            wacc_links = _build_wacc2(wb, analysis_data, hist_links if isinstance(hist_links, dict) else None)
-            dcf_links = _build_dcf_model(wb, analysis_data, wacc_links, hist_links)
-            _build_sensitivity(wb, analysis_data, dcf_links)
-            mc_links = _build_monte_carlo(wb, analysis_data, dcf_links)
-            _build_cover(wb, analysis_data, hist_links, wacc_links, dcf_links, mc_links)
+            is_financial = (
+                analysis_data.get("company", {}).get("is_financial", False)
+                or analysis_data.get("diagnostics", {}).get("is_financial", False)
+                or analysis_data.get("dcf_result", {}).get("is_financial", False)
+            )
+            model_type = (
+                analysis_data.get("company", {}).get("model_type")
+                or analysis_data.get("diagnostics", {}).get("model_type")
+                or analysis_data.get("dcf_result", {}).get("model_type")
+                or ("BANKING_DDM" if is_financial else "STANDARD_FCFF")
+            )
+
+            if is_financial or model_type in ("BANKING_DDM", "NBFC_LENDER_DDM", "INSURANCE_PNC_DDM", "INSURANCE_LIFE_DDM"):
+                logger.info("Generating dedicated %s Equity Excel Workbook", model_type)
+                _build_bank_cover(wb, analysis_data)
+                hist_links = _build_bank_historicals(wb, analysis_data)
+                ke_links = _build_bank_cost_of_equity(wb, analysis_data)
+                ddm_links = _build_bank_ddm_model(wb, analysis_data, ke_links, hist_links)
+                _build_bank_sensitivity(wb, analysis_data, ddm_links)
+                _build_monte_carlo(wb, analysis_data, ddm_links)
+            elif model_type in ("CORPORATE_DDM", "REIT_INVIT_AFFO"):
+                logger.info("Generating dedicated %s Equity Excel Workbook", model_type)
+                _build_bank_cover(wb, analysis_data)
+                hist_links = _build_historicals(wb, analysis_data)
+                ke_links = _build_bank_cost_of_equity(wb, analysis_data)
+                ddm_links = _build_bank_ddm_model(wb, analysis_data, ke_links, hist_links if isinstance(hist_links, dict) else None)
+                _build_bank_sensitivity(wb, analysis_data, ddm_links)
+                _build_monte_carlo(wb, analysis_data, ddm_links)
+            else:
+                # Ensure Cover is the first sheet, then build dependent sheets and link Cover formulas
+                ws_cover = wb.active
+                ws_cover.title = "Cover"
+                hist_links = _build_historicals(wb, analysis_data)
+                wacc_links = _build_wacc2(wb, analysis_data, hist_links if isinstance(hist_links, dict) else None)
+                dcf_links = _build_dcf_model(wb, analysis_data, wacc_links, hist_links)
+                _build_sensitivity(wb, analysis_data, dcf_links)
+                mc_links = _build_monte_carlo(wb, analysis_data, dcf_links)
+                _build_cover(wb, analysis_data, hist_links, wacc_links, dcf_links, mc_links)
     except Exception:
         logger.exception("Error building Excel valuation workbook")
         raise
