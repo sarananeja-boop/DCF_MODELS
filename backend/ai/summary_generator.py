@@ -362,6 +362,13 @@ def _enrich_and_validate_report(report: dict, analysis_data: dict) -> dict:
     current_price = float(market_data.get("current_price", 0.0))
     dcf_value = float(dcf.get("implied_price", 0.0))
 
+    # Enforce canonical company identity and trading currency from model payload
+    if company.get("name"):
+        report["company"] = company["name"]
+    if company.get("ticker"):
+        report["ticker"] = company["ticker"]
+    report["currency"] = company.get("currency", report.get("currency", "USD"))
+
     # Guarantee headline metrics
     if not report.get("headline_metrics"):
         report["headline_metrics"] = {}

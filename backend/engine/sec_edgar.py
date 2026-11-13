@@ -522,9 +522,9 @@ def extract_sec_edgar_reconciliation(
             facts,
             "us-gaap",
             [
+                "Revenues",
                 "RevenueFromContractWithCustomerExcludingAssessedTax",
                 "RevenueFromContractWithCustomerIncludingAssessedTax",
-                "Revenues",
                 "SalesRevenueNet",
             ],
             "USD",

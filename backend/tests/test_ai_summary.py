@@ -149,3 +149,35 @@ def test_build_fallback_uses_5_percent_terminal_growth_for_indian_stock(indian_a
     assert "recommendation" not in fallback_obj["headline_metrics"]
     assert "BUY" not in fallback_obj["headline_metrics"].get("valuation_posture", "")
     assert "SELL" not in fallback_obj["headline_metrics"].get("valuation_posture", "")
+
+
+
+def test_enrich_and_validate_enforces_us_currency_over_hallucinated_inr():
+    us_analysis_data = {
+        "company": {
+            "ticker": "ASML",
+            "name": "ASML Holding N.V.",
+            "market": "US",
+            "currency": "USD",
+            "symbol": "$",
+            "sector": "Technology",
+            "industry": "Semiconductor Equipment & Materials",
+        },
+        "market_data": {"current_price": 1495.0, "market_cap": 576e9, "shares_outstanding": 385e6, "beta": 1.25},
+        "macro": {"risk_free_rate": 0.051, "market_return": 0.10, "tax_rate": 0.21, "terminal_growth": 0.025, "gdp_growth": 0.025},
+        "historicals": {"n_years": 4, "avg_rev_growth": 0.12, "avg_ebit_margin": 0.32, "avg_roe": 0.45},
+        "wacc": {"wacc": 0.11, "cost_of_equity": 0.112, "cost_of_debt": 0.04},
+        "dcf_result": {"implied_price": 450.0, "terminal_growth": 0.025, "effective_terminal_growth": 0.025, "enterprise_value": 180e9, "pv_ufcf": 50e9, "pv_terminal_value": 130e9},
+        "monte_carlo": {"stats": {"median": 460.0, "p5": 300.0, "p25": 380.0, "p75": 540.0, "p95": 680.0}},
+        "reverse_dcf": {"growth_hurdle_gap_bps": 450.0, "market_implied_growth": 0.165, "base_growth": 0.12, "stance": "High Expectations Hurdle"},
+    }
+    hallucinated_report = {
+        "company": "Wrong Co",
+        "ticker": "WRONG",
+        "currency": "INR",
+        "headline_metrics": {},
+    }
+    cleaned = _enrich_and_validate_report(hallucinated_report, us_analysis_data)
+    assert cleaned["currency"] == "USD"
+    assert cleaned["company"] == "ASML Holding N.V."
+    assert cleaned["ticker"] == "ASML"

@@ -71,6 +71,33 @@ def _load_yahoo_fixtures(ticker: str) -> Optional[Tuple[pd.DataFrame, pd.DataFra
     return None
 
 
+_NON_MONETARY_COLS = {
+    "Basic Average Shares",
+    "Diluted Average Shares",
+    "Ordinary Shares Number",
+    "Share Issued",
+    "Treasury Shares Number",
+    "Preferred Shares Number",
+    "Tax Rate For Calcs",
+}
+_PER_SHARE_COLS = {"Basic EPS", "Diluted EPS"}
+
+
+def _scale_monetary_df(df: pd.DataFrame, factor: float, *, scale_per_share: bool = True) -> pd.DataFrame:
+    """Scale monetary rows/columns while keeping share counts and tax/ratio metrics intact."""
+    if df is None or df.empty or factor == 1.0:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        cname = str(col)
+        if cname in _NON_MONETARY_COLS or cname.endswith((" Shares", " Shares Number", " Share Issued")):
+            continue
+        if not scale_per_share and cname in _PER_SHARE_COLS:
+            continue
+        out[col] = pd.to_numeric(out[col], errors="coerce") * factor
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -857,11 +884,11 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
                         yf_ticker, fin_currency, trade_currency, trade_currency, fx_rate
                     )
                     if not income_stmt.empty:
-                        income_stmt = income_stmt * fx_rate
+                        income_stmt = _scale_monetary_df(income_stmt, fx_rate, scale_per_share=True)
                     if not balance_sheet.empty:
-                        balance_sheet = balance_sheet * fx_rate
+                        balance_sheet = _scale_monetary_df(balance_sheet, fx_rate, scale_per_share=True)
                     if not cash_flow.empty:
-                        cash_flow = cash_flow * fx_rate
+                        cash_flow = _scale_monetary_df(cash_flow, fx_rate, scale_per_share=True)
                     for info_monetary_key in (
                         "totalRevenue",
                         "ebitda",
@@ -939,9 +966,9 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
                         "Auto-reconciling financial statements by %sx.",
                         scale_multiplier, yf_ticker, avg_ratio, scale_multiplier
                     )
-                    income_stmt = income_stmt * scale_multiplier
-                    balance_sheet = balance_sheet * scale_multiplier
-                    cash_flow = cash_flow * scale_multiplier
+                    income_stmt = _scale_monetary_df(income_stmt, scale_multiplier, scale_per_share=False)
+                    balance_sheet = _scale_monetary_df(balance_sheet, scale_multiplier, scale_per_share=False)
+                    cash_flow = _scale_monetary_df(cash_flow, scale_multiplier, scale_per_share=False)
         except Exception as e:
             logger.warning("Unit scale reconciliation skipped for %s: %s", yf_ticker, e)
 
@@ -2562,7 +2589,25 @@ def compute_historical_metrics(stock_data: dict) -> dict:
         float(chg_cash_list[i] - (cfo_list[i] + cfi_list[i] + cff_list[i]))
         for i in range(n_years)
     ]
-    fx_effect_list = _extract_series(cash_flow, ["Effect Of Exchange Rate Changes"])
+    fx_raw_list = _extract_series(cash_flow, ["Effect Of Exchange Rate Changes"])
+    other_cash_outside_list = _extract_series(
+        cash_flow,
+        ["Other Cash Adjustment Outside Changein Cash", "Other Cash Adjustment Outside Change in Cash"],
+    )
+    fx_effect_list: List[float] = []
+    for i in range(n_years):
+        fx_i = float(fx_raw_list[i])
+        oth_i = float(other_cash_outside_list[i])
+        # Yahoo Finance uses "Other Cash Adjustment Outside Changein Cash" inconsistently:
+        # for demergers/consolidations (e.g. JIOFIN, RELIANCE, SUNPHARMA) it is an additive
+        # cash-rollforward bridge item outside Changes In Cash; for some banks/conglomerates
+        # (e.g. HDFCBANK FY24) it is a non-additive memo already reflected in Changes In Cash.
+        if abs(oth_i) > 0.0 and (abs(beg_cash_list[i]) > 0.0 or abs(end_cash_list[i]) > 0.0):
+            gap_no_oth = abs((beg_cash_list[i] + chg_cash_list[i] + fx_i) - end_cash_list[i])
+            gap_with_oth = abs((beg_cash_list[i] + chg_cash_list[i] + fx_i + oth_i) - end_cash_list[i])
+            if gap_with_oth < gap_no_oth:
+                fx_i = fx_i + oth_i
+        fx_effect_list.append(float(fx_i))
     restr_cash_list = [
         float(max(0.0, end_cash_list[i] - cce_clean[i]))
         for i in range(n_years)

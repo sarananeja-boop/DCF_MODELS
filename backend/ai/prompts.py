@@ -13,7 +13,7 @@ Return ONLY a valid JSON object matching this exact structure:
 {
   "company": "",
   "ticker": "",
-  "currency": "INR",
+  "currency": "USD or INR (match company currency from context)",
 
   "headline_metrics": {
     "current_price": 0.0,
