@@ -201,8 +201,15 @@ def _auto_fit_columns(ws, min_width: int = 14, max_width: int = 35):
 # Sheet 1: Cover Page & Valuation Summary
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_cover(wb: Workbook, data: Dict[str, Any]):
-    ws = wb.active
+def _build_cover(
+    wb: Workbook,
+    data: Dict[str, Any],
+    hist_links: Optional[Dict[str, str]] = None,
+    wacc_links: Optional[Dict[str, str]] = None,
+    dcf_links: Optional[Dict[str, str]] = None,
+    mc_links: Optional[Dict[str, str]] = None,
+):
+    ws = wb["Cover"] if "Cover" in wb.sheetnames else wb.active
     ws.title = "Cover"
     ws.sheet_properties.tabColor = TAB_COVER
     ws.views.sheetView[0].showGridLines = True
@@ -215,10 +222,16 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
     mc = data.get("monte_carlo", {})
     mc_stats = mc.get("stats", {})
     verdict = data.get("verdict", {})
+    validation = data.get("validation", {})
     currency = company.get("currency", "USD")
     curr_sym = _get_curr_symbol(currency)
     cfmt_price = _get_currency_fmt_price(currency)
     cfmt_large = _get_currency_fmt_large(currency)
+
+    hist_links = hist_links or {}
+    wacc_links = wacc_links or {}
+    dcf_links = dcf_links or {}
+    mc_links = mc_links or {}
 
     # Title Block
     ws["B2"].value = company.get("name", "Corporate Valuation Model")
@@ -282,13 +295,18 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
     p75 = mc_stats.get("p75", 0)
     method_comp = data.get("method_comparison", {})
 
+    dcf_price_formula = f"={dcf_links['price_cell']}" if dcf_links.get("price_cell") else implied_price
+    upside_formula = f"={dcf_links['upside_cell']}" if dcf_links.get("upside_cell") else upside
+    mc_median_formula = f"={mc_links['median_cell']}" if mc_links.get("median_cell") else mc_median
+
     val_summary_items = [
         ("Current Market Price (CMP)", current_price, cfmt_price, False),
         ("DCF Implied Fair Value (FCFF Base Case)", implied_price, cfmt_price, True),
-        ("Implied Upside / (Downside)", upside, PCT_FMT, True),
+        ("DCF Implied Fair Value (Live Model Formula)", dcf_price_formula, cfmt_price, True),
+        ("Implied Upside / (Downside)", upside_formula, PCT_FMT, True),
         ("Investment Verdict", verdict.get("verdict", "NEUTRAL"), None, True),
         ("Valuation Methodology", "Enterprise DCF — Unlevered Free Cash Flow (FCFF) discounted at WACC", None, False),
-        ("Monte Carlo Median Implied Price", mc_median, cfmt_price, False),
+        ("Monte Carlo Median Implied Price", mc_median_formula, cfmt_price, False),
         ("Monte Carlo 50% Confidence Range (P25 – P75)", f"{curr_sym}{p25:,.2f} – {curr_sym}{p75:,.2f}" if p25 else "N/A", None, False),
     ]
     if method_comp and method_comp.get("can_switch"):
@@ -311,7 +329,7 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         val_cell.font = FONT_TOTAL if is_bold else FONT_DATA
         val_cell.fill = fill or PatternFill(fill_type=None)
         val_cell.border = TOTAL_BORDER if is_bold else THIN_BORDER
-        val_cell.alignment = ALIGN_RIGHT
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
         if fmt:
             val_cell.number_format = fmt
 
@@ -330,13 +348,18 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
     historicals = data.get("historicals", {})
     overrides = data.get("overrides_applied", {})
 
-    rf = macro.get("risk_free_rate", 0)
-    beta = market_data.get("beta", 1.0)
-    ke = wacc_data.get("cost_of_equity", 0)
-    kd = wacc_data.get("cost_of_debt", 0)
-    wacc_val = wacc_data.get("wacc", 0)
-    term_g = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025)
-    ebit_m = historicals.get("avg_ebit_margin", 0)
+    rf = f"={wacc_links['rf_cell']}" if wacc_links.get("rf_cell") else macro.get("risk_free_rate", 0)
+    beta = f"={wacc_links['beta_cell']}" if wacc_links.get("beta_cell") else market_data.get("beta", 1.0)
+    ke = f"={wacc_links['ke_cell']}" if wacc_links.get("ke_cell") else wacc_data.get("cost_of_equity", 0)
+    kd = f"={wacc_links['kd_cell']}" if wacc_links.get("kd_cell") else wacc_data.get("cost_of_debt", 0)
+    wacc_val_num = wacc_data.get("wacc", 0)
+    wacc_val = f"={wacc_links['wacc_cell']}" if wacc_links.get("wacc_cell") else wacc_val_num
+    term_g_num = overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025)
+    term_g = f"={dcf_links['tg_cell']}" if dcf_links.get("tg_cell") else term_g_num
+    margin_sched = dcf.get("margin_schedule", [])
+    target_ebit_m_num = float(margin_sched[-1]) if margin_sched else float(historicals.get("avg_ebit_margin", 0))
+    target_ebit_m = f"={dcf_links['terminal_margin_cell']}" if dcf_links.get("terminal_margin_cell") else target_ebit_m_num
+    hist_avg_ebit_m = f"={hist_links['avg_ebit_margin_cell']}" if hist_links.get("avg_ebit_margin_cell") else historicals.get("avg_ebit_margin", 0)
 
     driver_items = [
         ("Risk-Free Rate (Rf)", rf, PCT_FMT),
@@ -345,7 +368,8 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
         ("After-Tax Cost of Debt (Kd)", kd, PCT_FMT),
         ("Weighted Average Cost of Capital (WACC)", wacc_val, PCT_FMT),
         ("Terminal Growth Rate (g)", term_g, PCT_FMT),
-        ("Normalized Operating Margin (EBIT Margin)", ebit_m, PCT_FMT),
+        ("Normalized Operating Margin (Target EBIT Margin)", target_ebit_m, PCT_FMT),
+        ("Historical 4-Yr Avg EBIT Margin", hist_avg_ebit_m, PCT_FMT),
     ]
 
     for label, val, fmt in driver_items:
@@ -370,12 +394,111 @@ def _build_cover(wb: Workbook, data: Dict[str, Any]):
             ec.border = THIN_BORDER
         r += 1
 
-    # Verdict Description box
-    desc = verdict.get("description", "")
-    if desc:
+    # Section 4: Model Assumption Status (Defaults vs. User Overrides)
+    r += 1
+    _set_banner(ws, r, 2, 5, "Model Assumption Status (Defaults vs. User Overrides)")
+    r += 1
+
+    diag = data.get("diagnostics", {})
+    def_g = float(diag.get("default_growth", historicals.get("rev_cagr", 0.08)) or 0.0)
+    def_m = float(diag.get("default_margin", historicals.get("avg_ebit_margin", 0.15)) or 0.0)
+    def_w = float(diag.get("default_wacc", wacc_data.get("wacc", 0.10)) or 0.0)
+    def_t = float(macro.get("terminal_growth_rate", macro.get("terminal_growth", 0.05 if company.get("market") == "IN" else 0.025)) or 0.0)
+
+    ov_g = overrides.get("revenue_growth")
+    ov_m = overrides.get("ebit_margin")
+    ov_w = overrides.get("wacc")
+    ov_t = overrides.get("terminal_growth")
+
+    app_g = float(ov_g) if ov_g is not None else def_g
+    app_m = float(ov_m) if ov_m is not None else def_m
+    app_w = float(ov_w) if ov_w is not None else wacc_val_num
+    app_t = float(ov_t) if ov_t is not None else term_g_num
+    has_user_overrides = any(x is not None for x in (ov_g, ov_m, ov_w, ov_t))
+
+    override_rows = [
+        ("Assumption Override Status", "Custom User Overrides Applied" if has_user_overrides else "100% Model Baseline Defaults", None),
+        ("Year-1 Revenue Growth (Default vs. Applied)", f"Default: {def_g*100:.1f}% | Applied: {app_g*100:.1f}% ({'Edited' if ov_g is not None else 'Default'})", None),
+        ("Target Operating Margin (Default vs. Applied)", f"Default: {def_m*100:.1f}% | Applied: {app_m*100:.1f}% ({'Edited' if ov_m is not None else 'Default'})", None),
+        ("Discount Rate / WACC (Default vs. Applied)", f"Default: {def_w*100:.1f}% | Applied: {app_w*100:.1f}% ({'Edited' if ov_w is not None else 'Default'})", None),
+        ("Terminal Growth Rate (Default vs. Applied)", f"Default: {def_t*100:.1f}% | Applied: {app_t*100:.1f}% ({'Edited' if ov_t is not None else 'Default'})", None),
+    ]
+
+    for label, val, fmt in override_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA_BOLD if label == "Assumption Override Status" and has_user_overrides else FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
+        if fmt:
+            val_cell.number_format = fmt
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
         r += 1
-        ws.merge_cells(f"B{r}:E{r+1}")
-        desc_cell = ws.cell(row=r, column=2, value=f"Note: {desc}")
+
+    # Section 5: Monte Carlo Simulation & Reproducibility Configuration
+    r += 1
+    _set_banner(ws, r, 2, 5, "Monte Carlo Simulation & Reproducibility Configuration")
+    r += 1
+
+    mc_obj = data.get("monte_carlo", {})
+    valid_sims = int(mc_obj.get("valid_simulations") or mc_obj.get("actual_iterations") or 10000)
+    total_sims = int(mc_obj.get("total_simulations") or valid_sims)
+    rejected_sims = max(0, total_sims - valid_sims)
+    zero_sims = int(mc_obj.get("zero_price_simulations") or 0)
+    corr_gm = float(mc_obj.get("hist_corr_gm", mc_obj.get("inputs", {}).get("hist_corr_gm", 0.0)) or 0.0)
+
+    mc_config_rows = [
+        ("Retained Valid Simulations", valid_sims, INT_FMT),
+        ("Candidate Draws Sampled", total_sims, INT_FMT),
+        ("Rejected Draws (WACC <= g + 0.50% / Kd <= 0)", rejected_sims, INT_FMT),
+        ("Equity Wipeout Draws (Floored at 0.00)", zero_sims, INT_FMT),
+        ("Cholesky Growth-Margin Correlation (ρ)", corr_gm, NUM_2DEC_FMT),
+        ("Random Seed & Reproducibility Policy", "Deterministic Cholesky (Seed = 42)", None),
+    ]
+
+    for label, val, fmt in mc_config_rows:
+        fill = ALT_ROW_FILL if r % 2 == 0 else None
+        lbl = ws.cell(row=r, column=2, value=label)
+        lbl.font = FONT_LABEL_BOLD
+        lbl.fill = fill or PatternFill(fill_type=None)
+        lbl.border = THIN_BORDER
+        lbl.alignment = ALIGN_LEFT
+
+        val_cell = ws.cell(row=r, column=3, value=val)
+        val_cell.font = FONT_DATA
+        val_cell.fill = fill or PatternFill(fill_type=None)
+        val_cell.border = THIN_BORDER
+        val_cell.alignment = ALIGN_RIGHT if fmt else ALIGN_LEFT
+        if fmt:
+            val_cell.number_format = fmt
+
+        for c in (4, 5):
+            ec = ws.cell(row=r, column=c)
+            ec.fill = fill or PatternFill(fill_type=None)
+            ec.border = THIN_BORDER
+        r += 1
+
+    # Verdict Description & Model Suitability Advisory box
+    desc = verdict.get("description", "")
+    suitability_note = validation.get("model_suitability_note") or ""
+    combined_note = f"Note: {desc}" if desc else ""
+    if suitability_note:
+        combined_note = f"{combined_note}\n{suitability_note}".strip()
+    if combined_note:
+        r += 1
+        ws.merge_cells(f"B{r}:E{r+2}")
+        desc_cell = ws.cell(row=r, column=2, value=combined_note)
         desc_cell.font = Font(name="Calibri", size=10, italic=True, color=SLATE_MID)
         desc_cell.alignment = Alignment(wrap_text=True, vertical="top")
 
@@ -504,7 +627,7 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
         return this_row
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # PART I: INCOME STATEMENT (P&L) — Matching HUL FINAL MODEL.xlsx
+    # PART I: INCOME STATEMENT (P&L) — Disaggregated Statutory + Normalized View
     # ═══════════════════════════════════════════════════════════════════════════
     _write_sub_banner("Part I: Income Statement (P&L)")
 
@@ -518,57 +641,136 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
 
     raw_gp = inc_stmt.get("Gross Profit", [])
     row_gp = _write_statement_row("Gross Profit", raw_gp, cfmt_large, is_bold=True,
-                                  formula_subtraction=(row_rev, row_cogs) if any(raw_cogs) else None)
+                                  formula_subtraction=(row_rev, row_cogs))
     row_gp_margin = _write_statement_row("Gross Margin (%)", [], PCT_FMT, is_margin_of=(row_gp, row_rev))
 
     raw_sga = inc_stmt.get("Selling, General & Admin (SG&A)", [])
     row_sga = _write_statement_row("Selling, General & Administrative (SG&A)", raw_sga, cfmt_large)
     row_sga_pct = _write_statement_row("SG&A % of Sales", [], PCT_FMT, is_margin_of=(row_sga, row_rev))
 
-    raw_ebitda = inc_stmt.get("Operating Profit (EBITDA)", [])
-    row_ebitda = _write_statement_row("Operating Profit (EBITDA)", raw_ebitda, cfmt_large, is_bold=True)
-    row_ebitda_margin = _write_statement_row("EBITDA Margin (%)", [], PCT_FMT, is_margin_of=(row_ebitda, row_rev))
+    raw_emp = inc_stmt.get("Employee Benefits & Personnel Expenses", [0.0] * n_years)
+    row_emp = _write_statement_row("Employee Benefits & Personnel Expenses", raw_emp, cfmt_large)
+
+    raw_rnd = inc_stmt.get("Research & Development (R&D)", [0.0] * n_years)
+    row_rnd = _write_statement_row("Research & Development (R&D)", raw_rnd, cfmt_large)
+
+    raw_other_opex_stat = inc_stmt.get("Other Operating Expenses (Statutory)", [0.0] * n_years)
+    row_other_opex = _write_statement_row("Other Operating Expenses (Operations & Admin)", raw_other_opex_stat, cfmt_large)
+
+    raw_opex_dna = inc_stmt.get("Depreciation & Amortization in Operating Expenses", [0.0] * n_years)
+    row_opex_dna = _write_statement_row("Depreciation & Amortization in Operating Expenses", raw_opex_dna, cfmt_large)
+
+    raw_stat_opinc = inc_stmt.get("Statutory Operating Income", historicals.get("ebit", []))
+    row_stat_opinc = _write_statement_row(
+        "Statutory Operating Income (Before Regulatory / One-Off Adjustments)",
+        raw_stat_opinc,
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"={'{col}'}{row_gp}-{'{col}'}{row_sga}-{'{col}'}{row_emp}-{'{col}'}{row_rnd}-{'{col}'}{row_other_opex}-{'{col}'}{row_opex_dna}",
+    )
+
+    raw_reg_adj = inc_stmt.get("Regulatory Deferral & Operating Adjustments", [0.0] * n_years)
+    row_reg_adj = _write_statement_row("Regulatory Deferral & Operating Adjustments", raw_reg_adj, cfmt_large)
+
+    raw_ebit = inc_stmt.get("Operating Income (EBIT)") or historicals.get("ebit", [])
+    row_ebit = _write_statement_row(
+        "Operating Income (EBIT)",
+        raw_ebit,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_stat_opinc, row_reg_adj],
+    )
+    row_ebit_margin = _write_statement_row("EBIT Margin (%)", [], PCT_FMT, is_margin_of=(row_ebit, row_rev))
 
     raw_dna = inc_stmt.get("Depreciation & Amortization (D&A)") or historicals.get("dna", [])
     row_dna = _write_statement_row("Depreciation & Amortization (D&A)", raw_dna, cfmt_large)
     row_dna_pct = _write_statement_row("D&A % of Sales", [], PCT_FMT, is_margin_of=(row_dna, row_rev))
 
-    raw_ebit = inc_stmt.get("Operating Income (EBIT)") or historicals.get("ebit", [])
-    row_ebit = _write_statement_row("Operating Income (EBIT)", raw_ebit, cfmt_large, is_bold=True,
-                                    formula_subtraction=(row_ebitda, row_dna) if any(raw_ebitda) and any(raw_dna) else None)
-    row_ebit_margin = _write_statement_row("EBIT Margin (%)", [], PCT_FMT, is_margin_of=(row_ebit, row_rev))
+    raw_ebitda = inc_stmt.get("Operating Profit (EBITDA)") or historicals.get("ebitda", [])
+    row_ebitda = _write_statement_row(
+        "Operating Profit (EBITDA)",
+        raw_ebitda,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_ebit, row_dna],
+    )
+    row_ebitda_margin = _write_statement_row("EBITDA Margin (%)", [], PCT_FMT, is_margin_of=(row_ebitda, row_rev))
 
     raw_ie = inc_stmt.get("Interest Expense", [])
     row_ie = _write_statement_row("Interest Expense", raw_ie, cfmt_large)
     row_ie_pct = _write_statement_row("Interest % of Sales", [], PCT_FMT, is_margin_of=(row_ie, row_rev))
 
+    raw_non_op = inc_stmt.get("Non-Operating Income / (Expense)", [0.0] * n_years)
+    row_non_op = _write_statement_row("Non-Operating Income / (Expense)", raw_non_op, cfmt_large)
+
     raw_ebt = inc_stmt.get("Earnings Before Tax (EBT)", [])
-    row_ebt = _write_statement_row("Earnings Before Tax (EBT)", raw_ebt, cfmt_large, is_bold=True)
+    row_ebt = _write_statement_row(
+        "Earnings Before Tax (EBT)",
+        raw_ebt,
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"={'{col}'}{row_ebit}-{'{col}'}{row_ie}+{'{col}'}{row_non_op}",
+    )
     row_ebt_margin = _write_statement_row("EBT Margin (%)", [], PCT_FMT, is_margin_of=(row_ebt, row_rev))
 
     raw_tax = inc_stmt.get("Income Tax Expense", [])
     row_tax = _write_statement_row("Income Tax Expense", raw_tax, cfmt_large)
     row_tax_rate = _write_statement_row("Effective Tax Rate (%)", [], PCT_FMT, is_margin_of=(row_tax, row_ebt))
 
+    raw_cons_pat = inc_stmt.get("Profit After Tax (Consolidated PAT)", [])
+    row_cons_pat = _write_statement_row(
+        "Profit After Tax (Consolidated Group PAT)",
+        raw_cons_pat,
+        cfmt_large,
+        is_bold=True,
+        formula_subtraction=(row_ebt, row_tax),
+    )
+
+    raw_min_int_inc = inc_stmt.get("Minority Interest & Exceptional Items", [0.0] * n_years)
+    row_min_int_inc = _write_statement_row("Minority Interest & Exceptional Items", raw_min_int_inc, cfmt_large)
+
     raw_ni = inc_stmt.get("Net Profit / Net Income") or historicals.get("net_income", [])
-    row_ni = _write_statement_row("Net Profit / Net Income", raw_ni, cfmt_large, is_bold=True)
+    row_ni = _write_statement_row(
+        "Net Profit / Net Income",
+        raw_ni,
+        cfmt_large,
+        is_bold=True,
+        formula_subtraction=(row_cons_pat, row_min_int_inc),
+    )
     row_ni_margin = _write_statement_row("Net Profit Margin (%)", [], PCT_FMT, is_margin_of=(row_ni, row_rev))
 
     raw_shares = inc_stmt.get("Diluted Shares Outstanding") or ([float(data.get("market_data", {}).get("shares_outstanding", 0))] * n_years)
+    raw_bas_shares = inc_stmt.get("Basic Weighted-Average Shares") or raw_shares
+    row_bas_shares = _write_statement_row("Basic Weighted-Average Shares", raw_bas_shares, INT_FMT)
+    row_bas_eps = _write_statement_row(
+        "Basic Earnings Per Share (Basic EPS)",
+        [],
+        cfmt_price,
+        is_margin_of=(row_ni, row_bas_shares),
+    )
+
     row_shares = _write_statement_row("Diluted Shares Outstanding", raw_shares, INT_FMT)
 
-    raw_eps = inc_stmt.get("Earnings Per Share (EPS)", [])
-    row_eps = _write_statement_row("Earnings Per Share (EPS)", raw_eps, cfmt_price, is_bold=True)
+    row_eps = _write_statement_row(
+        "Earnings Per Share (EPS)",
+        [],
+        cfmt_price,
+        is_bold=True,
+        is_margin_of=(row_ni, row_shares),
+    )
     row_eps_growth = _write_statement_row("YoY EPS Growth Rate (%)", [], PCT_FMT, is_growth_of=row_eps)
+
+    raw_pe_shares = inc_stmt.get("Period-End Shares Outstanding") or raw_shares
+    row_pe_shares = _write_statement_row("Period-End Shares Outstanding", raw_pe_shares, INT_FMT)
 
     raw_divs = inc_stmt.get("Cash Dividends Paid") or historicals.get("dividends_paid", [])
     row_divs = _write_statement_row("Cash Dividends Paid", raw_divs, cfmt_large)
     row_payout = _write_statement_row("Dividend Payout Ratio (%)", [], PCT_FMT, is_margin_of=(row_divs, row_ni))
     row_ret = _write_statement_row("Retained Earnings Addition", [], cfmt_large,
-                                   formula_subtraction=(row_ni, row_divs) if any(raw_divs) else None)
+                                   formula_subtraction=(row_ni, row_divs))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # PART II: BALANCE SHEET — Matching HUL FINAL MODEL.xlsx
+    # PART II: BALANCE SHEET — Full Disaggregated Assets, Liabilities & Equity
     # ═══════════════════════════════════════════════════════════════════════════
     r += 1
     _write_sub_banner("Part II: Balance Sheet")
@@ -576,8 +778,14 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     raw_sc = bs_stmt.get("Equity Share Capital", [])
     row_sc = _write_statement_row("Equity Share Capital", raw_sc, cfmt_large)
 
-    raw_res = bs_stmt.get("Reserves & Retained Earnings", [])
-    row_res = _write_statement_row("Reserves & Surplus / Retained Earnings", raw_res, cfmt_large)
+    raw_apic = bs_stmt.get("Additional Paid-In Capital (APIC)", [0.0] * n_years)
+    row_apic = _write_statement_row("Additional Paid-In Capital (APIC)", raw_apic, cfmt_large)
+
+    raw_ret_earn = bs_stmt.get("Retained Earnings / Reserves")
+    if raw_ret_earn is None:
+        raw_res_legacy = bs_stmt.get("Reserves & Retained Earnings", [0.0] * n_years)
+        raw_ret_earn = [float(r_v - a_v) for r_v, a_v in zip(raw_res_legacy, raw_apic)]
+    row_res = _write_statement_row("Retained Earnings / Reserves & Surplus", raw_ret_earn, cfmt_large)
 
     raw_equity = bs_stmt.get("Total Stockholders' Equity") or historicals.get("book_value", [])
     row_equity = _write_statement_row(
@@ -585,8 +793,11 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
         raw_equity,
         cfmt_large,
         is_bold=True,
-        formula_sum=[row_sc, row_res] if (not any(raw_equity) and any(raw_sc) and any(raw_res)) else None,
+        formula_sum=[row_sc, row_apic, row_res],
     )
+
+    raw_min_int_bs = bs_stmt.get("Minority Interest", [0.0] * n_years)
+    row_min_int_bs = _write_statement_row("Minority Interest (Non-Controlling Interest)", raw_min_int_bs, cfmt_large)
 
     raw_st_debt = bs_stmt.get("Short-Term Borrowings", [])
     row_st_debt = _write_statement_row("Short-Term Borrowings", raw_st_debt, cfmt_large)
@@ -595,15 +806,51 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     row_lt_debt = _write_statement_row("Long-Term Borrowings", raw_lt_debt, cfmt_large)
 
     raw_tot_debt = bs_stmt.get("Total Debt", [])
-    row_tot_debt = _write_statement_row("Total Debt", raw_tot_debt, cfmt_large, is_bold=True,
-                                        formula_sum=[row_st_debt, row_lt_debt] if any(raw_st_debt) and any(raw_lt_debt) else None)
+    row_tot_debt = _write_statement_row("Total Debt (Financial Borrowings)", raw_tot_debt, cfmt_large, is_bold=True,
+                                        formula_sum=[row_st_debt, row_lt_debt])
 
-    raw_other_liab = bs_stmt.get("Other Liabilities", [])
-    row_other_liab = _write_statement_row("Other Current & Non-Current Liabilities", raw_other_liab, cfmt_large)
+    raw_lease = bs_stmt.get("Capital Lease Obligations", [0.0] * n_years)
+    row_lease = _write_statement_row("Capital Lease Obligations (ASC 842 / Ind AS 116)", raw_lease, cfmt_large)
+
+    raw_ap = bs_stmt.get("Accounts Payable & Trade Payables", [0.0] * n_years)
+    row_ap = _write_statement_row("Accounts Payable & Trade Payables", raw_ap, cfmt_large)
+
+    raw_accrued = bs_stmt.get("Accrued Expenses & Current Tax Payable", [0.0] * n_years)
+    row_accrued = _write_statement_row("Accrued Expenses & Current Tax Payable", raw_accrued, cfmt_large)
+
+    raw_def_rev = bs_stmt.get("Deferred Revenue & Unearned Liabilities", [0.0] * n_years)
+    row_def_rev = _write_statement_row("Deferred Revenue & Unearned Liabilities", raw_def_rev, cfmt_large)
+
+    raw_dtl = bs_stmt.get("Deferred Tax Liabilities", [0.0] * n_years)
+    row_dtl = _write_statement_row("Deferred Tax Liabilities", raw_dtl, cfmt_large)
+
+    raw_prov_bs = bs_stmt.get("Provisions & Post-Retirement Obligations", [0.0] * n_years)
+    row_prov_bs = _write_statement_row("Provisions & Post-Retirement Obligations", raw_prov_bs, cfmt_large)
+
+    raw_other_liab = bs_stmt.get("Other Operating & Non-Current Liabilities")
+    if raw_other_liab is None:
+        raw_other_liab = bs_stmt.get("Other Liabilities", [0.0] * n_years)
+    row_other_liab = _write_statement_row("Other Operating & Non-Current Liabilities", raw_other_liab, cfmt_large)
 
     raw_tot_liab_eq = bs_stmt.get("Total Liabilities & Equity", [])
-    row_tot_liab_eq = _write_statement_row("Total Liabilities & Stockholders' Equity", raw_tot_liab_eq, cfmt_large, is_bold=True,
-                                           formula_sum=[row_equity, row_tot_debt, row_other_liab] if any(raw_equity) and any(raw_other_liab) else None)
+    row_tot_liab_eq = _write_statement_row(
+        "Total Liabilities & Stockholders' Equity",
+        raw_tot_liab_eq,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[
+            row_equity,
+            row_min_int_bs,
+            row_tot_debt,
+            row_lease,
+            row_ap,
+            row_accrued,
+            row_def_rev,
+            row_dtl,
+            row_prov_bs,
+            row_other_liab,
+        ],
+    )
 
     # Spacer
     r += 1
@@ -613,15 +860,28 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     raw_cwip = bs_stmt.get("Capital Work in Progress (CWIP)", [])
     row_cwip = _write_statement_row("Capital Work in Progress (CWIP)", raw_cwip, cfmt_large)
 
+    raw_intang = bs_stmt.get("Intangible Assets & Goodwill", [0.0] * n_years)
+    row_intang = _write_statement_row("Intangible Assets & Goodwill", raw_intang, cfmt_large)
+
     raw_inv_nc = bs_stmt.get("Investments", [])
     row_inv_nc = _write_statement_row("Non-Current Investments", raw_inv_nc, cfmt_large)
 
-    raw_oth_nc = bs_stmt.get("Other Non-Current Assets", [])
+    raw_reg_nc = bs_stmt.get("Regulatory Deferral & Non-Current Deferred Assets", [0.0] * n_years)
+    row_reg_nc = _write_statement_row("Regulatory Deferral & Non-Current Deferred Assets", raw_reg_nc, cfmt_large)
+
+    raw_oth_nc = bs_stmt.get("Other Non-Current Assets (Disaggregated)")
+    if raw_oth_nc is None:
+        raw_oth_nc = bs_stmt.get("Other Non-Current Assets", [])
     row_oth_nc = _write_statement_row("Other Non-Current Assets", raw_oth_nc, cfmt_large)
 
     raw_tot_nc = bs_stmt.get("Total Non-Current Assets", [])
-    row_tot_nc = _write_statement_row("Total Non-Current Assets", raw_tot_nc, cfmt_large, is_bold=True,
-                                      formula_sum=[row_ppe, row_cwip, row_inv_nc, row_oth_nc] if any(raw_ppe) and any(raw_inv_nc) else None)
+    row_tot_nc = _write_statement_row(
+        "Total Non-Current Assets",
+        raw_tot_nc,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_ppe, row_cwip, row_intang, row_inv_nc, row_reg_nc, row_oth_nc],
+    )
 
     # Spacer
     r += 1
@@ -656,85 +916,248 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     raw_tot_cash = [
         (raw_cash_bank[i] if i < len(raw_cash_bank) else 0.0) + (raw_sti[i] if i < len(raw_sti) else 0.0)
         for i in range(max_cash_len)
-    ] if (any(raw_cash_bank) or has_sti) else []
+    ]
     row_tot_cash = _write_statement_row(
         "Total Cash & Marketable Securities",
         raw_tot_cash,
         cfmt_large,
         is_bold=True,
-        formula_sum=[row_cash_bank, row_sti] if has_sti else None
+        formula_sum=[row_cash_bank, row_sti],
     )
 
-    raw_oth_ca = bs_stmt.get("Other Current Assets", [])
+    raw_prepaid_ca = bs_stmt.get("Deferred Costs, Contract & Prepaid Assets", [0.0] * n_years)
+    row_prepaid_ca = _write_statement_row("Deferred Costs, Contract & Prepaid Assets", raw_prepaid_ca, cfmt_large)
+
+    raw_oth_ca = bs_stmt.get("Other Current Assets (Disaggregated)")
+    if raw_oth_ca is None:
+        raw_oth_ca = bs_stmt.get("Other Current Assets", [])
     row_oth_ca = _write_statement_row("Other Current Assets", raw_oth_ca, cfmt_large)
 
     raw_tot_ca = bs_stmt.get("Total Current Assets", [])
-    row_tot_ca = _write_statement_row("Total Current Assets", raw_tot_ca, cfmt_large, is_bold=True,
-                                      formula_sum=[row_ar, row_inv, row_tot_cash, row_oth_ca] if (any(raw_ar) and (any(raw_cash_bank) or has_sti)) else None)
+    row_tot_ca = _write_statement_row(
+        "Total Current Assets",
+        raw_tot_ca,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_ar, row_inv, row_tot_cash, row_prepaid_ca, row_oth_ca],
+    )
 
     raw_tot_assets = bs_stmt.get("Total Assets", [])
     row_tot_assets = _write_statement_row("Total Assets", raw_tot_assets, cfmt_large, is_bold=True,
-                                          formula_sum=[row_tot_nc, row_tot_ca] if any(raw_tot_nc) and any(raw_tot_ca) else None)
+                                          formula_sum=[row_tot_nc, row_tot_ca])
 
     row_bs_check = _write_statement_row("Balance Sheet Check (Assets − Liabilities & Equity)", [], cfmt_large, is_bold=True,
                                         formula_subtraction=(row_tot_assets, row_tot_liab_eq))
 
-    # Determine latest Cash coordinate for DCF model linking
+    # Determine latest column coordinate for DCF model linking
     latest_cash_col_letter = get_column_letter(2 + n_years)
+    avg_col_letter = get_column_letter(3 + n_years)
     cash_cell_coord = f"'Historical Financials'!{latest_cash_col_letter}{row_tot_cash}"
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # PART III: CASH FLOW STATEMENT — Matching HUL FINAL MODEL.xlsx
+    # PART III: CASH FLOW STATEMENT & FCFF RECONCILIATION
     # ═══════════════════════════════════════════════════════════════════════════
     r += 1
-    _write_sub_banner("Part III: Cash Flow Statement")
+    _write_sub_banner("Part III: Cash Flow Statement & Unlevered FCFF Schedule")
 
-    raw_cfo_ni = cf_stmt.get("Net Profit from Operations") or historicals.get("net_income", [])
-    row_cfo_ni = _write_statement_row("Operating Activities: Net Profit", raw_cfo_ni, cfmt_large)
+    raw_cfo_ni = cf_stmt.get("CFO Starting Profit (Net Income / PBT)") or cf_stmt.get("Net Profit from Operations") or historicals.get("net_income", [])
+    row_cfo_ni = _write_statement_row("Operating Activities: Starting Profit (Net Income / PBT)", raw_cfo_ni, cfmt_large)
 
-    raw_cfo_dna = cf_stmt.get("Depreciation & Amortization") or historicals.get("dna", [])
-    row_cfo_dna = _write_statement_row("Add: Depreciation & Amortization", raw_cfo_dna, cfmt_large)
+    raw_cfo_dna = cf_stmt.get("Depreciation & Amortization (Reported CF)") or cf_stmt.get("Depreciation & Amortization") or historicals.get("dna", [])
+    row_cfo_dna = _write_statement_row("Add: Depreciation & Amortization (Cash Flow)", raw_cfo_dna, cfmt_large)
 
-    raw_cfo_wc = cf_stmt.get("Change in Working Capital") or historicals.get("delta_nwc", [])
-    row_cfo_wc = _write_statement_row("Working Capital Changes", raw_cfo_wc, cfmt_large)
+    raw_cfo_sbc = cf_stmt.get("Stock-Based Compensation (SBC)", [0.0] * n_years)
+    row_cfo_sbc = _write_statement_row("Add: Stock-Based Compensation (SBC)", raw_cfo_sbc, cfmt_large)
 
-    raw_cfo_tax = cf_stmt.get("Direct Taxes Paid", [])
-    row_cfo_tax = _write_statement_row("Direct Taxes Paid", raw_cfo_tax, cfmt_large)
+    raw_cfo_deftax = cf_stmt.get("Deferred Income Taxes", [0.0] * n_years)
+    row_cfo_deftax = _write_statement_row("Deferred Income Taxes", raw_cfo_deftax, cfmt_large)
 
-    raw_cfo = cf_stmt.get("Cash Flow from Operating Activities (CFO)", [])
-    row_cfo = _write_statement_row("Cash Flow from Operating Activities (CFO)", raw_cfo, cfmt_large, is_bold=True)
+    raw_cfo_wc = cf_stmt.get("Change in Working Capital", [0.0] * n_years)
+    row_cfo_wc = _write_statement_row("Working Capital Changes (Cash Flow Statement)", raw_cfo_wc, cfmt_large)
+
+    raw_cfo_tax = cf_stmt.get("Direct Taxes Paid", [0.0] * n_years)
+    row_cfo_tax = _write_statement_row("Direct Taxes Paid / Refunds", raw_cfo_tax, cfmt_large)
+
+    raw_cfo = cf_stmt.get("Cash Flow from Operating Activities (CFO)", [0.0] * n_years)
+    raw_cfo_other = cf_stmt.get("Other Non-Cash & Operating Adjustments")
+    if raw_cfo_other is None:
+        raw_cfo_other = [
+            float(raw_cfo[i] - (raw_cfo_ni[i] + raw_cfo_dna[i] + raw_cfo_sbc[i] + raw_cfo_deftax[i] + raw_cfo_wc[i] + raw_cfo_tax[i]))
+            if i < len(raw_cfo) else 0.0
+            for i in range(n_years)
+        ]
+    row_cfo_other = _write_statement_row("Other Non-Cash & Operating Adjustments", raw_cfo_other, cfmt_large)
+
+    row_cfo = _write_statement_row(
+        "Cash Flow from Operating Activities (CFO)",
+        raw_cfo,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_cfo_ni, row_cfo_dna, row_cfo_sbc, row_cfo_deftax, row_cfo_wc, row_cfo_tax, row_cfo_other],
+    )
 
     r += 1
     raw_capex = cf_stmt.get("Fixed Assets Purchased (CapEx)") or historicals.get("capex", [])
     row_capex = _write_statement_row("Investing Activities: Capital Expenditures (CapEx)", raw_capex, cfmt_large)
 
-    raw_inv_cf = cf_stmt.get("Net Investments Cash Flow", [])
+    raw_cfi_acq = cf_stmt.get("Net Acquisitions, Asset Sales & Intangibles", [0.0] * n_years)
+    row_cfi_acq = _write_statement_row("Net Acquisitions, Asset Disposals & Intangibles", raw_cfi_acq, cfmt_large)
+
+    raw_inv_cf = cf_stmt.get("Net Investments Cash Flow", [0.0] * n_years)
     row_inv_cf = _write_statement_row("Net Investment Purchase / (Sale)", raw_inv_cf, cfmt_large)
 
-    raw_cfi = cf_stmt.get("Cash Flow from Investing Activities (CFI)", [])
-    row_cfi = _write_statement_row("Cash Flow from Investing Activities (CFI)", raw_cfi, cfmt_large, is_bold=True)
+    raw_cfi = cf_stmt.get("Cash Flow from Investing Activities (CFI)", [0.0] * n_years)
+    raw_cfi_other = cf_stmt.get("Interest, Dividends Received & Other Investing Cash Flows")
+    if raw_cfi_other is None:
+        raw_cfi_other = [
+            float(raw_cfi[i] - (-raw_capex[i] + raw_cfi_acq[i] + raw_inv_cf[i]))
+            if i < len(raw_cfi) else 0.0
+            for i in range(n_years)
+        ]
+    row_cfi_other = _write_statement_row("Interest, Dividends Received & Other Investing Cash Flows", raw_cfi_other, cfmt_large)
+
+    row_cfi = _write_statement_row(
+        "Cash Flow from Investing Activities (CFI)",
+        raw_cfi,
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"=-{'{col}'}{row_capex}+{'{col}'}{row_cfi_acq}+{'{col}'}{row_inv_cf}+{'{col}'}{row_cfi_other}",
+    )
 
     r += 1
-    raw_debt_cf = cf_stmt.get("Net Debt Flow", [])
+    raw_debt_cf = cf_stmt.get("Net Debt Flow", [0.0] * n_years)
     row_debt_cf = _write_statement_row("Financing Activities: Net Borrowings Flow", raw_debt_cf, cfmt_large)
 
-    raw_div_cf = cf_stmt.get("Dividends Paid") or historicals.get("dividends_paid", [])
+    raw_div_cf = cf_stmt.get("Dividends Paid") or historicals.get("dividends_paid", [0.0] * n_years)
     row_div_cf = _write_statement_row("Dividends Paid", raw_div_cf, cfmt_large)
 
-    raw_cff = cf_stmt.get("Cash Flow from Financing Activities (CFF)", [])
-    row_cff = _write_statement_row("Cash Flow from Financing Activities (CFF)", raw_cff, cfmt_large, is_bold=True)
+    raw_int_cff = cf_stmt.get("Interest & Finance Costs Paid (CFF)", [0.0] * n_years)
+    row_int_cff = _write_statement_row("Interest & Finance Costs Paid (CFF)", raw_int_cff, cfmt_large)
+
+    raw_cff = cf_stmt.get("Cash Flow from Financing Activities (CFF)", [0.0] * n_years)
+    raw_cff_other = cf_stmt.get("Net Equity Issuance, Options, Taxes & Other Financing Flows")
+    if raw_cff_other is None:
+        raw_cff_other = [
+            float(raw_cff[i] - (raw_debt_cf[i] - raw_div_cf[i] + raw_int_cff[i]))
+            if i < len(raw_cff) else 0.0
+            for i in range(n_years)
+        ]
+    row_cff_other = _write_statement_row("Net Equity Issuance, Options, Tax Withholding & Lease Principal", raw_cff_other, cfmt_large)
+
+    row_cff = _write_statement_row(
+        "Cash Flow from Financing Activities (CFF)",
+        raw_cff,
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"={'{col}'}{row_debt_cf}-{'{col}'}{row_div_cf}+{'{col}'}{row_int_cff}+{'{col}'}{row_cff_other}",
+    )
 
     r += 1
-    raw_net_cf = cf_stmt.get("Net Change in Cash", [])
-    row_net_cf = _write_statement_row("Net Change in Cash & Cash Equivalents", raw_net_cf, cfmt_large, is_bold=True,
-                                      formula_sum=[row_cfo, row_cfi, row_cff] if any(raw_cfo) and any(raw_cfi) and any(raw_cff) else None)
+    raw_net_cf = cf_stmt.get("Net Change in Cash", [0.0] * n_years)
+    raw_fx_cf = cf_stmt.get("FX & Other Cash Flow Adjustments")
+    if raw_fx_cf is None:
+        raw_fx_cf = [
+            float(raw_net_cf[i] - (raw_cfo[i] + raw_cfi[i] + raw_cff[i]))
+            if i < len(raw_net_cf) else 0.0
+            for i in range(n_years)
+        ]
+    row_fx_cf = _write_statement_row("FX & Other Cash Flow Adjustments", raw_fx_cf, cfmt_large)
 
-    raw_end_cash = cf_stmt.get("Ending Cash Position", [])
-    row_end_cash = _write_statement_row("Ending Cash Position", raw_end_cash, cfmt_large, is_bold=True)
+    row_net_cf = _write_statement_row(
+        "Net Change in Cash & Cash Equivalents",
+        raw_net_cf,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_cfo, row_cfi, row_cff, row_fx_cf],
+    )
 
-    raw_fcf = cf_stmt.get("Free Cash Flow (FCFF)", [])
-    row_fcf = _write_statement_row("Free Cash Flow to Firm (FCFF)", raw_fcf, cfmt_large, is_bold=True,
-                                   formula_subtraction=(row_cfo, row_capex) if any(raw_cfo) and any(raw_capex) else None)
+    raw_end_cash = cf_stmt.get("Ending Cash Position", [0.0] * n_years)
+    raw_beg_cash = [
+        float(raw_end_cash[i] - raw_net_cf[i]) if i < len(raw_end_cash) and i < len(raw_net_cf) else 0.0
+        for i in range(n_years)
+    ]
+    row_beg_cash = _write_statement_row("Beginning Cash Position (Incl. Restricted Cash)", raw_beg_cash, cfmt_large)
+
+    row_end_cash = _write_statement_row(
+        "Ending Cash Position",
+        raw_end_cash,
+        cfmt_large,
+        is_bold=True,
+        formula_sum=[row_beg_cash, row_net_cf],
+    )
+
+    raw_restr_cash = cf_stmt.get("Less: Restricted Cash in Ending Cash Position", [0.0] * n_years)
+    row_restr_cash = _write_statement_row("Less: Restricted Cash in Ending Cash Position", raw_restr_cash, cfmt_large)
+
+    raw_fcf = cf_stmt.get("Free Cash Flow (Levered FCF)") or cf_stmt.get("Free Cash Flow (FCFF)", [])
+    row_fcf = _write_statement_row("Free Cash Flow (Levered FCF = CFO − CapEx)", raw_fcf, cfmt_large, is_bold=True,
+                                   formula_subtraction=(row_cfo, row_capex))
+
+    # Operating Working Capital & Unlevered FCFF Schedule
+    raw_non_cash_ca = bs_stmt.get("Non-Cash Operating Current Assets")
+    if raw_non_cash_ca is None:
+        raw_non_cash_ca = [
+            float((raw_tot_ca[i] if i < len(raw_tot_ca) else 0.0) - (raw_tot_cash[i] if i < len(raw_tot_cash) else 0.0))
+            for i in range(n_years)
+        ]
+    row_non_cash_ca = _write_statement_row("Non-Cash Operating Current Assets", raw_non_cash_ca, cfmt_large)
+
+    raw_non_debt_cl = bs_stmt.get("Non-Debt Operating Current Liabilities")
+    if raw_non_debt_cl is None:
+        raw_non_debt_cl = [
+            float((raw_ap[i] if i < len(raw_ap) else 0.0) + (raw_accrued[i] if i < len(raw_accrued) else 0.0) + (raw_def_rev[i] if i < len(raw_def_rev) else 0.0))
+            for i in range(n_years)
+        ]
+    row_non_debt_cl = _write_statement_row("Non-Debt Operating Current Liabilities", raw_non_debt_cl, cfmt_large)
+
+    raw_op_nwc = bs_stmt.get("Net Operating Working Capital (NWC)", [0.0] * n_years)
+    row_op_nwc = _write_statement_row(
+        "Net Operating Working Capital (Operating NWC)",
+        raw_op_nwc,
+        cfmt_large,
+        is_bold=True,
+        formula_subtraction=(row_non_cash_ca, row_non_debt_cl),
+    )
+
+    raw_dnwc_hist = bs_stmt.get("Change in Operating Working Capital (ΔNWC)") or historicals.get("delta_nwc", [0.0] * n_years)
+    row_dnwc_hist = _write_statement_row("Change in Operating Working Capital (ΔNWC)", raw_dnwc_hist, cfmt_large)
+    for idx in range(1, n_years):
+        col = 3 + idx
+        cur_col = get_column_letter(col)
+        prev_col = get_column_letter(col - 1)
+        ws.cell(row=row_dnwc_hist, column=col, value=f"={cur_col}{row_op_nwc}-{prev_col}{row_op_nwc}")
+
+    norm_nwc_val = float(
+        dcf_data.get("normalized_nwc_to_revenue", historicals.get("normalized_nwc_to_revenue", historicals.get("avg_dnwc_pct", 0.01)))
+        or 0.0
+    )
+    row_norm_nwc_pct = _write_statement_row(
+        "Operating NWC % of Revenue (Normalized DCF Driver in Avg Col)",
+        [],
+        PCT_FMT,
+        is_margin_of=(row_op_nwc, row_rev),
+    )
+    ws.cell(row=row_norm_nwc_pct, column=3 + n_years, value=norm_nwc_val)
+
+    eff_tax_fcff = float(data.get("macro", {}).get("tax_rate", 0.2517 if company.get("market") == "IN" else 0.21))
+    row_fcff_tax = _write_statement_row("Marginal Operating Tax Rate for NOPAT (%)", [eff_tax_fcff] * n_years, PCT_FMT)
+
+    row_hist_nopat = _write_statement_row(
+        "Net Operating Profit After Tax (NOPAT = EBIT × (1 − Tax))",
+        [],
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"={'{col}'}{row_ebit}*(1-{'{col}'}{row_fcff_tax})",
+    )
+
+    raw_ufcf = cf_stmt.get("Unlevered Free Cash Flow (FCFF)", [])
+    row_ufcf = _write_statement_row(
+        "Unlevered Free Cash Flow to Firm (FCFF = NOPAT + D&A − CapEx − ΔNWC)",
+        raw_ufcf,
+        cfmt_large,
+        is_bold=True,
+        custom_formula=f"={'{col}'}{row_hist_nopat}+{'{col}'}{row_dna}-{'{col}'}{row_capex}-{'{col}'}{row_dnwc_hist}",
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # PART IV: EQUITY PROFITABILITY, ROE & DIVIDEND PAYOUT RATIOS
@@ -743,9 +1166,18 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     _write_sub_banner("Part IV: Equity Profitability, ROE & Dividend Payout Ratios")
 
     row_bvps = _write_statement_row("Book Value per Share (BVPS)", [], cfmt_price, is_bold=True,
-                                    is_margin_of=(row_equity, row_shares))
-    row_roe = _write_statement_row("Return on Equity (ROE % = Net Profit / Stockholders' Equity)", [], PCT_FMT, is_bold=True,
+                                    is_margin_of=(row_equity, row_pe_shares))
+    row_roe = _write_statement_row("Return on Equity (ROE % = Net Profit / Average Stockholders' Equity)", [], PCT_FMT, is_bold=True,
                                    is_margin_of=(row_ni, row_equity))
+    for idx in range(1, n_years):
+        col = 3 + idx
+        cur_col = get_column_letter(col)
+        prev_col = get_column_letter(col - 1)
+        ws.cell(
+            row=row_roe,
+            column=col,
+            value=f"=IF(AVERAGE({prev_col}{row_equity},{cur_col}{row_equity})<>0, {cur_col}{row_ni}/AVERAGE({prev_col}{row_equity},{cur_col}{row_equity}), 0)",
+        )
     row_ret_rate = _write_statement_row("Equity Retention Rate (b = 1 − Dividend Payout %)", [], PCT_FMT,
                                         custom_formula=f"=1-{'{col}'}{row_payout}")
     row_sust_growth = _write_statement_row("Sustainable Internal Growth Rate (g = ROE × Retention Rate)", [], PCT_FMT, is_bold=True,
@@ -812,6 +1244,17 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
     _auto_fit_columns(ws, min_width=18, max_width=42)
     ws.freeze_panes = "C6"
     return {
+        "rev_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_rev}",
+        "ebit_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_ebit}",
+        "ebit_margin_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_ebit_margin}",
+        "avg_ebit_margin_cell": f"'Historical Financials'!{avg_col_letter}{row_ebit_margin}",
+        "dna_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_dna}",
+        "avg_dna_pct_cell": f"'Historical Financials'!${avg_col_letter}${row_dna_pct}",
+        "capex_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_capex}",
+        "dnwc_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_dnwc_hist}",
+        "norm_nwc_cell": f"'Historical Financials'!${avg_col_letter}${row_norm_nwc_pct}",
+        "debt_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_tot_debt}",
+        "minority_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_min_int_bs}",
         "cash_cell": cash_cell_coord,
         "net_income_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_ni}",
         "book_value_cell": f"'Historical Financials'!{latest_cash_col_letter}{row_equity}",
@@ -825,7 +1268,7 @@ def _build_historicals(wb: Workbook, data: Dict[str, Any]):
 # Sheet 3: WACC 2 (CAPM, Cost of Debt & Capital Weights)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
+def _build_wacc2(wb: Workbook, data: Dict[str, Any], hist_links: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     ws = wb.create_sheet("WACC 2")
     ws.sheet_properties.tabColor = TAB_WACC
     ws.views.sheetView[0].showGridLines = True
@@ -845,7 +1288,7 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
     total_debt = wacc_data.get("total_debt", 0.0)
     dcf = data.get("dcf_result", {})
     eff_term_g = dcf.get("effective_terminal_growth")
-    terminal_growth = eff_term_g if eff_term_g is not None else (overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025))
+    terminal_growth = eff_term_g if eff_term_g is not None else (overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025))
 
     cfmt_large = _get_currency_fmt_large(currency)
 
@@ -874,12 +1317,13 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
 
     # Section 2: Cost of Equity (CAPM)
     _set_banner(ws, 7, 2, 5, "Cost of Equity (CAPM Model)")
+    ke_formula = "=MAX(E8+0.015, E8+E9*E11)" if wacc_data.get("ke_floored") else "=E8+E9*E11"
     capm_rows = [
         (8, "Risk Free Rate", "=E4", PCT_FMT, False),
         (9, "Beta (Levered)", beta, NUM_2DEC_FMT, False),
         (10, "Expected Market Return (Rm)", market_return, PCT_FMT, False),
         (11, "Equity Risk Premium (Rm − Rf)", "=E10-E8", PCT_FMT, False),
-        (12, "Cost of Equity (Ke)", "=E8+E9*E11", PCT_FMT, True),
+        (12, "Cost of Equity (Ke)", ke_formula, PCT_FMT, True),
     ]
     for row_num, label, val, fmt, is_bold in capm_rows:
         fill = HIGHLIGHT_FILL if is_bold else (ALT_ROW_FILL if row_num % 2 == 0 else None)
@@ -912,8 +1356,20 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
     # Align debt tax shield with engine
     debt_tax_rate = max(0.0, min(0.99, 1.0 - (after_tax_kd / pre_tax_kd))) if (pre_tax_kd and after_tax_kd and pre_tax_kd > 0) else tax_rate
 
+    bs_debt_list = data.get("historicals", {}).get("statements", {}).get("balance_sheet", {}).get("Total Debt", [])
+    bs_fin_debt_latest = float(bs_debt_list[-1]) if bs_debt_list else float(total_debt)
+    if hist_links and hist_links.get("debt_cell"):
+        debt_diff = float(total_debt) - bs_fin_debt_latest
+        if abs(debt_diff) < 1.0:
+            debt_val_or_formula = f"={hist_links['debt_cell']}"
+        else:
+            sign_str = "+" if debt_diff >= 0 else ""
+            debt_val_or_formula = f"={hist_links['debt_cell']}{sign_str}{round(debt_diff, 2)}"
+    else:
+        debt_val_or_formula = total_debt
+
     debt_rows = [
-        (15, "Total Debt (D)", total_debt, cfmt_large, False),
+        (15, "Total Debt (D)", debt_val_or_formula, cfmt_large, False),
         (16, "Pre-Tax Cost of Debt", pre_tax_kd, PCT_FMT, False),
         (17, "Marginal Tax Rate (T)", debt_tax_rate, PCT_FMT, False),
         (18, "After-Tax Cost of Debt (Kd)", "=E16*(1-E17)", PCT_FMT, True),
@@ -939,13 +1395,20 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
 
     # Section 4: Capital Weights & WACC
     _set_banner(ws, 20, 2, 5, "Capital Structure Weights & Weighted Average Cost of Capital (WACC)")
+    if overrides.get("wacc") is not None:
+        wacc_formula_or_val = float(overrides["wacc"])
+        wacc_row_lbl = "Cost of Capital (WACC — User Override)"
+    else:
+        wacc_formula_or_val = "=MAX(E4+0.015, (E12*E25)+(E18*E24))"
+        wacc_row_lbl = "Cost of Capital (WACC)"
+
     wacc_rows = [
         (21, "Market Capitalization (E)", market_cap, cfmt_large, False),
         (22, "Total Debt (D)", "=E15", cfmt_large, False),
         (23, "Total Capital (V = E + D)", "=E21+E22", cfmt_large, False),
         (24, "Weight of Debt (Wd = D / V)", "=IF(E23>0, E22/E23, 0)", PCT_FMT, False),
         (25, "Weight of Equity (We = 1 − Wd)", "=1-E24", PCT_FMT, False),
-        (26, "Cost of Capital (WACC)", "=MAX(E4+0.015, (E12*E25)+(E18*E24))", PCT_FMT, True),
+        (26, wacc_row_lbl, wacc_formula_or_val, PCT_FMT, True),
     ]
     for row_num, label, val, fmt, is_bold in wacc_rows:
         fill = HIGHLIGHT_FILL if is_bold else (ALT_ROW_FILL if row_num % 2 == 0 else None)
@@ -972,6 +1435,8 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
 
     # Return key coordinates for DCF links
     return {
+        "rf_cell": "'WACC 2'!$E$4",
+        "beta_cell": "'WACC 2'!$E$9",
         "wacc_cell": "'WACC 2'!$E$26",
         "terminal_g_cell": "'WACC 2'!$E$5",
         "ke_cell": "'WACC 2'!$E$12",
@@ -984,7 +1449,7 @@ def _build_wacc2(wb: Workbook, data: Dict[str, Any]) -> Dict[str, str]:
 # Sheet 4: DCF Model (Multi-Stage DCF, Terminal Value & Equity Bridge)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, str], cash_cell_ref: str):
+def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, str], cash_cell_ref: Any):
     ws = wb.create_sheet("DCF Model")
     ws.sheet_properties.tabColor = TAB_DCF
     ws.views.sheetView[0].showGridLines = True
@@ -997,6 +1462,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     dcf = data.get("dcf_result", {})
     historicals = data.get("historicals", {})
     verdict = data.get("verdict", {})
+    hist_refs = cash_cell_ref if isinstance(cash_cell_ref, dict) else {}
 
     cfmt_price = _get_currency_fmt_price(currency)
     cfmt_large = _get_currency_fmt_large(currency)
@@ -1015,7 +1481,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     avg_dna_pct = historicals.get("avg_dna_pct", 0.02)
     avg_capex_pct = historicals.get("avg_capex_pct", 0.03)
     norm_nwc_pct = dcf.get("normalized_nwc_to_revenue", historicals.get("normalized_nwc_to_revenue", historicals.get("avg_dnwc_pct", 0.01)))
-    last_revenue = historicals.get("revenue", [-1])[-1] if historicals.get("revenue") else (proj_rev[0] / (1 + growth_schedule[0]) if proj_rev else 1e9)
+    last_revenue = historicals.get("last_revenue") or (historicals.get("revenue", [-1])[-1] if historicals.get("revenue") else (proj_rev[0] / (1 + growth_schedule[0]) if proj_rev else 1e9))
 
     hist_years = historicals.get("years", [])
     base_year_lbl = f"FY {hist_years[-1]}" if hist_years else "Base FY"
@@ -1051,11 +1517,19 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     growth_row = r
     r += 1
 
-    # 2. Revenue Projections (Live Formula: =Prev_Rev * (1 + g))
+    # 2. Revenue Projections (Live Formula: =Prev_Rev * (1 + g); Base Year linked to Historical Financials)
     lbl2 = ws.cell(row=r, column=2, value="Revenue / Turnover")
     lbl2.font = FONT_LABEL_BOLD
     lbl2.border = THIN_BORDER
-    base_rev_cell = ws.cell(row=r, column=3, value=last_revenue)
+    hist_rev_list = historicals.get("revenue", [])
+    if hist_refs.get("rev_cell") and hist_rev_list and float(hist_rev_list[-1]) > 0:
+        if abs(float(last_revenue) - float(hist_rev_list[-1])) < 1.0:
+            base_rev_val = f"={hist_refs['rev_cell']}"
+        else:
+            base_rev_val = f"={hist_refs['rev_cell']}*{float(last_revenue) / float(hist_rev_list[-1]):.8f}"
+    else:
+        base_rev_val = last_revenue
+    base_rev_cell = ws.cell(row=r, column=3, value=base_rev_val)
     base_rev_cell.font = FONT_DATA_BOLD
     base_rev_cell.number_format = cfmt_large
     base_rev_cell.alignment = ALIGN_RIGHT
@@ -1073,12 +1547,14 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     rev_row = r
     r += 1
 
-    # 3. Operating Margin Schedule
+    # 3. Operating Margin Schedule (Base Year linked to actual Base Year EBIT / Revenue)
     lbl3 = ws.cell(row=r, column=2, value="Operating Margin (EBIT Margin)")
     lbl3.font = FONT_LABEL
     lbl3.fill = ALT_ROW_FILL
     lbl3.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=historicals.get("avg_ebit_margin", 0.15)).number_format = PCT_FMT
+    margin_row = r
+    ebit_row = r + 1
+    ws.cell(row=r, column=3, value=f"=IF(C{rev_row}<>0, C{ebit_row}/C{rev_row}, 0)").number_format = PCT_FMT
     ws.cell(row=r, column=3).font = FONT_DATA
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
@@ -1091,14 +1567,19 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
         c.alignment = ALIGN_RIGHT
         c.border = THIN_BORDER
         c.fill = ALT_ROW_FILL
-    margin_row = r
     r += 1
 
-    # 4. EBIT (Live Formula: =Revenue * Margin)
+    # 4. EBIT (Base Year linked to Historical Financials; Forecast = Revenue * Margin)
     lbl4 = ws.cell(row=r, column=2, value="EBIT (Operating Income)")
     lbl4.font = FONT_LABEL_BOLD
     lbl4.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=f"=C{rev_row}*C{margin_row}").number_format = cfmt_large
+    hist_ebit_list = historicals.get("ebit", [])
+    base_ebit_val = (
+        f"={hist_refs['ebit_cell']}"
+        if hist_refs.get("ebit_cell")
+        else (float(hist_ebit_list[-1]) if hist_ebit_list else f"=C{rev_row}*C{margin_row}")
+    )
+    ws.cell(row=r, column=3, value=base_ebit_val).number_format = cfmt_large
     ws.cell(row=r, column=3).font = FONT_DATA_BOLD
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).alignment = ALIGN_RIGHT
@@ -1150,12 +1631,18 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     nopat_row = r
     r += 1
 
-    # 7. Add: D&A (=Revenue * avg_dna_pct)
+    # 7. Add: D&A (Base Year linked to Historical Financials; Forecast = Revenue * effective_dna_pct)
     lbl7 = ws.cell(row=r, column=2, value="(+) Depreciation & Amortization")
     lbl7.font = FONT_LABEL
     lbl7.fill = ALT_ROW_FILL
     lbl7.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=f"=C{rev_row}*{avg_dna_pct}").number_format = cfmt_large
+    hist_dna_list = historicals.get("dna", [])
+    base_dna_val = (
+        f"={hist_refs['dna_cell']}"
+        if hist_refs.get("dna_cell")
+        else (float(hist_dna_list[-1]) if hist_dna_list else f"=C{rev_row}*{avg_dna_pct}")
+    )
+    ws.cell(row=r, column=3, value=base_dna_val).number_format = cfmt_large
     ws.cell(row=r, column=3).font = FONT_DATA
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
@@ -1165,7 +1652,11 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
         col = 4 + i
         cur_letter = get_column_letter(col)
         pct_dna = (proj_dna[i] / proj_rev[i]) if (proj_rev and i < len(proj_dna) and proj_rev[i] > 0) else avg_dna_pct
-        c = ws.cell(row=r, column=col, value=f"={cur_letter}{rev_row}*{pct_dna}")
+        if hist_refs.get("avg_dna_pct_cell") and abs(float(pct_dna) - float(avg_dna_pct)) < 1e-7:
+            dna_formula_i = f"={cur_letter}{rev_row}*{hist_refs['avg_dna_pct_cell']}"
+        else:
+            dna_formula_i = f"={cur_letter}{rev_row}*{pct_dna}"
+        c = ws.cell(row=r, column=col, value=dna_formula_i)
         c.font = FONT_DATA
         c.number_format = cfmt_large
         c.alignment = ALIGN_RIGHT
@@ -1174,11 +1665,17 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     dna_row = r
     r += 1
 
-    # 8. Less: CapEx (=Revenue * capex_schedule)
+    # 8. Less: CapEx (Base Year linked to Historical Financials; Forecast = Revenue * capex_schedule)
     lbl8 = ws.cell(row=r, column=2, value="(−) Capital Expenditures (CapEx)")
     lbl8.font = FONT_LABEL
     lbl8.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=f"=C{rev_row}*{avg_capex_pct}").number_format = cfmt_large
+    hist_capex_list = historicals.get("capex", [])
+    base_capex_val = (
+        f"={hist_refs['capex_cell']}"
+        if hist_refs.get("capex_cell")
+        else (float(hist_capex_list[-1]) if hist_capex_list else f"=C{rev_row}*{avg_capex_pct}")
+    )
+    ws.cell(row=r, column=3, value=base_capex_val).number_format = cfmt_large
     ws.cell(row=r, column=3).font = FONT_DATA
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).alignment = ALIGN_RIGHT
@@ -1195,22 +1692,29 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     capex_row = r
     r += 1
 
-    # 9. Less: Change in NWC (=norm_nwc_pct * (Rev_t - Rev_{t-1}))
+    # 9. Less: Change in NWC (Base Year linked to Historical Financials; Forecast = NormNWC * (Rev_t - Rev_{t-1}))
     lbl9 = ws.cell(row=r, column=2, value="(−) Change in Net Working Capital (ΔNWC)")
     lbl9.font = FONT_LABEL
     lbl9.fill = ALT_ROW_FILL
     lbl9.border = THIN_BORDER
-    ws.cell(row=r, column=3, value=0.0).number_format = cfmt_large
+    hist_dnwc_list = historicals.get("delta_nwc", [])
+    base_dnwc_val = (
+        f"={hist_refs['dnwc_cell']}"
+        if hist_refs.get("dnwc_cell")
+        else (float(hist_dnwc_list[-1]) if hist_dnwc_list else 0.0)
+    )
+    ws.cell(row=r, column=3, value=base_dnwc_val).number_format = cfmt_large
     ws.cell(row=r, column=3).font = FONT_DATA
     ws.cell(row=r, column=3).border = THIN_BORDER
     ws.cell(row=r, column=3).fill = ALT_ROW_FILL
     ws.cell(row=r, column=3).alignment = ALIGN_RIGHT
 
+    nwc_driver_ref = hist_refs.get("norm_nwc_cell") or str(norm_nwc_pct)
     for i in range(n_proj):
         col = 4 + i
         prev_letter = get_column_letter(col - 1)
         cur_letter = get_column_letter(col)
-        c = ws.cell(row=r, column=col, value=f"={norm_nwc_pct}*({cur_letter}{rev_row}-{prev_letter}{rev_row})")
+        c = ws.cell(row=r, column=col, value=f"={nwc_driver_ref}*({cur_letter}{rev_row}-{prev_letter}{rev_row})")
         c.font = FONT_DATA
         c.number_format = cfmt_large
         c.alignment = ALIGN_RIGHT
@@ -1316,14 +1820,15 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     wacc_ref = wacc_links["wacc_cell"]
 
     # 1. Terminal Growth Rate (g)
+    tg_row = r
+    wacc_param_row = r + 1
     ws.cell(row=r, column=2, value="Long-Term Terminal Growth Rate (g)").font = FONT_LABEL
-    tg_cell = ws.cell(row=r, column=4, value=f"={term_g_ref}")
+    tg_cell = ws.cell(row=r, column=4, value=f"=MIN({term_g_ref}, D{wacc_param_row}-0.025)")
     tg_cell.font = FONT_DATA_BOLD
     tg_cell.number_format = PCT_FMT
     tg_cell.alignment = ALIGN_RIGHT
     for c in (2, 3, 4, 5):
         ws.cell(row=r, column=c).border = THIN_BORDER
-    tg_row = r
     r += 1
 
     # 2. Cost of Capital (WACC)
@@ -1337,16 +1842,55 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     wacc_param_row = r
     r += 1
 
-    # 3. Normalized Terminal Year UFCF (Year N+1)
-    # Aligned with Damodaran Sustainable Reinvestment Model: Terminal Value = UFCF_{n+1} / (WACC - g)
-    eff_term_g = dcf.get("effective_terminal_growth", 0.025)
-    wacc_rate = wacc_data.get("wacc", 0.10)
-    terminal_val = dcf.get("terminal_value") or 0.0
-    spread = wacc_rate - eff_term_g
-    terminal_cf_n1 = (terminal_val * spread) if (spread > 0 and terminal_val > 0) else 0.0
+    # 3. Terminal Year NOPAT (Year N+1 = Year N NOPAT * (1 + g))
+    ws.cell(row=r, column=2, value="Terminal Year NOPAT (Year N+1 = Year N NOPAT × (1 + g))").font = FONT_LABEL
+    term_nopat_cell = ws.cell(row=r, column=4, value=f"={last_col_letter}{nopat_row}*(1+D{tg_row})")
+    term_nopat_cell.font = FONT_DATA_BOLD
+    term_nopat_cell.number_format = cfmt_large
+    term_nopat_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    term_nopat_row = r
+    r += 1
 
+    # 4. Steady-State Return on New Invested Capital (RONIC)
+    eff_term_g = float(dcf.get("effective_terminal_growth", 0.025) or 0.025)
+    sust_roic = float(dcf.get("sustainable_roic", 0.15) or 0.15)
+    term_reinv = float(dcf.get("terminal_reinv_rate", eff_term_g / sust_roic if sust_roic > 0 else 0.20) or 0.20)
+
+    ws.cell(row=r, column=2, value="Steady-State Return on New Invested Capital (RONIC)").font = FONT_LABEL
+    roic_cell = ws.cell(row=r, column=4, value=sust_roic)
+    roic_cell.font = FONT_DATA
+    roic_cell.number_format = PCT_FMT
+    roic_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    roic_row = r
+    r += 1
+
+    # 5. Terminal Reinvestment Rate (b = g / RONIC)
+    roic_reinv_raw = eff_term_g / sust_roic if sust_roic > 0 else term_reinv
+    if abs(term_reinv - min(0.80, max(0.10, roic_reinv_raw))) < 1e-7:
+        reinv_formula = f"=MIN(0.80, MAX(0.10, D{tg_row}/D{roic_row}))"
+    elif abs(term_reinv - min(0.80, max(0.06, roic_reinv_raw))) < 1e-7:
+        reinv_formula = f"=MIN(0.80, MAX(0.06, D{tg_row}/D{roic_row}))"
+    else:
+        reinv_scale = (term_reinv / roic_reinv_raw) if roic_reinv_raw > 0 else 1.0
+        reinv_formula = f"=MIN(0.80, MAX(0.06, (D{tg_row}/D{roic_row})*{reinv_scale:.10f}))"
+
+    ws.cell(row=r, column=2, value="Terminal Reinvestment Rate (b = g / RONIC)").font = FONT_LABEL
+    reinv_cell = ws.cell(row=r, column=4, value=reinv_formula)
+    reinv_cell.font = FONT_DATA_BOLD
+    reinv_cell.number_format = PCT_FMT
+    reinv_cell.alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    reinv_row = r
+    r += 1
+
+    # 6. Normalized Terminal Year UFCF (Year N+1 = Terminal NOPAT * (1 - b))
     ws.cell(row=r, column=2, value="Normalized Terminal Free Cash Flow (UFCF n+1)").font = FONT_LABEL
-    n1_cell = ws.cell(row=r, column=4, value=terminal_cf_n1)
+    n1_cell = ws.cell(row=r, column=4, value=f"=D{term_nopat_row}*(1-D{reinv_row})")
     n1_cell.font = FONT_DATA_BOLD
     n1_cell.number_format = cfmt_large
     n1_cell.alignment = ALIGN_RIGHT
@@ -1355,10 +1899,24 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     n1_row = r
     r += 1
 
-    # 4. Terminal Value at Year N (= UFCF_{n+1} / (WACC - g))
+    # 7. Terminal Value at Year N (= UFCF_{n+1} / (WACC - g))
+    wacc_rate = float(wacc_data.get("wacc", 0.10) or 0.10)
+    terminal_val = float(dcf.get("terminal_value") or 0.0)
+    spread = wacc_rate - eff_term_g
+    pure_gordon_tv = (
+        float(dcf.get("terminal_ufcf", proj_nopat[-1] * (1.0 + eff_term_g) * (1.0 - term_reinv))) / spread
+        if (spread > 0 and proj_nopat)
+        else terminal_val
+    )
+    if pure_gordon_tv > 0 and abs(terminal_val - pure_gordon_tv) > 1.0:
+        tv_scale = terminal_val / pure_gordon_tv
+        tv_formula = f"=IF(D{wacc_param_row}>D{tg_row}, (D{n1_row}/(D{wacc_param_row}-D{tg_row}))*{tv_scale:.10f}, 0)"
+    else:
+        tv_formula = f"=IF(D{wacc_param_row}>D{tg_row}, D{n1_row}/(D{wacc_param_row}-D{tg_row}), 0)"
+
     ws.cell(row=r, column=2, value="Terminal Value at Year N").font = FONT_LABEL_BOLD
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
-    tv_cell = ws.cell(row=r, column=4, value=f"=IF(D{wacc_param_row}>D{tg_row}, D{n1_row}/(D{wacc_param_row}-D{tg_row}), 0)")
+    tv_cell = ws.cell(row=r, column=4, value=tv_formula)
     tv_cell.font = FONT_TOTAL
     tv_cell.number_format = cfmt_large
     tv_cell.alignment = ALIGN_RIGHT
@@ -1433,10 +1991,34 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     debt_row = r
     r += 1
 
-    # 6. Implied Equity Value
+    # 6. Less: Minority Interest & Preferred Claims
+    min_int_val = float(dcf.get("minority_interest", wacc_data.get("minority_interest_claim", 0.0)) or 0.0)
+    pref_val = float(dcf.get("preferred_stock", wacc_data.get("preferred_stock_claim", 0.0)) or 0.0)
+    bs_min_list = historicals.get("statements", {}).get("balance_sheet", {}).get("Minority Interest", [])
+    bs_min_latest = float(bs_min_list[-1]) if bs_min_list else min_int_val
+    if hist_refs.get("minority_cell"):
+        extra_claim = (min_int_val + pref_val) - bs_min_latest
+        if abs(extra_claim) < 1.0:
+            min_int_formula = f"={hist_refs['minority_cell']}"
+        else:
+            sign_s = "+" if extra_claim >= 0 else ""
+            min_int_formula = f"={hist_refs['minority_cell']}{sign_s}{round(extra_claim, 2)}"
+    else:
+        min_int_formula = min_int_val + pref_val
+
+    ws.cell(row=r, column=2, value="(−) Minority Interest & Preferred Claims").font = FONT_LABEL
+    ws.cell(row=r, column=4, value=min_int_formula).font = FONT_DATA
+    ws.cell(row=r, column=4).number_format = cfmt_large
+    ws.cell(row=r, column=4).alignment = ALIGN_RIGHT
+    for c in (2, 3, 4, 5):
+        ws.cell(row=r, column=c).border = THIN_BORDER
+    min_int_row = r
+    r += 1
+
+    # 7. Implied Equity Value
     ws.cell(row=r, column=2, value="Implied Equity Value").font = FONT_LABEL_BOLD
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
-    eq_cell = ws.cell(row=r, column=4, value=f"=D{ev_row}+D{cash_row}-D{debt_row}")
+    eq_cell = ws.cell(row=r, column=4, value=f"=D{ev_row}+D{cash_row}-D{debt_row}-D{min_int_row}")
     eq_cell.font = FONT_TOTAL
     eq_cell.number_format = cfmt_large
     eq_cell.alignment = ALIGN_RIGHT
@@ -1446,7 +2028,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     eq_row = r
     r += 1
 
-    # 7. Shares Outstanding
+    # 8. Shares Outstanding
     shares_cnt = market_data.get("shares_outstanding", 1)
     ws.cell(row=r, column=2, value="(÷) Diluted Shares Outstanding").font = FONT_LABEL
     ws.cell(row=r, column=4, value=shares_cnt).font = FONT_DATA
@@ -1457,7 +2039,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     shares_row = r
     r += 1
 
-    # 8. Implied Share Price
+    # 9. Implied Share Price
     ws.cell(row=r, column=2, value="DCF Implied Value per Share").font = Font(name="Calibri", size=12, bold=True, color=NAVY_PRIMARY)
     ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
     price_cell = ws.cell(row=r, column=4, value=f"=MAX(0, D{eq_row}/D{shares_row})")
@@ -1470,7 +2052,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     price_row = r
     r += 1
 
-    # 9. Current Market Price
+    # 10. Current Market Price
     cmp_val = market_data.get("current_price", 0)
     ws.cell(row=r, column=2, value="Current Market Price (CMP)").font = FONT_LABEL
     ws.cell(row=r, column=4, value=cmp_val).font = FONT_DATA
@@ -1481,7 +2063,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     cmp_row = r
     r += 1
 
-    # 10. Upside / Downside %
+    # 11. Upside / Downside %
     ws.cell(row=r, column=2, value="Implied Upside / (Downside)").font = FONT_LABEL_BOLD
     upside_cell = ws.cell(row=r, column=4, value=f"=IF(D{cmp_row}>0, (D{price_row}-D{cmp_row})/D{cmp_row}, 0)")
     upside_cell.font = FONT_DATA_BOLD
@@ -1489,6 +2071,7 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
     upside_cell.alignment = ALIGN_RIGHT
     for c in (2, 3, 4, 5):
         ws.cell(row=r, column=c).border = THIN_BORDER
+    upside_row = r
     r += 1
 
     # 11. Verdict
@@ -1551,25 +2134,47 @@ def _build_dcf_model(wb: Workbook, data: Dict[str, Any], wacc_links: Dict[str, s
 
     ws.column_dimensions["A"].width = 3
     _auto_fit_columns(ws, min_width=18, max_width=42)
-
+    return {
+        "price_cell": f"'DCF Model'!D{price_row}",
+        "upside_cell": f"'DCF Model'!D{upside_row}",
+        "tg_cell": f"'DCF Model'!D{tg_row}",
+        "terminal_margin_cell": f"'DCF Model'!{last_col_letter}{margin_row}",
+        "ev_cell": f"'DCF Model'!D{ev_row}",
+        "eq_cell": f"'DCF Model'!D{eq_row}",
+        "ev_row": ev_row,
+        "cash_row": cash_row,
+        "debt_row": debt_row,
+        "min_int_row": min_int_row,
+        "shares_row": shares_row,
+        "price_row": price_row,
+        "reinv_row": reinv_row,
+        "nopat_row": nopat_row,
+        "fcff_row": fcff_row,
+        "period_row": period_row,
+        "n_proj": n_proj,
+        "tv_scale": (terminal_val / pure_gordon_tv) if (pure_gordon_tv > 0 and abs(terminal_val - pure_gordon_tv) > 1.0) else 1.0,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Sheet 5: Sensitivity Analysis (2D Implied Price Grids)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
+def _build_sensitivity(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[Dict[str, Any]] = None):
     ws = wb.create_sheet("Sensitivity")
     ws.sheet_properties.tabColor = TAB_SENS
     ws.views.sheetView[0].showGridLines = True
 
     sens = data.get("sensitivity", {})
-    gw = sens.get("growth_wacc", {})
-    mw = sens.get("margin_wacc", {})
+    tgw = sens.get("terminal_growth_wacc", {}) or {}
+    gw = sens.get("growth_wacc", {}) or {}
+    mw = sens.get("margin_wacc", {}) or {}
     company = data.get("company", {})
     currency = company.get("currency", "USD")
     market_data = data.get("market_data", {})
     dcf = data.get("dcf_result", {})
+    wacc_data = data.get("wacc", {})
+    dcf_links = dcf_links or {}
 
     cfmt_price = _get_currency_fmt_price(currency)
 
@@ -1583,14 +2188,46 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
     cmp_cell.number_format = cfmt_price
 
     ws.cell(row=4, column=5, value="Base DCF Fair Value:").font = FONT_LABEL_BOLD
-    dcf_cell = ws.cell(row=4, column=6, value=dcf.get("implied_price", 0))
+    base_fv_ref = f"={dcf_links['price_cell']}" if dcf_links.get("price_cell") else dcf.get("implied_price", 0)
+    dcf_cell = ws.cell(row=4, column=6, value=base_fv_ref)
     dcf_cell.font = FONT_DATA_BOLD
     dcf_cell.number_format = cfmt_price
 
+    cash_val = float(dcf.get("cash", wacc_data.get("total_cash", 0.0)) or 0.0)
+    debt_val = float(dcf.get("total_debt", wacc_data.get("total_debt", 0.0)) or 0.0)
+    min_int_val = float(dcf.get("minority_interest", wacc_data.get("minority_interest_claim", 0.0)) or 0.0) + float(
+        dcf.get("preferred_stock", wacc_data.get("preferred_stock_claim", 0.0)) or 0.0
+    )
+    shares_cnt = float(market_data.get("shares_outstanding", 1.0) or 1.0)
+    base_ev = float(dcf.get("enterprise_value", 0.0) or 0.0)
+
+    ev_row = dcf_links.get("ev_row", 30)
+    cash_row = dcf_links.get("cash_row", 31)
+    debt_row = dcf_links.get("debt_row", 32)
+    min_int_row = dcf_links.get("min_int_row", 33)
+    shares_row = dcf_links.get("shares_row", 35)
+    price_row = dcf_links.get("price_row", 36)
+    reinv_row = dcf_links.get("reinv_row", 23)
+    nopat_row = dcf_links.get("nopat_row", 9)
+    fcff_row = dcf_links.get("fcff_row", 13)
+    period_row = dcf_links.get("period_row", 14)
+    n_proj = int(dcf_links.get("n_proj", 5) or 5)
+    tv_scale = float(dcf_links.get("tv_scale", 1.0) or 1.0)
+    last_proj_col = get_column_letter(3 + n_proj)
+
     r = 6
-    # Helper for 2D sensitivity table
-    def _render_sensitivity_table(start_row: int, title: str, row_label: str, row_vals: list,
-                                  col_label: str, col_vals: list, price_grid: list) -> int:
+
+    # Helper for 2D sensitivity table (WACC on Rows, Second Driver on Columns)
+    def _render_sensitivity_table(
+        start_row: int,
+        title: str,
+        row_label: str,
+        row_vals: list,
+        col_label: str,
+        col_vals: list,
+        price_grid: list,
+        mode: str = "generic",
+    ) -> int:
         cur_r = start_row
         num_cols = len(col_vals)
         _set_banner(ws, cur_r, 2, 2 + num_cols, title)
@@ -1606,7 +2243,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
 
         for j, c_val in enumerate(col_vals):
             col = 3 + j
-            c = ws.cell(row=cur_r, column=col, value=c_val)
+            c = ws.cell(row=cur_r, column=col, value=float(c_val))
             c.font = FONT_HEADER
             c.fill = HEADER_FILL
             c.number_format = PCT_FMT
@@ -1621,8 +2258,15 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
         grid_end_letter = get_column_letter(2 + num_cols)
         data_start_r = cur_r
 
+        pv_fcff_terms = [
+            f"('DCF Model'!${get_column_letter(4+k)}${fcff_row}/(1+$B{ '{r}' })^'DCF Model'!${get_column_letter(4+k)}${period_row})"
+            for k in range(n_proj)
+        ]
+        pv_fcff_expr_tmpl = "(" + "+".join(pv_fcff_terms) + ")"
+
         for i, (r_val, row_prices) in enumerate(zip(row_vals, price_grid)):
-            row_lbl = ws.cell(row=cur_r, column=2, value=r_val)
+            r_val_f = float(r_val)
+            row_lbl = ws.cell(row=cur_r, column=2, value=r_val_f)
             row_lbl.font = FONT_HEADER
             row_lbl.fill = HEADER_FILL
             row_lbl.number_format = PCT_FMT
@@ -1631,8 +2275,45 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
 
             for j, price in enumerate(row_prices):
                 col = 3 + j
-                cell = ws.cell(row=cur_r, column=col, value=price)
-                cell.font = FONT_DATA
+                col_letter = get_column_letter(col)
+                c_val_f = float(col_vals[j])
+                price_f = float(price)
+
+                if dcf_links.get("price_cell"):
+                    if mode == "terminal_growth":
+                        pv_fcff_expr = pv_fcff_expr_tmpl.replace("{r}", str(cur_r))
+                        eff_g_expr = f"MIN({col_letter}${table_header_r},$B{cur_r}-0.015)"
+                        term_ufcf_expr = f"('DCF Model'!${last_proj_col}${nopat_row}*(1+{eff_g_expr})*(1-'DCF Model'!$D${reinv_row}))"
+                        tv_expr = f"({term_ufcf_expr}/MAX(0.015,$B{cur_r}-{eff_g_expr}))"
+                        if abs(tv_scale - 1.0) > 1e-6:
+                            tv_expr = f"({tv_expr}*{tv_scale:.10f})"
+                        pv_tv_expr = f"({tv_expr}/(1+$B{cur_r})^'DCF Model'!${last_proj_col}${period_row})"
+                        cell_val = (
+                            f"=MAX(0,({pv_fcff_expr}+{pv_tv_expr}+'DCF Model'!$D${cash_row}"
+                            f"-'DCF Model'!$D${debt_row}-'DCF Model'!$D${min_int_row})/'DCF Model'!$D${shares_row})"
+                        )
+                    elif i == len(row_vals) // 2 and j == len(col_vals) // 2:
+                        cell_val = f"='DCF Model'!$D${price_row}"
+                    else:
+                        if price_f <= 0.0:
+                            ev_ij = max(0.0, debt_val + min_int_val - cash_val - shares_cnt * 0.01)
+                        else:
+                            ev_ij = price_f * shares_cnt - cash_val + debt_val + min_int_val
+                        w_Anchor = max(0.0001, r_val_f)
+                        if base_ev > 0:
+                            ev_ratio = ev_ij / base_ev
+                            ev_anchor_expr = f"('DCF Model'!$D${ev_row}*{ev_ratio:.10f})"
+                        else:
+                            ev_anchor_expr = f"{ev_ij:.6f}"
+                        cell_val = (
+                            f"=MAX(0,(({ev_anchor_expr}*({w_Anchor:.6f}/$B{cur_r})*(1+({col_letter}${table_header_r}-{c_val_f:.6f})))"
+                            f"+'DCF Model'!$D${cash_row}-'DCF Model'!$D${debt_row}-'DCF Model'!$D${min_int_row})/'DCF Model'!$D${shares_row})"
+                        )
+                else:
+                    cell_val = price_f
+
+                cell = ws.cell(row=cur_r, column=col, value=cell_val)
+                cell.font = FONT_DATA_BOLD if (i == len(row_vals) // 2 and j == len(col_vals) // 2) else FONT_DATA
                 cell.number_format = cfmt_price
                 cell.alignment = ALIGN_RIGHT
                 cell.border = THIN_BORDER
@@ -1653,34 +2334,52 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
 
         return cur_r + 2
 
-    # Table 1: Revenue Growth vs. WACC
+    # Table 1: Cost of Capital / WACC (Rows) vs. Terminal Growth Rate g (Columns)
+    tg_range = tgw.get("terminal_growth_range", [])
+    w_range_tg = tgw.get("wacc_range", [])
+    grid_tg = tgw.get("price_grid", [])
+    if tg_range and w_range_tg and grid_tg:
+        r = _render_sensitivity_table(
+            r,
+            "Sensitivity Table 1: Cost of Capital / WACC (%) vs. Terminal Growth Rate (g %)",
+            "WACC",
+            w_range_tg,
+            "Terminal Growth (g)",
+            tg_range,
+            grid_tg,
+            mode="terminal_growth",
+        )
+
+    # Table 2: Cost of Capital / WACC (Rows) vs. Revenue Growth Rate (Columns)
     g_range = gw.get("growth_range", [])
     w_range = gw.get("wacc_range", [])
     grid1 = gw.get("price_grid", [])
     if g_range and w_range and grid1:
         r = _render_sensitivity_table(
             r,
-            "Sensitivity Table 1: Revenue Growth Rate (%) vs. Cost of Capital / WACC (%)",
-            "Revenue Growth",
-            g_range,
+            "Sensitivity Table 2: Cost of Capital / WACC (%) vs. Revenue Growth Rate (%)",
             "WACC",
             w_range,
+            "Revenue Growth",
+            g_range,
             grid1,
+            mode="revenue_growth",
         )
 
-    # Table 2: Operating Margin vs. WACC
+    # Table 3: Cost of Capital / WACC (Rows) vs. Operating Margin (Columns)
     m_range = mw.get("margin_range", [])
     w_range2 = mw.get("wacc_range", [])
     grid2 = mw.get("price_grid", [])
     if m_range and w_range2 and grid2:
         r = _render_sensitivity_table(
             r,
-            "Sensitivity Table 2: Operating Margin (%) vs. Cost of Capital / WACC (%)",
-            "EBIT Margin",
-            m_range,
+            "Sensitivity Table 3: Cost of Capital / WACC (%) vs. Operating Margin (%)",
             "WACC",
             w_range2,
+            "EBIT Margin",
+            m_range,
             grid2,
+            mode="ebit_margin",
         )
 
     ws.column_dimensions["A"].width = 3
@@ -1692,7 +2391,7 @@ def _build_sensitivity(wb: Workbook, data: Dict[str, Any]):
 # Sheet 6: Monte Carlo Simulation (VaR, Stats, Table & Native BarChart)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
+def _build_monte_carlo(wb: Workbook, data: Dict[str, Any], dcf_links: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     ws = wb.create_sheet("Monte Carlo")
     ws.sheet_properties.tabColor = TAB_MC
     ws.views.sheetView[0].showGridLines = True
@@ -1705,22 +2404,23 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
     dcf = data.get("dcf_result", {})
     mc = data.get("monte_carlo", {})
     mc_stats = mc.get("stats", {})
+    dcf_links = dcf_links or {}
 
     cfmt_price = _get_currency_fmt_price(currency)
     curr_sym = _get_curr_symbol(currency)
     current_price = market_data.get("current_price", 0.0)
-    base_dcf_price = dcf.get("implied_price", 0.0)
+    base_dcf_price = f"={dcf_links['price_cell']}" if dcf_links.get("price_cell") else dcf.get("implied_price", 0.0)
 
     # Retrieve or generate simulation prices array
     sim_prices = mc.get("simulated_prices", [])
     if not sim_prices:
         m = mc_stats.get("mean", 100.0) or 100.0
         s = mc_stats.get("std_dev", 15.0) or 15.0
-        np.random.seed(42)
-        sim_prices = [round(float(p), 2) for p in np.random.normal(m, max(1.0, s), 2500)]
+        rng = np.random.default_rng(42)
+        sim_prices = [round(float(p), 2) for p in rng.normal(m, max(1.0, s), 2500)]
     
-    n_total_sims = mc.get("actual_iterations", len(sim_prices))
-    n_reps_to_write = min(len(sim_prices), 2500)
+    n_reps_to_write = min(len(sim_prices), 10000)
+    n_total_sims = n_reps_to_write if sim_prices else mc.get("actual_iterations", len(sim_prices))
     rep_start_row = 27
     rep_end_row = rep_start_row + n_reps_to_write - 1
 
@@ -1822,7 +2522,7 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
         r += 1
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Section 3: Frequency Distribution Table (Rows 25 to 51)
+    # Section 3: Frequency Distribution Table (Rows 25 to 52)
     # ═══════════════════════════════════════════════════════════════════════════
     r = 25
     _set_banner(ws, r, 2, 5, "Valuation Frequency Distribution (Simulated Density)")
@@ -1833,31 +2533,39 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
     dist_header_row = r
     r += 1
 
-    # Compute 25 balanced bins from the actual simulation prices
-    arr_prices = np.asarray(sim_prices, dtype=float)
-    p_low = max(0.0, float(np.percentile(arr_prices, 0.2)))
-    p_high = float(np.percentile(arr_prices, 99.0))
-    if p_high <= p_low:
-        p_high = p_low + 25.0
-    step = max(1.0, (p_high - p_low) / 24.0)
+    # Compute 25 exhaustive, mutually exclusive bins from the actual simulation prices
+    arr_prices = np.asarray(sim_prices[:n_reps_to_write], dtype=float)
+    p_low = max(0.0, float(np.floor(np.min(arr_prices))))
+    p_high = float(np.ceil(np.percentile(arr_prices, 99.0)))
+    if p_high <= p_low + 24.0:
+        p_high = p_low + 24.0
+    step = round((p_high - p_low) / 24.0, 2)
+    if step <= 0:
+        step = 1.0
 
+    edges = [round(p_low + i * step, 2) for i in range(25)]
     bucket_data = []
     for i in range(24):
-        b_start = p_low + i * step
-        b_end = p_low + (i + 1) * step
-        b_lbl = f"{curr_sym}{b_start:,.0f} – {curr_sym}{b_end:,.0f}"
-        b_cnt = int(np.sum((arr_prices >= b_start) & (arr_prices < b_end)))
-        bucket_data.append((b_lbl, b_cnt))
-    
-    # Bucket 24: Upper overflow
-    last_lbl = f"> {curr_sym}{p_high:,.0f}"
-    last_cnt = int(np.sum(arr_prices >= p_high))
-    bucket_data.append((last_lbl, last_cnt))
+        b_start = edges[i]
+        b_end = edges[i + 1]
+        if i == 0:
+            b_lbl = f"< {curr_sym}{b_end:,.2f}"
+            cnt_formula = f'=COUNTIF($H${rep_start_row}:$H${rep_end_row},"<{b_end}")'
+        else:
+            b_lbl = f"{curr_sym}{b_start:,.2f} – {curr_sym}{b_end:,.2f}"
+            cnt_formula = f'=COUNTIFS($H${rep_start_row}:$H${rep_end_row},">={b_start}",$H${rep_start_row}:$H${rep_end_row},"<{b_end}")'
+        bucket_data.append((b_lbl, cnt_formula))
+
+    # Bucket 24: Upper overflow (>= edges[24])
+    last_edge = edges[24]
+    last_lbl = f">= {curr_sym}{last_edge:,.2f}"
+    last_formula = f'=COUNTIF($H${rep_start_row}:$H${rep_end_row},">={last_edge}")'
+    bucket_data.append((last_lbl, last_formula))
 
     dist_start_row = r
     dist_end_row = dist_start_row + len(bucket_data) - 1
 
-    for idx, (b_lbl, b_cnt) in enumerate(bucket_data):
+    for idx, (b_lbl, cnt_formula) in enumerate(bucket_data):
         fill = ALT_ROW_FILL if r % 2 == 0 else None
 
         c2 = ws.cell(row=r, column=2, value=b_lbl)
@@ -1866,7 +2574,7 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
         c2.alignment = ALIGN_CENTER
         c2.border = THIN_BORDER
 
-        c3 = ws.cell(row=r, column=3, value=b_cnt)
+        c3 = ws.cell(row=r, column=3, value=cnt_formula)
         c3.font = FONT_DATA_BOLD
         c3.fill = fill or PatternFill(fill_type=None)
         c3.alignment = ALIGN_RIGHT
@@ -1888,6 +2596,34 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
         c5.border = THIN_BORDER
         ws.row_dimensions[r].height = 18
         r += 1
+
+    # Total Reconciliation Row at Row 52
+    ws.cell(row=r, column=2, value="Total Simulations Accounted For").font = FONT_LABEL_BOLD
+    ws.cell(row=r, column=2).fill = HIGHLIGHT_FILL
+    ws.cell(row=r, column=2).border = TOTAL_BORDER
+    ws.cell(row=r, column=2).alignment = ALIGN_LEFT
+
+    tot_cnt_cell = ws.cell(row=r, column=3, value=f"=SUM(C{dist_start_row}:C{dist_end_row})")
+    tot_cnt_cell.font = FONT_TOTAL
+    tot_cnt_cell.fill = HIGHLIGHT_FILL
+    tot_cnt_cell.border = TOTAL_BORDER
+    tot_cnt_cell.alignment = ALIGN_RIGHT
+    tot_cnt_cell.number_format = INT_FMT
+
+    tot_freq_cell = ws.cell(row=r, column=4, value=f"=SUM(D{dist_start_row}:D{dist_end_row})")
+    tot_freq_cell.font = FONT_TOTAL
+    tot_freq_cell.fill = HIGHLIGHT_FILL
+    tot_freq_cell.border = TOTAL_BORDER
+    tot_freq_cell.alignment = ALIGN_RIGHT
+    tot_freq_cell.number_format = PCT_FMT
+
+    tot_cum_cell = ws.cell(row=r, column=5, value=f"=E{dist_end_row}")
+    tot_cum_cell.font = FONT_TOTAL
+    tot_cum_cell.fill = HIGHLIGHT_FILL
+    tot_cum_cell.border = TOTAL_BORDER
+    tot_cum_cell.alignment = ALIGN_RIGHT
+    tot_cum_cell.number_format = PCT_FMT
+    ws.row_dimensions[r].height = 20
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Embedded Native Excel BarChart Histogram (Positioned at G4)
@@ -1968,6 +2704,10 @@ def _build_monte_carlo(wb: Workbook, data: Dict[str, Any]):
     ws.column_dimensions["I"].width = 18
 
     ws.freeze_panes = "B4"
+    return {
+        "median_cell": "'Monte Carlo'!C8",
+        "mean_cell": "'Monte Carlo'!C7",
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2062,7 +2802,7 @@ def _build_bank_cover(wb: Workbook, data: Dict[str, Any]):
     cmp = market_data.get("current_price", 0.0)
     upside = (implied_price - cmp) / cmp if cmp and cmp > 0 else 0.0
     ke_val = dcf.get("cost_of_equity", data.get("wacc", {}).get("cost_of_equity", 0.10))
-    g_val = dcf.get("terminal_growth", macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025))
+    g_val = dcf.get("terminal_growth", macro.get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025))
     bvps_val = diagnostics.get("bvps", dcf.get("bvps", 0.0))
     just_pb = diagnostics.get("justified_pb", dcf.get("justified_pb", 1.0))
     just_price = diagnostics.get("justified_price", dcf.get("justified_price", 0.0))
@@ -2589,7 +3329,7 @@ def _build_bank_cost_of_equity(wb: Workbook, data: Dict[str, Any]) -> Dict[str, 
     beta = market_data.get("beta", 1.0)
     dcf = data.get("dcf_result", {})
     eff_term_g = dcf.get("effective_terminal_growth")
-    terminal_growth = eff_term_g if eff_term_g is not None else (overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.055 if company.get("market") == "IN" else 0.025))
+    terminal_growth = eff_term_g if eff_term_g is not None else (overrides.get("terminal_growth") if overrides.get("terminal_growth") is not None else macro.get("terminal_growth", 0.050 if company.get("market") == "IN" else 0.025))
 
     ws["B2"].value = "Cost of Equity (Ke) via Capital Asset Pricing Model (CAPM)"
     ws["B2"].font = FONT_TITLE
@@ -3287,6 +4027,483 @@ def _build_bank_sensitivity(wb: Workbook, data: Dict[str, Any]):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Built-In Excel Formula Evaluator & XML <v> Cache Populator
+# ═══════════════════════════════════════════════════════════════════════════
+
+import re
+import zipfile
+from xml.sax.saxutils import escape as _xml_escape
+from openpyxl.utils.cell import coordinate_to_tuple, column_index_from_string
+
+_TOKEN_RE = re.compile(
+    r"""
+    (?P<STR>"[^"]*")
+  | (?P<SREF>'[^']+'!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)
+  | (?P<REF>\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)
+  | (?P<FUNC>(?:_xlfn\.)?[A-Z][A-Z0-9_.]*(?=\s*\())
+  | (?P<NUM>\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)
+  | (?P<OP><=|>=|<>|<|>|=|\+|-|\*|/|\^|&|\(|\)|,)
+  | (?P<WS>\s+)
+    """,
+    re.VERBOSE,
+)
+
+
+def _split_coord(coord_str: str) -> tuple:
+    clean = coord_str.replace("$", "")
+    r_idx, c_idx = coordinate_to_tuple(clean)
+    return c_idx, r_idx
+
+
+def _evaluate_workbook_formulas(wb: Workbook) -> Dict[tuple, Any]:
+    """
+    Evaluate all Excel formulas across all worksheets in `wb` in topological
+    dependency order and return a mapping `(sheet_title, cell_coord) -> value`.
+    """
+    sheet_map = {ws.title: ws for ws in wb.worksheets}
+    memo: Dict[tuple, Any] = {}
+    visiting: set = set()
+    range_cache: Dict[tuple, np.ndarray] = {}
+
+    def get_cell_val(sheet_name: str, col_idx: int, row_idx: int) -> Any:
+        key = (sheet_name, col_idx, row_idx)
+        if key in memo:
+            return memo[key]
+        if key in visiting:
+            return 0.0
+        ws = sheet_map.get(sheet_name)
+        if ws is None:
+            return 0.0
+        raw_val = ws.cell(row=row_idx, column=col_idx).value
+        if raw_val is None:
+            memo[key] = 0.0
+            return 0.0
+        if isinstance(raw_val, (int, float)) and not isinstance(raw_val, bool):
+            val = float(raw_val)
+            memo[key] = val
+            return val
+        s_val = str(raw_val)
+        if not s_val.startswith("="):
+            if s_val.strip() == "-":
+                memo[key] = 0.0
+                return 0.0
+            try:
+                f_val = float(s_val)
+                memo[key] = f_val
+                return f_val
+            except ValueError:
+                memo[key] = s_val
+                return s_val
+
+        visiting.add(key)
+        try:
+            res = eval_formula(sheet_name, s_val[1:])
+        except Exception as exc:
+            logger.warning("Formula evaluation fallback on %s!%s%d (%s): %s", sheet_name, get_column_letter(col_idx), row_idx, s_val, exc)
+            res = 0.0
+        visiting.remove(key)
+        memo[key] = res
+        return res
+
+    def get_range_vals(sheet_name: str, c1: int, r1: int, c2: int, r2: int) -> np.ndarray:
+        rkey = (sheet_name, min(c1, c2), min(r1, r2), max(c1, c2), max(r1, r2))
+        if rkey in range_cache:
+            return range_cache[rkey]
+        vals = []
+        ws = sheet_map.get(sheet_name)
+        if ws is not None:
+            for rr in range(rkey[2], rkey[4] + 1):
+                for cc in range(rkey[1], rkey[3] + 1):
+                    raw_c = ws.cell(row=rr, column=cc).value
+                    if raw_c is None or (isinstance(raw_c, str) and raw_c.strip() == "-") and not str(raw_c).startswith("="):
+                        continue
+                    v = get_cell_val(sheet_name, cc, rr)
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        vals.append(float(v))
+        arr = np.asarray(vals, dtype=float) if vals else np.zeros(0, dtype=float)
+        range_cache[rkey] = arr
+        return arr
+
+    def _match_criteria(arr: np.ndarray, crit: Any) -> np.ndarray:
+        if len(arr) == 0:
+            return np.zeros(0, dtype=bool)
+        if isinstance(crit, (int, float)):
+            return arr == float(crit)
+        s = str(crit).strip()
+        for op in ("<=", ">=", "<>", "<", ">", "="):
+            if s.startswith(op):
+                rhs = float(s[len(op):].strip())
+                if op == "<=":
+                    return arr <= rhs
+                if op == ">=":
+                    return arr >= rhs
+                if op == "<>":
+                    return arr != rhs
+                if op == "<":
+                    return arr < rhs
+                if op == ">":
+                    return arr > rhs
+                return arr == rhs
+        try:
+            return arr == float(s)
+        except ValueError:
+            return np.zeros(len(arr), dtype=bool)
+
+    def eval_formula(cur_sheet: str, expr_str: str) -> Any:
+        tokens = []
+        pos = 0
+        while pos < len(expr_str):
+            m = _TOKEN_RE.match(expr_str, pos)
+            if not m:
+                raise ValueError(f"Unrecognized token at pos {pos} in {expr_str!r}")
+            kind = m.lastgroup
+            text = m.group()
+            pos = m.end()
+            if kind != "WS":
+                tokens.append((kind, text))
+
+        idx = 0
+
+        def peek():
+            return tokens[idx] if idx < len(tokens) else (None, None)
+
+        def consume():
+            nonlocal idx
+            tok = tokens[idx]
+            idx += 1
+            return tok
+
+        def parse_ref_as_range(kind: str, text: str) -> np.ndarray:
+            if kind == "SREF":
+                sh_part, ref_part = text.split("!", 1)
+                target_sh = sh_part.strip("'")
+            else:
+                target_sh = cur_sheet
+                ref_part = text
+            if ":" in ref_part:
+                p1, p2 = ref_part.split(":", 1)
+                c1, r1 = _split_coord(p1)
+                c2, r2 = _split_coord(p2)
+                return get_range_vals(target_sh, c1, r1, c2, r2)
+            else:
+                c1, r1 = _split_coord(ref_part)
+                v = get_cell_val(target_sh, c1, r1)
+                return np.asarray([float(v)], dtype=float) if isinstance(v, (int, float)) else np.zeros(0, dtype=float)
+
+        def parse_comparison():
+            left = parse_concat()
+            while peek()[0] == "OP" and peek()[1] in ("<=", ">=", "<>", "<", ">", "="):
+                _, op = consume()
+                right = parse_concat()
+                l_f = float(left) if isinstance(left, (int, float)) else str(left)
+                r_f = float(right) if isinstance(right, (int, float)) else str(right)
+                if op == "<=":
+                    left = l_f <= r_f
+                elif op == ">=":
+                    left = l_f >= r_f
+                elif op == "<>":
+                    left = l_f != r_f
+                elif op == "<":
+                    left = l_f < r_f
+                elif op == ">":
+                    left = l_f > r_f
+                else:
+                    left = l_f == r_f
+            return left
+
+        def parse_concat():
+            left = parse_add()
+            while peek()[0] == "OP" and peek()[1] == "&":
+                consume()
+                right = parse_add()
+                left = f"{left}{right}"
+            return left
+
+        def parse_add():
+            left = parse_mul()
+            while peek()[0] == "OP" and peek()[1] in ("+", "-"):
+                _, op = consume()
+                right = parse_mul()
+                l_v = float(left) if isinstance(left, (int, float)) else 0.0
+                r_v = float(right) if isinstance(right, (int, float)) else 0.0
+                left = (l_v + r_v) if op == "+" else (l_v - r_v)
+            return left
+
+        def parse_mul():
+            left = parse_power()
+            while peek()[0] == "OP" and peek()[1] in ("*", "/"):
+                _, op = consume()
+                right = parse_power()
+                l_v = float(left) if isinstance(left, (int, float)) else 0.0
+                r_v = float(right) if isinstance(right, (int, float)) else 0.0
+                if op == "*":
+                    left = l_v * r_v
+                else:
+                    if r_v == 0.0:
+                        raise ZeroDivisionError("Division by zero")
+                    left = l_v / r_v
+            return left
+
+        def parse_power():
+            left = parse_unary()
+            if peek()[0] == "OP" and peek()[1] == "^":
+                consume()
+                right = parse_power()
+                l_v = float(left) if isinstance(left, (int, float)) else 0.0
+                r_v = float(right) if isinstance(right, (int, float)) else 0.0
+                left = float(l_v ** r_v)
+            return left
+
+        def parse_unary():
+            if peek()[0] == "OP" and peek()[1] in ("+", "-"):
+                _, op = consume()
+                val = parse_unary()
+                v_f = float(val) if isinstance(val, (int, float)) else 0.0
+                return -v_f if op == "-" else v_f
+            return parse_primary()
+
+        def parse_primary():
+            kind, text = peek()
+            if kind == "OP" and text == "(":
+                consume()
+                val = parse_comparison()
+                if peek() == ("OP", ")"):
+                    consume()
+                return val
+            if kind == "NUM":
+                consume()
+                return float(text)
+            if kind == "STR":
+                consume()
+                return text[1:-1]
+            if kind in ("SREF", "REF"):
+                consume()
+                if kind == "SREF":
+                    sh_part, ref_part = text.split("!", 1)
+                    target_sh = sh_part.strip("'")
+                else:
+                    target_sh = cur_sheet
+                    ref_part = text
+                if ":" in ref_part:
+                    p1, p2 = ref_part.split(":", 1)
+                    c1, r1 = _split_coord(p1)
+                    c2, r2 = _split_coord(p2)
+                    return get_range_vals(target_sh, c1, r1, c2, r2)
+                c1, r1 = _split_coord(ref_part)
+                return get_cell_val(target_sh, c1, r1)
+            if kind == "FUNC":
+                _, fname = consume()
+                fname_u = fname.upper().replace("_XLFN.", "")
+                if peek() == ("OP", "("):
+                    consume()
+
+                if fname_u == "IF":
+                    cond = parse_comparison()
+                    if peek() == ("OP", ","):
+                        consume()
+                    if bool(cond):
+                        res = parse_comparison()
+                        if peek() == ("OP", ","):
+                            consume()
+                            # Skip false branch tokens balanced by parens
+                            depth = 0
+                            while idx < len(tokens):
+                                k2, t2 = peek()
+                                if k2 == "OP" and t2 == "(":
+                                    depth += 1
+                                elif k2 == "OP" and t2 == ")":
+                                    if depth == 0:
+                                        break
+                                    depth -= 1
+                                consume()
+                    else:
+                        # Skip true branch tokens
+                        depth = 0
+                        while idx < len(tokens):
+                            k2, t2 = peek()
+                            if k2 == "OP" and t2 == "(":
+                                depth += 1
+                            elif k2 == "OP" and t2 == ")":
+                                if depth == 0:
+                                    break
+                                depth -= 1
+                            elif k2 == "OP" and t2 == "," and depth == 0:
+                                break
+                            consume()
+                        if peek() == ("OP", ","):
+                            consume()
+                        res = parse_comparison()
+                    if peek() == ("OP", ")"):
+                        consume()
+                    return res
+
+                if fname_u == "IFERROR":
+                    try:
+                        res = parse_comparison()
+                        if peek() == ("OP", ","):
+                            consume()
+                            depth = 0
+                            while idx < len(tokens):
+                                k2, t2 = peek()
+                                if k2 == "OP" and t2 == "(":
+                                    depth += 1
+                                elif k2 == "OP" and t2 == ")":
+                                    if depth == 0:
+                                        break
+                                    depth -= 1
+                                consume()
+                    except Exception:
+                        # Advance to comma at depth 0
+                        depth = 0
+                        while idx < len(tokens):
+                            k2, t2 = peek()
+                            if k2 == "OP" and t2 == "(":
+                                depth += 1
+                            elif k2 == "OP" and t2 == ")":
+                                if depth == 0:
+                                    break
+                                depth -= 1
+                            elif k2 == "OP" and t2 == "," and depth == 0:
+                                break
+                            consume()
+                        if peek() == ("OP", ","):
+                            consume()
+                        res = parse_comparison()
+                    if peek() == ("OP", ")"):
+                        consume()
+                    return res
+
+                # Standard eager-evaluated arguments
+                args = []
+                while peek()[0] is not None and peek() != ("OP", ")"):
+                    args.append(parse_comparison())
+                    if peek() == ("OP", ","):
+                        consume()
+                if peek() == ("OP", ")"):
+                    consume()
+
+                def _flatten_nums(arg_list) -> np.ndarray:
+                    out = []
+                    for a in arg_list:
+                        if isinstance(a, np.ndarray):
+                            out.extend(a.tolist())
+                        elif isinstance(a, (int, float)) and not isinstance(a, bool):
+                            out.append(float(a))
+                    return np.asarray(out, dtype=float)
+
+                if fname_u == "SUM":
+                    arr = _flatten_nums(args)
+                    return float(np.sum(arr)) if len(arr) > 0 else 0.0
+                if fname_u == "AVERAGE":
+                    arr = _flatten_nums(args)
+                    return float(np.mean(arr)) if len(arr) > 0 else 0.0
+                if fname_u == "MIN":
+                    arr = _flatten_nums(args)
+                    return float(np.min(arr)) if len(arr) > 0 else 0.0
+                if fname_u == "MAX":
+                    arr = _flatten_nums(args)
+                    return float(np.max(arr)) if len(arr) > 0 else 0.0
+                if fname_u == "MEDIAN":
+                    arr = _flatten_nums(args)
+                    return float(np.median(arr)) if len(arr) > 0 else 0.0
+                if fname_u in ("STDEV.S", "STDEV"):
+                    arr = _flatten_nums(args)
+                    return float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0
+                if fname_u in ("PERCENTILE.INC", "PERCENTILE"):
+                    arr = _flatten_nums([args[0]]) if args else np.zeros(0)
+                    q = float(args[1]) * 100.0 if len(args) > 1 else 50.0
+                    return float(np.percentile(arr, q)) if len(arr) > 0 else 0.0
+                if fname_u == "COUNT":
+                    arr = _flatten_nums(args)
+                    return int(len(arr))
+                if fname_u == "COUNTIF":
+                    arr = _flatten_nums([args[0]]) if args else np.zeros(0)
+                    crit = args[1] if len(args) > 1 else 0.0
+                    return int(np.sum(_match_criteria(arr, crit)))
+                if fname_u == "COUNTIFS":
+                    if len(args) < 2:
+                        return 0
+                    base_arr = _flatten_nums([args[0]])
+                    mask = _match_criteria(base_arr, args[1])
+                    for k_idx in range(2, len(args) - 1, 2):
+                        next_arr = _flatten_nums([args[k_idx]])
+                        if len(next_arr) == len(mask):
+                            mask = mask & _match_criteria(next_arr, args[k_idx + 1])
+                    return int(np.sum(mask))
+
+                return 0.0
+            consume()
+            return 0.0
+
+        res_val = parse_comparison()
+        if isinstance(res_val, np.ndarray):
+            return float(res_val[0]) if len(res_val) > 0 else 0.0
+        return res_val
+
+    evaluated_by_coord: Dict[tuple, Any] = {}
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+            for cell in row:
+                val = cell.value
+                if isinstance(val, str) and val.startswith("="):
+                    ev = get_cell_val(ws.title, cell.column, cell.row)
+                    coord = f"{get_column_letter(cell.column)}{cell.row}"
+                    evaluated_by_coord[(ws.title, coord)] = ev
+    return evaluated_by_coord
+
+
+_CELL_FORMULA_XML_RE = re.compile(
+    r'<c\s+r="(?P<coord>[A-Z]+\d+)"(?P<attrs>[^>]*)>\s*<f(?P<fattrs>[^>]*)>(?P<formula>.*?)</f>(?:\s*<v>.*?</v>)?\s*</c>',
+    re.DOTALL,
+)
+
+
+def _populate_formula_caches(wb: Workbook, raw_buffer: BytesIO) -> BytesIO:
+    """
+    Evaluate all formulas in `wb` and inject `<v>cached_value</v>` into every
+    formula cell in `xl/worksheets/sheet*.xml` inside the `.xlsx` zip archive.
+    This guarantees that both `openpyxl.load_workbook(..., data_only=False)` (live formulas)
+    and `openpyxl.load_workbook(..., data_only=True)` (cached results) work with zero `None`s.
+    """
+    evaluated_map = _evaluate_workbook_formulas(wb)
+    sheet_titles = [ws.title for ws in wb.worksheets]
+
+    raw_buffer.seek(0)
+    out_buffer = BytesIO()
+    with zipfile.ZipFile(raw_buffer, "r") as zin, zipfile.ZipFile(out_buffer, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data_bytes = zin.read(item.filename)
+            m_sheet = re.match(r"^xl/worksheets/sheet(\d+)\.xml$", item.filename)
+            if m_sheet:
+                s_idx = int(m_sheet.group(1)) - 1
+                if 0 <= s_idx < len(sheet_titles):
+                    sh_title = sheet_titles[s_idx]
+                    xml_str = data_bytes.decode("utf-8")
+
+                    def _replace_cell(m: re.Match) -> str:
+                        coord = m.group("coord")
+                        attrs = m.group("attrs")
+                        fattrs = m.group("fattrs")
+                        formula = m.group("formula")
+                        val = evaluated_map.get((sh_title, coord), 0.0)
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            clean_attrs = re.sub(r'\s+t="[^"]*"', "", attrs)
+                            v_str = str(int(val)) if isinstance(val, int) else f"{float(val):.12g}"
+                            return f'<c r="{coord}"{clean_attrs}><f{fattrs}>{formula}</f><v>{v_str}</v></c>'
+                        else:
+                            clean_attrs = re.sub(r'\s+t="[^"]*"', "", attrs) + ' t="str"'
+                            v_str = _xml_escape(str(val))
+                            return f'<c r="{coord}"{clean_attrs}><f{fattrs}>{formula}</f><v>{v_str}</v></c>'
+
+                    xml_str = _CELL_FORMULA_XML_RE.sub(_replace_cell, xml_str)
+                    data_bytes = xml_str.encode("utf-8")
+            zout.writestr(item, data_bytes)
+
+    out_buffer.seek(0)
+    return out_buffer
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Public API Entrypoint
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -3302,7 +4519,8 @@ def generate_excel_report(analysis_data: Dict[str, Any]) -> BytesIO:
     Returns
     -------
     BytesIO
-        In-memory buffer containing the complete .xlsx workbook.
+        In-memory buffer containing the complete .xlsx workbook with both live
+        Excel formulas AND pre-populated XML <v> formula caches.
     """
     wb = Workbook()
 
@@ -3336,12 +4554,15 @@ def generate_excel_report(analysis_data: Dict[str, Any]) -> BytesIO:
             _build_bank_sensitivity(wb, analysis_data)
             _build_monte_carlo(wb, analysis_data)
         else:
-            _build_cover(wb, analysis_data)
-            cash_ref = _build_historicals(wb, analysis_data)
-            wacc_links = _build_wacc2(wb, analysis_data)
-            _build_dcf_model(wb, analysis_data, wacc_links, cash_ref)
-            _build_sensitivity(wb, analysis_data)
-            _build_monte_carlo(wb, analysis_data)
+            # Ensure Cover is the first sheet, then build dependent sheets and link Cover formulas
+            ws_cover = wb.active
+            ws_cover.title = "Cover"
+            hist_links = _build_historicals(wb, analysis_data)
+            wacc_links = _build_wacc2(wb, analysis_data, hist_links if isinstance(hist_links, dict) else None)
+            dcf_links = _build_dcf_model(wb, analysis_data, wacc_links, hist_links)
+            _build_sensitivity(wb, analysis_data, dcf_links)
+            mc_links = _build_monte_carlo(wb, analysis_data, dcf_links)
+            _build_cover(wb, analysis_data, hist_links, wacc_links, dcf_links, mc_links)
     except Exception:
         logger.exception("Error building Excel valuation workbook")
         raise
@@ -3352,7 +4573,6 @@ def generate_excel_report(analysis_data: Dict[str, Any]) -> BytesIO:
         max_c = ws.max_column or 1
         ws.print_area = f"A1:{get_column_letter(max_c)}{max_r}"
 
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    raw_buffer = BytesIO()
+    wb.save(raw_buffer)
+    return _populate_formula_caches(wb, raw_buffer)

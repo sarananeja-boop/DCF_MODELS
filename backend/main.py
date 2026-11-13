@@ -37,6 +37,7 @@ from engine.monte_carlo import run_monte_carlo
 from engine.sensitivity import (
     generate_sensitivity_grid,
     generate_margin_sensitivity_grid,
+    generate_terminal_growth_sensitivity_grid,
 )
 from engine.validators import validate_valuation, validate_bank_valuation, generate_verdict
 from engine.trend_analysis import compute_trends
@@ -452,6 +453,7 @@ def analyze(req: AnalyzeRequest):
                 base_roe=target_margin,
                 base_ke=discount_rate,
             )
+            sens_tg_wacc = None
 
             validation = validate_bank_valuation(dcf_result, stock_data, metrics)
             method_comparison = {
@@ -475,6 +477,29 @@ def analyze(req: AnalyzeRequest):
 
             avg_ebit_margin = metrics.get("avg_ebit_margin", 0.15)
             hist_growth = metrics.get("avg_rev_growth", 0.10)
+            rev_growth_hist = metrics.get("rev_growth", [])
+            latest_rnd_pct = float(metrics.get("latest_rnd_pct", 0.0) or 0.0)
+            avg_rnd_pct = float(metrics.get("avg_rnd_pct", 0.0) or 0.0)
+            eff_rnd_pct = max(latest_rnd_pct, avg_rnd_pct)
+            if len(rev_growth_hist) >= 2:
+                latest_rev_g = float(rev_growth_hist[-1])
+                prev_rev_g = float(rev_growth_hist[-2])
+                # When top-line growth is accelerating out of a cyclical downturn, R&D investment cycle,
+                # or M&A integration (latest growth > multi-year avg + 10%), weight recent momentum
+                if latest_rev_g > hist_growth + 0.10 and latest_rev_g > 0.15:
+                    if eff_rnd_pct >= 0.15 and latest_rev_g > prev_rev_g + 0.10:
+                        accel_g = latest_rev_g + 0.37 * (latest_rev_g - prev_rev_g)
+                        live_rev_g = (stock_data.get("info") or {}).get("revenueGrowth")
+                        if live_rev_g is not None:
+                            try:
+                                live_g_f = float(live_rev_g)
+                                if live_g_f > latest_rev_g:
+                                    accel_g = max(accel_g, 0.50 * latest_rev_g + 0.50 * min(0.50, live_g_f))
+                            except (ValueError, TypeError):
+                                pass
+                        hist_growth = accel_g
+                    else:
+                        hist_growth = 0.55 * latest_rev_g + 0.45 * hist_growth
 
             # Law of Large Numbers scale-tiered growth ceiling:
             # Prevents astronomical extrapolations on massive revenue bases ($100B+ like NVDA)
@@ -516,7 +541,10 @@ def analyze(req: AnalyzeRequest):
 
             ebit_margins_hist = metrics.get("ebit_margins", [])
             latest_margin = float(ebit_margins_hist[-1]) if ebit_margins_hist else avg_ebit_margin
+            gross_margins_hist = metrics.get("gross_margins", [])
+            latest_gross_margin = float(gross_margins_hist[-1]) if gross_margins_hist else 0.0
             avg_gross_margin = float(metrics.get("avg_gross_margin", 0.0) or 0.0)
+            eff_gross_margin = max(avg_gross_margin, latest_gross_margin)
             avg_fcf_margin = float(metrics.get("avg_fcf_margin", 0.0) or 0.0)
             latest_fcf_margin = float(metrics.get("latest_fcf_margin", 0.0) or 0.0)
             best_fcf_margin = max(avg_fcf_margin, latest_fcf_margin)
@@ -524,7 +552,7 @@ def analyze(req: AnalyzeRequest):
             # Only trigger QSR/Retail store-OpEx turnaround convergence when GAAP EBIT margin is depressed (<8%)
             is_store_opex_below_gp = bool(
                 avg_ebitda_margin > 0
-                and (avg_gross_margin - avg_ebitda_margin) > 0.35
+                and (eff_gross_margin - avg_ebitda_margin) > 0.35
                 and max(latest_margin, avg_ebit_margin) < 0.08
             )
 
@@ -545,13 +573,35 @@ def analyze(req: AnalyzeRequest):
             elif (
                 not is_extractive
                 and not is_store_opex_below_gp
-                and (avg_gross_margin >= 0.55 or best_fcf_margin >= 0.18)
-                and (best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.08)
+                and (
+                    (eff_gross_margin >= 0.45 and (best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.04 or eff_gross_margin >= 0.48))
+                    or (best_fcf_margin >= 0.18 and best_fcf_margin > max(latest_margin, avg_ebit_margin) + 0.06)
+                )
+                and max(latest_margin, avg_ebit_margin) < 0.45 * eff_gross_margin
             ):
-                unit_target = max(0.38 * avg_gross_margin, best_fcf_margin)
-                fcff_default_margin = float(np.clip(unit_target, 0.20, 0.38))
-                econ_start = max(latest_margin, min(latest_fcf_margin, avg_fcf_margin) - 0.05)
-                fcff_default_current_margin = float(np.clip(econ_start, 0.05, fcff_default_margin))
+                if eff_rnd_pct >= 0.15 and eff_gross_margin >= 0.48 and latest_sbc_pct < 0.08:
+                    unit_target = max(
+                        0.625 * eff_gross_margin,
+                        latest_margin + 0.70 * max(0.0, latest_rnd_pct - 0.01),
+                        best_fcf_margin * 1.15,
+                    )
+                    fcff_default_margin = float(np.clip(unit_target, 0.25, 0.35 if eff_gross_margin < 0.65 else 0.38))
+                    econ_start = max(
+                        latest_margin + 0.17 * latest_rnd_pct,
+                        avg_ebit_margin,
+                        0.75 * best_fcf_margin,
+                    )
+                    fcff_default_current_margin = float(np.clip(econ_start, 0.08, fcff_default_margin))
+                elif latest_sbc_pct >= 0.08 and avg_gross_margin >= 0.55:
+                    unit_target = max(0.38 * avg_gross_margin, best_fcf_margin)
+                    fcff_default_margin = float(np.clip(unit_target, 0.20, 0.38))
+                    econ_start = max(latest_margin, min(latest_fcf_margin, avg_fcf_margin) - 0.05)
+                    fcff_default_current_margin = float(np.clip(econ_start, 0.05, fcff_default_margin))
+                else:
+                    unit_target = max(0.45 * eff_gross_margin, best_fcf_margin * 1.10, latest_margin + 0.05)
+                    fcff_default_margin = float(np.clip(unit_target, 0.22, 0.38))
+                    econ_start = max(latest_margin, avg_ebit_margin)
+                    fcff_default_current_margin = float(np.clip(econ_start, 0.08, fcff_default_margin))
                 unit_economics_convergence = True
             elif is_store_opex_below_gp and avg_ebitda_margin >= 0.05:
                 # QSR / Retail / Multi-unit concepts (e.g. DNUT) where store labor & occupancy OpEx sit below Gross Profit
@@ -693,6 +743,7 @@ def analyze(req: AnalyzeRequest):
                     base_roe=target_margin,
                     base_ke=discount_rate,
                 )
+                sens_tg_wacc = None
 
                 validation = validate_bank_valuation(dcf_result, stock_data, metrics)
 
@@ -811,6 +862,20 @@ def analyze(req: AnalyzeRequest):
                     target_margin=target_margin,
                     current_margin=current_margin,
                     tax_rate=tax_rate,
+                    base_growth=start_growth,
+                    base_wacc=discount_rate,
+                )
+                sens_tg_wacc = generate_terminal_growth_sensitivity_grid(
+                    metrics=metrics,
+                    wacc_data=wacc_data,
+                    stock_data=stock_data,
+                    market_profile=market_profile,
+                    terminal_growth=terminal_growth,
+                    projection_years=projection_years,
+                    target_margin=target_margin,
+                    current_margin=current_margin,
+                    tax_rate=tax_rate,
+                    use_mid_year=True,
                     base_growth=start_growth,
                     base_wacc=discount_rate,
                 )
@@ -973,12 +1038,15 @@ def analyze(req: AnalyzeRequest):
             "historicals": {
                 "years": metrics.get("years"),
                 "revenue": metrics.get("revenue"),
+                "last_revenue": metrics.get("last_revenue"),
                 "ebit": metrics.get("ebit"),
+                "ebitda": metrics.get("ebitda"),
                 "capex": metrics.get("capex"),
                 "dna": metrics.get("dna"),
                 "delta_nwc": metrics.get("delta_nwc"),
                 "rev_growth": metrics.get("rev_growth"),
                 "ebit_margins": metrics.get("ebit_margins"),
+                "ebitda_margins": metrics.get("ebitda_margins"),
                 "net_income": metrics.get("net_income"),
                 "net_interest_income": metrics.get("net_interest_income"),
                 "pretax_income": metrics.get("pretax_income"),
@@ -993,11 +1061,15 @@ def analyze(req: AnalyzeRequest):
                 "std_rev_growth": metrics.get("std_rev_growth"),
                 "avg_ebit_margin": metrics.get("avg_ebit_margin"),
                 "std_ebit_margin": metrics.get("std_ebit_margin"),
+                "avg_ebitda_margin": metrics.get("avg_ebitda_margin"),
                 "avg_capex_pct": metrics.get("avg_capex_pct"),
                 "avg_dna_pct": metrics.get("avg_dna_pct"),
                 "avg_dnwc_pct": metrics.get("avg_dnwc_pct"),
+                "normalized_nwc_to_revenue": metrics.get("normalized_nwc_to_revenue"),
                 "n_years": metrics.get("n_years"),
                 "cash_and_equivalents": metrics.get("cash_and_equivalents"),
+                "minority_interest_claim": metrics.get("minority_interest_claim", 0.0),
+                "preferred_stock_claim": metrics.get("preferred_stock_claim", 0.0),
                 "statements": metrics.get("statements", {}),
             },
             "wacc": {
@@ -1025,6 +1097,13 @@ def analyze(req: AnalyzeRequest):
                 "default_spread": wacc_data.get("default_spread"),
                 "interest_coverage": wacc_data.get("interest_coverage"),
                 "total_debt": wacc_data.get("total_debt"),
+                "raw_total_debt": wacc_data.get("raw_total_debt", metrics.get("raw_total_debt", 0.0)),
+                "lease_obligations": wacc_data.get("lease_obligations", metrics.get("lease_obligations", 0.0)),
+                "captive_debt_offset": wacc_data.get("captive_debt_offset", metrics.get("captive_debt_offset", 0.0)),
+                "minority_interest_claim": wacc_data.get("minority_interest_claim", metrics.get("minority_interest_claim", 0.0)),
+                "preferred_stock_claim": wacc_data.get("preferred_stock_claim", metrics.get("preferred_stock_claim", 0.0)),
+                "aro_provisions_claim": wacc_data.get("aro_provisions_claim", metrics.get("aro_provisions_claim", 0.0)),
+                "greenfield_debt_offset": wacc_data.get("greenfield_debt_offset", metrics.get("greenfield_debt_offset", 0.0)),
                 "operational_debt": wacc_data.get("operational_debt", 0.0),
                 "total_cash": metrics.get("cash_and_equivalents"),
                 "note": wacc_data.get("note"),
@@ -1049,11 +1128,12 @@ def analyze(req: AnalyzeRequest):
                 "hist_corr_gm": mc_result.get("hist_corr_gm"),
                 "corr_sample_size": mc_result.get("corr_sample_size"),
                 "is_corr_regularized": mc_result.get("is_corr_regularized", False),
-                "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])[:2500]],
+                "simulated_prices": [round(float(p), 2) for p in mc_result.get("simulated_prices", [])[:10000]],
             },
             "sensitivity": {
                 "growth_wacc": sens_growth_wacc,
                 "margin_wacc": sens_margin_wacc,
+                "terminal_growth_wacc": sens_tg_wacc,
             },
             "trends": trends,
             "validation": validation,

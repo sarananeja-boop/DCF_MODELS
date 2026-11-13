@@ -111,21 +111,31 @@ def run_monte_carlo(
     corr_matrix = np.eye(num_vars)
     corr_matrix[0, 1] = hist_corr_gm
     corr_matrix[1, 0] = hist_corr_gm
+    # Economic cross-correlations among discount-rate / capital-structure factors:
+    # [2: Rf, 3: Beta, 4: ERP, 5: Pre-Tax Kd, 6: Equity Weight]
+    corr_matrix[2, 5] = corr_matrix[5, 2] = 0.50   # Sovereign yield vs corporate borrowing rate
+    corr_matrix[3, 4] = corr_matrix[4, 3] = 0.20   # Beta vs Equity Risk Premium
+    corr_matrix[5, 6] = corr_matrix[6, 5] = -0.30  # Pre-Tax Kd vs Equity Weight (higher debt weight -> higher spread)
 
     try:
         L = np.linalg.cholesky(corr_matrix)
     except np.linalg.LinAlgError:
-        logger.warning("Cholesky decomposition failed. Falling back to independent variables.")
-        L = np.eye(num_vars)
+        logger.warning("Cholesky decomposition failed. Falling back to growth-margin correlation only.")
+        corr_fallback = np.eye(num_vars)
+        corr_fallback[0, 1] = corr_fallback[1, 0] = hist_corr_gm
+        try:
+            L = np.linalg.cholesky(corr_fallback)
+        except np.linalg.LinAlgError:
+            L = np.eye(num_vars)
 
     # ------------------------------------------------------------------
     # 5B – Correlated fat-tailed draws (Student-t df=5 normalized to unit variance)
     # ------------------------------------------------------------------
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     oversample = iterations * 3
 
     # Var(t_5) = 5 / (5 - 2) = 5/3; scale by sqrt(3/5) so draws preserve t(5) fat tails with unit variance
-    independent_draws = np.random.standard_t(5, size=(num_vars, oversample)) * np.sqrt(3.0 / 5.0)
+    independent_draws = rng.standard_t(5, size=(num_vars, oversample)) * np.sqrt(3.0 / 5.0)
     correlated_draws = L @ independent_draws
 
     # Means and standard deviations (bounded so 1-year historical outliers do not explode perpetual variance)

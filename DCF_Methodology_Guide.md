@@ -63,9 +63,9 @@ ValuationLabs treats capital structures differently based on domestic legal, tax
 | Parameter | Indian Equities (NSE / BSE) | US Equities (NYSE / NASDAQ) | Mathematical Derivation / Feed |
 | :--- | :--- | :--- | :--- |
 | **Sovereign Risk-Free Rate ($R_f$)** | RBI 10-Year Benchmark G-Sec Yield | US 10-Year Treasury Yield | Live FRED API (`DGS10` / `INDIRLTLT01STM`) |
-| **Market Equity Risk Premium ($ERP$)** | $7.00\%$ | $5.00\%$ | Damodaran Mature Market + Sovereign CDS Spread |
+| **Expected Market Return ($R_m$) / $ERP$** | $R_m = 13.00\%$ ($ERP = R_m - R_f \approx 5.90\%$) | $R_m = 10.00\%$ ($ERP = R_m - R_f \approx 5.80\%$) | Damodaran Mature Market + Sovereign CDS Spread |
 | **Corporate Income Tax Rate ($\tau$)** | $25.17\%$ | $21.00\%$ | Sec. 115BAA (22% + 10% Surcharge + 4% Cess) vs. US TCJA |
-| **Perpetual Terminal Growth Rate ($g_{\infty}$)** | $2.50\%$ (Real Conservative Default) | $2.50\%$ (Real Conservative Default) | $\min(\text{Historical GDP Trend}, R_f - 1.5\%)$ |
+| **Perpetual Terminal Growth Rate ($g_{\infty}$)** | $5.00\%$ (INR Nominal Default) | $2.50\%$ (USD Nominal Default) | $\min(\text{Long-Term Nominal GDP Trend}, R_f - 1.5\%)$ |
 | **Reporting Currency** | Indian Rupee (₹ INR Crores) | US Dollar ($ USD Millions) | Local Filing Denomination |
 | **Statement Standard** | Ind AS / IFRS Consolidated | US GAAP / SEC 10-K Consolidated | Standardized Audited Primary Filings |
 
@@ -301,7 +301,7 @@ ValuationLabs resolves this by deploying a **10,000-iteration correlated stochas
      [7-Variable Covariance Matrix Construction: Σ]
        - Revenue Growth               - Equity Risk Premium
        - Operating EBIT Margin        - Synthetic Cost of Debt
-       - Risk-Free Rate (Rf)          - Terminal Growth Rate
+       - Risk-Free Rate (Rf)          - Equity Capital Weight (We)
        - Levered Beta
                          │
                          ▼
@@ -334,9 +334,9 @@ ValuationLabs resolves this by deploying a **10,000-iteration correlated stochas
 
 ### 7.1 The 7-Variable Covariance Matrix ($\Sigma$)
 The engine models the joint distribution of seven economic variables:
-$$\mathbf{Y} = \begin{bmatrix} g_{\text{start}} & \mu_{\text{target}} & R_f & \beta & ERP & K_d & g_{\infty} \end{bmatrix}^{T}$$
+$$\mathbf{Y} = \begin{bmatrix} g_{\text{start}} & \mu_{\text{target}} & R_f & \beta & ERP & K_d & W_e \end{bmatrix}^{T}$$
 
-Historical variances and empirical correlations populate the symmetric positive semi-definite covariance matrix $\Sigma$:
+Historical variances, empirical Growth–Margin correlation ($\rho_{g, \mu}$), and macroeconomic cross-correlations ($\rho_{R_f, K_d} = +0.50$, $\rho_{\beta, ERP} = +0.20$, $\rho_{K_d, W_e} = -0.30$) populate the symmetric positive-definite covariance matrix $\Sigma$:
 
 $$\Sigma = \begin{bmatrix}
 \sigma_1^{2} & \rho_{1,2}\sigma_1\sigma_2 & \cdots & \rho_{1,7}\sigma_1\sigma_7 \\

@@ -71,6 +71,25 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
     elif dcf_result.get("tv_share_flag", False):
         warning_msg = "Terminal Value accounts for >75% of Enterprise Value; valuation is highly sensitive to terminal WACC and growth."
 
+    # Model suitability advisory for regulated utilities / high regulatory deferral assets
+    model_suitability_note: Optional[str] = None
+    sector = str(stock_data.get("sector", "") or "")
+    bs_stmts = metrics.get("statements", {}).get("balance_sheet", {})
+    reg_assets_arr = bs_stmts.get("Regulatory Deferral Assets (Non-Tax)") or bs_stmts.get("Regulatory Deferral & Non-Current Deferred Assets", [])
+    tot_assets_arr = bs_stmts.get("Total Assets", [])
+    latest_reg_assets = float(reg_assets_arr[-1]) if reg_assets_arr else 0.0
+    latest_tot_assets = float(tot_assets_arr[-1]) if tot_assets_arr else 0.0
+    reg_asset_share = (latest_reg_assets / latest_tot_assets) if latest_tot_assets > 0 else 0.0
+    if sector.lower() == "utilities" or reg_asset_share >= 0.05:
+        model_suitability_note = (
+            f"Regulated Utility / Rate-Base Advisory: Regulatory deferral & non-current deferred assets represent "
+            f"{reg_asset_share*100:.1f}% of Total Assets. Under Ind AS 114 / ASC 980, regulated utilities earn a statutory return on "
+            f"equity (Regulated Asset Base) and recover tariff deferrals over multi-year cycles while funding multi-year expansion CapEx "
+            f"via project debt. Compare Unlevered FCFF alongside the Corporate DDM / Regulated Equity ROE model."
+        )
+        if not warning_msg and multiple_gap_pct >= 0.35:
+            warning_msg = model_suitability_note
+
     return {
         "metric_used": metric_used,
         "trailing_ebitda": float(trailing_ebitda),
@@ -81,6 +100,7 @@ def validate_valuation(dcf_result: Dict[str, Any], stock_data: Dict[str, Any], m
         "multiple_gap_pct": float(multiple_gap_pct),
         "status": status,
         "warning": warning_msg,
+        "model_suitability_note": model_suitability_note,
         "exit_implied_price": dcf_result.get("exit_implied_price"),
         "benchmark_exit_multiple": dcf_result.get("benchmark_exit_multiple"),
         "implied_exit_multiple": dcf_result.get("implied_exit_multiple"),

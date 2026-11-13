@@ -268,7 +268,7 @@ export default function AssumptionSliders({
     const hist = data.historicals || {};
     const diag = data.diagnostics || {};
     const revHist = hist.revenue || [];
-    const lastRev = revHist.length > 0 ? revHist[revHist.length - 1] : (dcf.projected_revenue?.[0] / (1 + (diag.default_growth || 0.10))) || 1;
+    const lastRev = hist.last_revenue || (revHist.length > 0 ? revHist[revHist.length - 1] : (dcf.projected_revenue?.[0] / (1 + (diag.default_growth || 0.10))) || 1);
     const taxRate = dcf.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21);
     const nwcRatio = dcf.normalized_nwc_to_revenue || 0;
 

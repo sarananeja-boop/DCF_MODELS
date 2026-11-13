@@ -292,6 +292,12 @@ def compute_wacc(
         "wacc_floored": wacc_floored,
         "wacc_note": wacc_note,
         "total_debt": float(total_debt),
+        "raw_total_debt": float(metrics.get("raw_total_debt", total_debt)),
+        "lease_obligations": float(metrics.get("lease_obligations", 0.0)),
+        "captive_debt_offset": float(metrics.get("captive_debt_offset", 0.0)),
+        "minority_interest_claim": float(metrics.get("minority_interest_claim", 0.0)),
+        "aro_provisions_claim": float(metrics.get("aro_provisions_claim", 0.0)),
+        "greenfield_debt_offset": float(metrics.get("greenfield_debt_offset", 0.0)),
     }
 
 
@@ -311,6 +317,8 @@ def run_dcf(
     current_margin: Optional[float] = None,
     tax_rate: Optional[float] = None,
     use_mid_year: bool = True,
+    ignore_terminal_growth_cap: bool = False,
+    fixed_terminal_reinv_rate: Optional[float] = None,
 ) -> dict:
     """Run a single multi-stage DCF valuation with linear growth fade and Mid-Year convention.
 
@@ -330,6 +338,8 @@ def run_dcf(
     last_revenue: float = metrics["last_revenue"]
     total_debt: float = wacc_data["total_debt"]
     cash_equiv: float = metrics["cash_and_equivalents"]
+    minority_interest_claim: float = float(metrics.get("minority_interest_claim", 0.0) or 0.0)
+    preferred_stock_claim: float = float(metrics.get("preferred_stock_claim", 0.0) or 0.0)
     shares_out: float = stock_data["shares_outstanding"]
 
     is_extractive = stock_data.get("is_extractive", False)
@@ -374,7 +384,7 @@ def run_dcf(
     # Bound D&A when non-PPE amortization (e.g. streaming content amortization in NFLX or acquisition
     # intangible amortization in LBOs) makes D&A far exceed physical CapEx.
     effective_dna_pct = (
-        min(avg_dna_pct, max(avg_capex_pct * 1.05, 0.045))
+        min(avg_dna_pct, max(avg_capex_pct * 1.05, 0.025))
         if avg_dna_pct > avg_capex_pct * 1.15
         else avg_dna_pct
     )
@@ -462,7 +472,7 @@ def run_dcf(
     gw_series = bs.get("Intangible Assets & Goodwill", [0]) if isinstance(bs, dict) else [0]
     gw_val = float(gw_series[-1]) if gw_series else 0.0
     invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
-    tangible_ic = max(last_revenue * 0.15, invested_capital - 0.80 * max(0.0, gw_val))
+    tangible_ic = max(last_revenue * 0.15, invested_capital - 1.00 * max(0.0, gw_val))
     
     hist_ebit = metrics.get("ebit", [])
     last_ebit = hist_ebit[-1] if hist_ebit else (last_rev * ebit_margin)
@@ -489,14 +499,16 @@ def run_dcf(
     sustainable_roic = max(min_roic_floor, min(effective_roic, max_roic_cap))
 
     is_india = (stock_data.get("market") == "IN")
-    if is_extractive:
+    if ignore_terminal_growth_cap:
+        max_g_allowed = max(0.01, discount_rate - 0.015)
+    elif is_extractive:
         max_g_allowed = 0.025
     else:
         max_g_allowed = 0.050 if is_india else 0.025
     clamped_terminal_growth = min(terminal_growth, max_g_allowed)
 
-    # Enforce minimum spread: WACC - g >= 0.025 (2.5% minimum spread)
-    min_spread = 0.025
+    # Enforce minimum spread: WACC - g >= 0.025 (2.5% minimum spread, or 1.5% in sensitivity sweep)
+    min_spread = 0.015 if ignore_terminal_growth_cap else 0.025
     if discount_rate - clamped_terminal_growth < min_spread:
         effective_terminal_growth = max(0.01, discount_rate - min_spread)
         terminal_growth_capped = True
@@ -508,7 +520,9 @@ def run_dcf(
         effective_terminal_growth = clamped_terminal_growth
 
     roic_reinv = effective_terminal_growth / sustainable_roic
-    if is_high_roic and margin_schedule[-1] > 0:
+    if fixed_terminal_reinv_rate is not None:
+        terminal_reinv_rate = float(fixed_terminal_reinv_rate)
+    elif is_high_roic and margin_schedule[-1] > 0:
         yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
         model_yr5_reinv = max(
             0.0,
@@ -524,11 +538,11 @@ def run_dcf(
         terminal_reinv_rate = min(0.80, max(min_reinv_floor, roic_reinv))
 
     # For extractive/capital-intensive firms, terminal reinvestment rate must also fund sustaining net CapEx
-    if is_extractive and margin_schedule[-1] > 0:
+    if fixed_terminal_reinv_rate is None and is_extractive and margin_schedule[-1] > 0:
         yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
         net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_margin)
         terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv))
-    elif is_cyclical and margin_schedule[-1] > 0:
+    elif fixed_terminal_reinv_rate is None and is_cyclical and margin_schedule[-1] > 0:
         yr5_nopat_margin = max(0.01, margin_schedule[-1] * (1.0 - tax_rate))
         net_capex_reinv = max(0.0, (steady_state_capex_pct - effective_dna_pct) / yr5_nopat_margin)
         terminal_reinv_rate = min(0.80, max(terminal_reinv_rate, net_capex_reinv * 0.85))
@@ -550,7 +564,7 @@ def run_dcf(
         benchmark_exit_mult = 7.5
     elif stock_data.get("is_financial", False):
         benchmark_exit_mult = 8.0
-    elif avg_gm_val >= 0.55 and start_growth >= 0.15:
+    elif (avg_gm_val >= 0.55 or (avg_gm_val >= 0.50 and float(metrics.get("latest_rnd_pct", 0.0)) >= 0.18)) and start_growth >= 0.15:
         benchmark_exit_mult = 16.0
     elif avg_gm_val >= 0.45 and start_growth >= 0.10:
         benchmark_exit_mult = 12.5
@@ -560,7 +574,7 @@ def run_dcf(
     exit_terminal_value = terminal_ebitda * benchmark_exit_mult if terminal_ebitda > 0 else 0.0
     pv_exit_tv = exit_terminal_value / discount_factors[-1] if len(discount_factors) > 0 else 0.0
     exit_ev = pv_ufcf + pv_exit_tv
-    exit_equity = exit_ev + cash_equiv - total_debt
+    exit_equity = exit_ev + cash_equiv - total_debt - minority_interest_claim - preferred_stock_claim
     exit_implied_price = max(0.0, exit_equity / shares_out) if shares_out > 0 else 0.0
 
     if discount_rate <= effective_terminal_growth:
@@ -588,9 +602,9 @@ def run_dcf(
 
     implied_exit_multiple = (terminal_value / terminal_ebitda) if (terminal_value and terminal_ebitda > 0) else None
 
-    # EV → Equity bridge
+    # EV → Equity bridge (subtract financial debt, minority interest, and preferred stock claims)
     enterprise_val = pv_ufcf + pv_terminal_value
-    equity_value = enterprise_val + cash_equiv - total_debt
+    equity_value = enterprise_val + cash_equiv - total_debt - minority_interest_claim - preferred_stock_claim
     
     # Implied price per share floored at 0.0
     implied_price = max(0.0, equity_value / shares_out) if shares_out > 0 else 0.0
@@ -621,17 +635,30 @@ def run_dcf(
         "projected_dnwc": [float(dw) for dw in proj_dnwc],
         "growth_schedule": growth_schedule.tolist(),
         "margin_schedule": margin_schedule.tolist(),
+        "capex_schedule": [float(c) for c in capex_schedule],
+        "effective_dna_pct": float(effective_dna_pct),
+        "steady_state_capex_pct": float(steady_state_capex_pct),
         "pv_ufcf": float(pv_ufcf),
         "pv_ufcf_list": [float(p) for p in pv_ufcf_list],
         "discount_periods": discount_periods,
         "discount_factors": [float(1.0 / df) for df in discount_factors],
+        "terminal_nopat": float(terminal_nopat),
+        "terminal_ufcf": float(terminal_ufcf),
         "terminal_value": float(terminal_value) if terminal_value is not None else None,
         "pv_terminal_value": float(pv_terminal_value),
         "equity_value": float(equity_value),
+        "cash": float(cash_equiv),
+        "total_debt": float(total_debt),
+        "minority_interest": float(minority_interest_claim),
+        "preferred_stock": float(preferred_stock_claim),
         "terminal_value_valid": terminal_value_valid,
         "terminal_value_note": terminal_value_note,
         "terminal_growth_capped": terminal_growth_capped,
         "effective_terminal_growth": float(effective_terminal_growth),
+        "terminal_reinv_rate": float(terminal_reinv_rate),
+        "sustainable_roic": float(sustainable_roic),
+        "roic_reinv": float(roic_reinv),
+        "is_high_roic": bool(is_high_roic),
         "tv_share_of_ev": float(tv_share_of_ev),
         "tv_share_flag": tv_share_flag,
         "tv_share_note": tv_share_note,
@@ -670,6 +697,8 @@ def run_dcf_batch(
     last_revenue: float = float(metrics["last_revenue"])
     total_debt: float = float(wacc_data["total_debt"])
     cash_equiv: float = float(metrics["cash_and_equivalents"])
+    minority_interest_claim: float = float(metrics.get("minority_interest_claim", 0.0) or 0.0)
+    preferred_stock_claim: float = float(metrics.get("preferred_stock_claim", 0.0) or 0.0)
     shares_out: float = float(stock_data["shares_outstanding"])
 
     is_extractive = stock_data.get("is_extractive", False)
@@ -772,7 +801,7 @@ def run_dcf_batch(
     gw_series = bs.get("Intangible Assets & Goodwill", [0]) if isinstance(bs, dict) else [0]
     gw_val = float(gw_series[-1]) if gw_series else 0.0
     invested_capital = max(1.0, equity_bv + total_debt - cash_equiv)
-    tangible_ic = max(last_revenue * 0.15, invested_capital - 0.80 * max(0.0, gw_val))
+    tangible_ic = max(last_revenue * 0.15, invested_capital - 1.00 * max(0.0, gw_val))
 
     hist_ebit = metrics.get("ebit", [])
     if hist_ebit:
@@ -891,7 +920,7 @@ def run_dcf_batch(
     pv_terminal_value = np.where(valid_tv, terminal_value / discount_factors[:, -1], 0.0)
 
     enterprise_val = pv_ufcf + pv_terminal_value
-    equity_value = enterprise_val + cash_equiv - total_debt
+    equity_value = enterprise_val + cash_equiv - total_debt - minority_interest_claim - preferred_stock_claim
     implied_price = (
         np.maximum(0.0, equity_value / shares_out) if shares_out > 0 else np.zeros(n)
     )

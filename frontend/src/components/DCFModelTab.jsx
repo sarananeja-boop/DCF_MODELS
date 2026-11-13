@@ -49,6 +49,9 @@ const DCFModelTab = ({ data }) => {
 
   const projectionYears = dcf.projected_revenue?.length || 0;
   const cash = waccObj?.total_cash ?? comp?.total_cash ?? comp?.cash;
+  const minorityPreferred =
+    (dcf?.minority_interest ?? waccObj?.minority_interest_claim ?? 0) +
+    (dcf?.preferred_stock ?? waccObj?.preferred_stock_claim ?? 0);
   const shares = data.market_data?.shares_outstanding || 0;
   
   return (
@@ -71,7 +74,7 @@ const DCFModelTab = ({ data }) => {
               {isEquityModel ? 'Discount: Ke (CAPM)' : `Tax Rate: ${formatPct(dcf.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21))}`}
             </span>
             <span className="px-2.5 py-1 rounded-lg bg-[#0d121a] border border-[#f4eedf]/10 text-[#e3b23c] tabular-nums">
-              Terminal g: {formatPct(dcf.terminal_growth ?? (market === 'IN' ? 0.055 : 0.025))}
+              Terminal g: {formatPct(dcf.terminal_growth ?? (market === 'IN' ? 0.050 : 0.025))}
             </span>
           </div>
         </div>
@@ -305,7 +308,7 @@ const DCFModelTab = ({ data }) => {
           </div>
         ) : (
           /* Corporate / Industrial Enterprise-to-Equity Bridge with Arithmetic Operators */
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 pt-3 border-t border-[#f4eedf]/10 items-center">
+          <div className={`grid grid-cols-2 sm:grid-cols-3 ${minorityPreferred > 0 ? 'xl:grid-cols-7' : 'xl:grid-cols-6'} gap-2.5 pt-3 border-t border-[#f4eedf]/10 items-center`}>
             <div className="bg-[#0d121a] rounded-xl p-3 text-center border border-[#f4eedf]/8">
               <div className="text-[10px] text-[#a6b0c3] font-bold uppercase">Enterprise Value</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#f4eedf] tabular-nums mt-0.5">{formatNum(dcf.enterprise_value)}</div>
@@ -318,6 +321,12 @@ const DCFModelTab = ({ data }) => {
               <div className="text-[10px] text-[#34b38a] font-bold uppercase">(+) Plus Cash</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#34b38a] tabular-nums mt-0.5">+{formatNum(cash)}</div>
             </div>
+            {minorityPreferred > 0 && (
+              <div className="bg-[#0d121a] rounded-xl p-3 text-center border border-[#f4eedf]/8">
+                <div className="text-[10px] text-[#e07a5f] font-bold uppercase">(−) Minority / Pref</div>
+                <div className="font-display font-bold text-sm sm:text-base text-[#e07a5f] tabular-nums mt-0.5">−{formatNum(minorityPreferred)}</div>
+              </div>
+            )}
             <div className="bg-[#0d121a] rounded-xl p-3 text-center border border-[#f4eedf]/10">
               <div className="text-[10px] text-[#e3b23c] font-bold uppercase">(=) Equity Value</div>
               <div className="font-display font-bold text-sm sm:text-base text-[#e3b23c] tabular-nums mt-0.5">={formatNum(dcf.equity_value)}</div>

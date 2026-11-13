@@ -105,16 +105,26 @@ export default function SensitivityTab({ data }) {
 
   // Additional Matrix 3: Terminal Growth Rate (g) vs WACC (Terminal Value Sensitivity)
   const tvMatrix = useMemo(() => {
+    const tgWacc = data.sensitivity?.terminal_growth_wacc;
+    if (tgWacc?.terminal_growth_range?.length && tgWacc?.wacc_range?.length && tgWacc?.price_grid?.length) {
+      const gRange = tgWacc.terminal_growth_range;
+      const wRange = tgWacc.wacc_range;
+      const grid = wRange.map((_, ri) => gRange.map((__, ci) => tgWacc.price_grid[ri]?.[ci] ?? null));
+      return { gRange, wRange, grid };
+    }
+
     const pv5 = data.dcf_result?.pv_ufcf || 0;
     const debt = data.wacc?.total_debt || 0;
     const cash = data.wacc?.total_cash || data.historicals?.cash_and_equivalents || 0;
+    const minority = data.dcf_result?.minority_interest || data.wacc?.minority_interest_claim || 0;
+    const preferred = data.dcf_result?.preferred_stock || data.wacc?.preferred_stock_claim || 0;
     const shares = data.market_data?.shares_outstanding || 1;
 
     const baseReinv = data.dcf_result?.terminal_reinv_rate ?? 0.30;
     const baseTgr = data.dcf_result?.terminal_growth || (data.company?.market === 'IN' ? 0.050 : 0.025);
     const effBaseTgr = data.dcf_result?.effective_terminal_growth || baseTgr;
     const baseTv = data.dcf_result?.terminal_value || 0;
-    const baseTerminalUfcf = baseTv > 0 ? baseTv * Math.max(0.005, baseWacc - effBaseTgr) : 0;
+    const baseTerminalUfcf = data.dcf_result?.terminal_ufcf || (baseTv > 0 ? baseTv * Math.max(0.005, baseWacc - effBaseTgr) : 0);
 
     const gSteps = [-0.015, -0.0075, 0, 0.0075, 0.015];
     const waccSteps = [-0.015, -0.0075, 0, 0.0075, 0.015];
@@ -136,7 +146,7 @@ export default function SensitivityTab({ data }) {
         // Mid-year discount factor for year 5 matches backend discount_factors[-1] = (1 + w)^4.5
         const pvTv = tvNominal / Math.pow(1 + w, 4.5);
         const ev = pv5 + pvTv;
-        const eq = isEquityModel ? (pv5 + pvTv) : (ev - debt + cash);
+        const eq = isEquityModel ? (pv5 + pvTv) : (ev - debt + cash - minority - preferred);
         const p = eq / shares;
         return p > 0 ? p : null;
       });
@@ -145,28 +155,44 @@ export default function SensitivityTab({ data }) {
     return { gRange, wRange, grid };
   }, [data, baseGrowth, baseWacc, isEquityModel]);
 
-  // Additional Chart: Sensitivity Tornado (±100 bps Shock Impact)
+  // Additional Chart: Sensitivity Tornado (One-Step Grid Shock Impact Around Base Case)
   const tornadoData = useMemo(() => {
-    // 1. WACC ± 1%
-    const waccDeltaDown = baseFairValue * 1.135;
-    const waccDeltaUp = baseFairValue * 0.885;
+    const safeVal = (v, fallback) => (v != null && !isNaN(v) && v > 0 ? v : fallback);
+    const r1 = baseRowIdx1 >= 0 ? baseRowIdx1 : 2;
+    const c1 = baseColIdx1 >= 0 ? baseColIdx1 : 2;
+    const r2 = baseRowIdx2 >= 0 ? baseRowIdx2 : 2;
+    const c2 = baseColIdx2 >= 0 ? baseColIdx2 : 2;
 
-    // 2. EBIT Margin ± 1%
-    const marginDeltaUp = baseFairValue * 1.082;
-    const marginDeltaDown = baseFairValue * 0.918;
+    // 1. WACC ± 1 step (higher WACC = lower price, lower WACC = higher price)
+    const waccDownIdx = Math.max(0, r1 - 1);
+    const waccUpIdx = Math.min((g1_y?.length || 5) - 1, r1 + 1);
+    const waccDeltaDown = safeVal(g1_z[waccDownIdx]?.[c1], baseFairValue * 1.135);
+    const waccDeltaUp = safeVal(g1_z[waccUpIdx]?.[c1], baseFairValue * 0.885);
 
-    // 3. Revenue Growth ± 1%
-    const growthDeltaUp = baseFairValue * 1.065;
-    const growthDeltaDown = baseFairValue * 0.935;
+    // 2. EBIT Margin ± 1 step
+    const marginDownIdx = Math.max(0, c2 - 1);
+    const marginUpIdx = Math.min((g2_x?.length || 5) - 1, c2 + 1);
+    const marginDeltaDown = safeVal(g2_z[r2]?.[marginDownIdx], baseFairValue * 0.918);
+    const marginDeltaUp = safeVal(g2_z[r2]?.[marginUpIdx], baseFairValue * 1.082);
 
-    // 4. Terminal Growth ± 0.5%
-    const tgDeltaUp = baseFairValue * 1.092;
-    const tgDeltaDown = baseFairValue * 0.915;
+    // 3. Revenue Growth ± 1 step
+    const growthDownIdx = Math.max(0, c1 - 1);
+    const growthUpIdx = Math.min((g1_x?.length || 5) - 1, c1 + 1);
+    const growthDeltaDown = safeVal(g1_z[r1]?.[growthDownIdx], baseFairValue * 0.935);
+    const growthDeltaUp = safeVal(g1_z[r1]?.[growthUpIdx], baseFairValue * 1.065);
+
+    // 4. Terminal Growth ± 1 step (around center index 2)
+    const tgMidRow = Math.floor((tvMatrix.wRange?.length || 5) / 2);
+    const tgMidCol = Math.floor((tvMatrix.gRange?.length || 5) / 2);
+    const tgDownCol = Math.max(0, tgMidCol - 1);
+    const tgUpCol = Math.min((tvMatrix.gRange?.length || 5) - 1, tgMidCol + 1);
+    const tgDeltaDown = safeVal(tvMatrix.grid?.[tgMidRow]?.[tgDownCol], baseFairValue * 0.915);
+    const tgDeltaUp = safeVal(tvMatrix.grid?.[tgMidRow]?.[tgUpCol], baseFairValue * 1.092);
 
     return [
       {
         factor: isEquityModel ? 'Cost of Equity (Ke)' : 'Discount Rate (WACC)',
-        shift: '±1.0%',
+        shift: '±100 bps',
         low: waccDeltaUp,
         high: waccDeltaDown,
         lowPct: ((waccDeltaUp / baseFairValue) - 1) * 100,
@@ -174,7 +200,7 @@ export default function SensitivityTab({ data }) {
       },
       {
         factor: isEquityModel ? 'Target Return on Equity (ROE)' : 'Operating EBIT Margin',
-        shift: '±1.0%',
+        shift: '±250 bps',
         low: marginDeltaDown,
         high: marginDeltaUp,
         lowPct: ((marginDeltaDown / baseFairValue) - 1) * 100,
@@ -182,7 +208,7 @@ export default function SensitivityTab({ data }) {
       },
       {
         factor: 'Terminal Growth Rate (g)',
-        shift: '±0.5%',
+        shift: '±75 bps',
         low: tgDeltaDown,
         high: tgDeltaUp,
         lowPct: ((tgDeltaDown / baseFairValue) - 1) * 100,
@@ -190,14 +216,14 @@ export default function SensitivityTab({ data }) {
       },
       {
         factor: isEquityModel ? 'Net Income Growth' : 'Revenue Growth (Yr 1)',
-        shift: '±1.0%',
+        shift: '±250 bps',
         low: growthDeltaDown,
         high: growthDeltaUp,
         lowPct: ((growthDeltaDown / baseFairValue) - 1) * 100,
         highPct: ((growthDeltaUp / baseFairValue) - 1) * 100,
       },
     ];
-  }, [baseFairValue, isEquityModel]);
+  }, [baseFairValue, isEquityModel, baseRowIdx1, baseColIdx1, baseRowIdx2, baseColIdx2, g1_x, g1_y, g1_z, g2_x, g2_z, tvMatrix]);
 
   return (
     <div className="space-y-5 text-[#f4eedf]">
