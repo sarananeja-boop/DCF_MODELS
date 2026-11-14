@@ -188,238 +188,233 @@ export default function AssumptionSliders({
       };
     }
 
+    const years = dcf.projected_revenue?.length || 5;
+    const shares = Number(
+      dcf.shares_used ||
+      data.market_data?.diluted_valuation_shares ||
+      data.market_data?.shares_diluted_tsm ||
+      data.market_data?.shares_outstanding ||
+      1
+    );
+    const market = data.company?.market || 'US';
+
+    const computeRawSimPrice = (gVal, mVal, wVal, tVal) => {
+      if (isReit) {
+        // REIT / InvIT AFFO / NDCF Engine mirroring reit_engine.py
+        const lastRev = Number(dcf.base_revenue ?? data.historicals?.revenue?.[data.historicals?.revenue?.length - 1] ?? 1e9);
+        const baseM = Math.max(0.08, Math.min(0.85, Number(dcf.base_affo_margin ?? dcf.base_roe ?? 0.50)));
+        const targetM = Math.max(0.08, Math.min(0.85, mVal));
+        const ke = wVal;
+        const termG = Math.min(tVal, market === 'IN' ? 0.055 : 0.025);
+        const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
+        const growthExcess = Math.max(0, gVal - termG);
+        const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
+        const fadeExp = 1.0 + 0.35 * fadeBlend;
+        const gSched = stepFracs.map((f) => gVal - (gVal - termG) * Math.pow(f, fadeExp));
+        const mSched = Array.from({ length: years }, (_, i) => baseM + (targetM - baseM) * (i / Math.max(1, years - 1)));
+
+        let curRev = lastRev;
+        let pvNdcf = 0;
+        let lastAffo = 0;
+        for (let i = 0; i < years; i++) {
+          curRev = curRev * (1 + gSched[i]);
+          const affoYr = curRev * mSched[i];
+          const gNext = i + 1 < years ? gSched[i + 1] : termG;
+          const retB = Math.min(0.25, Math.max(0.05, Math.max(0, gNext - 0.70 * termG) / 0.12));
+          pvNdcf += (affoYr * (1 - retB)) / Math.pow(1 + ke, i + 0.5);
+          if (i === years - 1) lastAffo = affoYr;
+        }
+
+        let tv = 0;
+        const spread = ke - termG;
+        if (ke > termG) {
+          const effTermG = spread < 0.020 ? ke - 0.020 : termG;
+          const effSpread = spread < 0.020 ? 0.020 : spread;
+          const termRet = Math.min(0.25, Math.max(0.05, Math.max(0, 0.30 * effTermG) / 0.12));
+          const termNdcf = lastAffo * (1 + effTermG) * (1 - termRet);
+          tv = termNdcf / effSpread;
+        }
+        const pvTv = tv / Math.pow(1 + ke, years - 0.5);
+        const eqVal = pvNdcf + pvTv;
+        return Math.max(0, eqVal / shares);
+      }
+
+      if (isEquityModel) {
+        // Bank / Insurer / Corporate DDM Engine mirroring bank_engine.py & insurance_engine.py
+        const hist = data.historicals || {};
+        const diag = data.diagnostics || {};
+        const niHist = hist.net_income || [];
+        const validNi = niHist.filter((x) => x > 0);
+        const baseNi = Number(
+          dcf.base_net_income ?? (validNi.length > 0 ? validNi[validNi.length - 1] : (hist.revenue?.[hist.revenue.length - 1] || 1e9) * 0.15)
+        );
+
+        const currRoe = Number(dcf.base_roe ?? diag.current_ebit_margin ?? hist.avg_roe ?? 0.14);
+        const targetRoe = Math.max(0.05, Math.min(0.35, mVal));
+        let baseRoe = Math.max(0.05, Math.min(0.35, currRoe));
+        if (!isInsurance) baseRoe = Math.max(baseRoe, targetRoe * 0.90);
+
+        const ke = wVal;
+        const termG = Math.min(tVal, market === 'IN' ? 0.055 : 0.025);
+        const stG = isInsurance ? gVal : Math.max(-0.05, Math.min(0.35, gVal));
+
+        const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
+        const growthExcess = Math.max(0, stG - termG);
+        const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
+        const fadeExp = 1.0 + 0.35 * fadeBlend;
+        const gSched = stepFracs.map((f) => stG - (stG - termG) * Math.pow(f, fadeExp));
+
+        const roeSched = Array.from({ length: years }, (_, i) => baseRoe + (targetRoe - baseRoe) * (i / Math.max(1, years - 1)));
+        const effReturn = (r, k) => (r >= 1.25 * k ? r : 1.15 * k + (r / Math.max(1e-6, 1.25 * k)) * (0.10 * k));
+
+        let curNi = baseNi;
+        let pvFcfe = 0;
+        let lastNi = 0;
+
+        for (let i = 0; i < years; i++) {
+          const yrG = gSched[i];
+          const yrGNext = i + 1 < years ? gSched[i + 1] : termG;
+          const roe = roeSched[i];
+          curNi = curNi * (1 + yrG);
+
+          const rEff = effReturn(Math.max(roe, targetRoe), ke);
+          const marginalRoe = Math.max(rEff, ke * 2.2, yrG * 0.95 + 0.05);
+          const retentionB = marginalRoe > 0 ? Math.min(0.85, Math.max(0.05, yrGNext / marginalRoe)) : 0.50;
+          const fcfe = curNi * (1 - retentionB);
+
+          pvFcfe += fcfe / Math.pow(1 + ke, i + 0.5);
+          if (i === years - 1) lastNi = curNi;
+        }
+
+        const spread = ke - termG;
+        let tv = 0;
+        if (ke > termG) {
+          const effTermG = spread < 0.020 ? Math.max(0.01, ke - 0.020) : termG;
+          const effSpread = spread < 0.020 ? 0.020 : spread;
+          const termRoe = effReturn(roeSched[years - 1], ke);
+          const termRet = termRoe > 0 ? Math.min(0.95, Math.max(0.05, effTermG / termRoe)) : 0.50;
+          const termNi = lastNi * (1 + effTermG);
+          const termFcfe = termNi * (1 - termRet);
+          tv = termFcfe / effSpread;
+        }
+
+        const pvTv = tv / Math.pow(1 + ke, years - 0.5);
+        const eqVal = pvFcfe + pvTv;
+        return Math.max(0, eqVal / shares);
+      }
+
+      // Standard FCFF Engine mirroring dcf_engine.py
+      const hist = data.historicals || {};
+      const diag = data.diagnostics || {};
+      const revHist = hist.revenue || [];
+      const lastRev = hist.last_revenue || (revHist.length > 0 ? revHist[revHist.length - 1] : (dcf.projected_revenue?.[0] / (1 + (diag.default_growth || 0.10))) || 1);
+      const taxRate = dcf.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21);
+      const nwcRatio = dcf.normalized_nwc_to_revenue || 0;
+
+      const baseRev = dcf.projected_revenue || [];
+      const baseDna = dcf.projected_dna || [];
+      const baseCapex = dcf.projected_capex || [];
+      const isExtractive = Boolean(dcf.is_extractive || diag.is_extractive);
+      const isCyclical = Boolean(dcf.is_cyclical || diag.is_cyclical);
+
+      const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
+      const fadeBlend = (!isExtractive && !isCyclical)
+        ? Math.min(1.0, Math.max(0.0, (gVal - tVal - 0.05) / 0.10))
+        : 0.0;
+      const fadeExp = 1.0 + 0.35 * fadeBlend;
+      const gSched = stepFracs.map((s) => gVal - (gVal - tVal) * Math.pow(s, fadeExp));
+
+      const useMarginRamp = Boolean(diag.margin_normalization_used) && diag.current_ebit_margin != null;
+      const currM = useMarginRamp ? Number(diag.current_ebit_margin) : null;
+      const mSched = currM != null
+        ? Array.from({ length: years }, (_, i) => currM + (mVal - currM) * ((i + 1) / years))
+        : Array.from({ length: years }, () => mVal);
+
+      const dnaPct = (baseRev[0] && baseDna[0]) ? baseDna[0] / baseRev[0] : (hist.avg_dna_pct || 0.04);
+      const capexPcts = Array.from({ length: years }, (_, i) => {
+        return (baseRev[i] && baseCapex[i]) ? baseCapex[i] / baseRev[i] : (hist.avg_capex_pct || 0.06);
+      });
+
+      let curRev = lastRev;
+      let pvUfcf = 0;
+      const projRev = [];
+      for (let yr = 0; yr < years; yr++) {
+        const nextRev = curRev * (1 + gSched[yr]);
+        const marginVal = mSched[yr];
+        const nopat = nextRev * marginVal * (1 - taxRate);
+        const dnaAdd = nextRev * dnaPct;
+        const capexSub = nextRev * capexPcts[yr];
+        const deltaNwc = nwcRatio * (nextRev - curRev);
+        const ufcf = nopat + dnaAdd - capexSub - deltaNwc;
+
+        pvUfcf += ufcf / Math.pow(1 + wVal, yr + 0.5);
+        projRev.push(nextRev);
+        curRev = nextRev;
+      }
+
+      const maxGAllowed = isExtractive ? 0.025 : (market === 'IN' ? 0.050 : 0.025);
+      const clampedT = Math.min(tVal, maxGAllowed);
+      const minSpread = 0.025;
+      const effT = (wVal - clampedT < minSpread) ? Math.max(0.01, wVal - minSpread) : clampedT;
+
+      // Marginal terminal reinvestment response anchored to backend base rate
+      const baseTgr = dcf.effective_terminal_growth ?? dcf.terminal_growth ?? (market === 'IN' ? 0.050 : 0.025);
+      const baseReinv = dcf.terminal_reinv_rate ?? 0.30;
+      const sustRoic = Math.max(wVal + 0.045, Number(dcf.sustainable_roic) || 0.20);
+      const termReinvRate = Math.min(0.80, Math.max(0.06, baseReinv + (effT - baseTgr) / sustRoic));
+
+      const termNopat = projRev[years - 1] * (1 + effT) * mSched[years - 1] * (1 - taxRate);
+      const termUfcf = termNopat * (1 - termReinvRate);
+
+      // Institutional Exit Multiple Cross-Check for Cyclicals/Extractives
+      const benchMult = dcf.benchmark_exit_multiple || 10.0;
+      const termEbitda = projRev[years - 1] * (1 + effT) * (mSched[years - 1] + dnaPct);
+      const exitTv = termEbitda > 0 ? termEbitda * benchMult : 0;
+
+      const spread = wVal - effT;
+      const gordonTv = termUfcf / Math.max(0.005, spread);
+      let tv = gordonTv;
+      if (isExtractive && exitTv > 0 && gordonTv > exitTv) {
+        tv = 0.35 * gordonTv + 0.65 * exitTv;
+      } else if (isCyclical && exitTv > 0 && gordonTv > exitTv) {
+        tv = 0.45 * gordonTv + 0.55 * exitTv;
+      }
+
+      // Mid-year discount factor for TV matches backend discount_factors[-1] = (1 + w)^4.5
+      const pvTv = tv / Math.pow(1 + wVal, years - 0.5);
+      const simEv = pvUfcf + pvTv;
+
+      const totalDebt = dcf.total_debt ?? data.wacc?.total_debt ?? 0;
+      const totalCash = dcf.cash ?? data.wacc?.total_cash ?? data.company?.total_cash ?? 0;
+      const minority = dcf.minority_interest ?? data.wacc?.minority_interest_claim ?? 0;
+      const preferred = dcf.preferred_stock ?? data.wacc?.preferred_stock_claim ?? 0;
+      const simEq = Math.max(0, simEv - totalDebt + totalCash - minority - preferred);
+      return Math.max(0, simEq / shares);
+    };
+
     const gNew = growth / 100;
     const mNew = margin / 100;
     const wNew = Math.max(0.04, wacc / 100);
     const tNew = Math.max(0.005, tgr / 100);
-    const years = dcf.projected_revenue?.length || 5;
-    const shares = data.market_data?.shares_outstanding || 1;
-    const market = data.company?.market || 'US';
+    const rawSimPrice = computeRawSimPrice(gNew, mNew, wNew, tNew);
 
-    if (isReit) {
-      // REIT / InvIT AFFO / NDCF Engine mirroring reit_engine.py
-      const lastRev = Number(dcf.base_revenue ?? data.historicals?.revenue?.[data.historicals?.revenue?.length - 1] ?? 1e9);
-      const baseM = Math.max(0.08, Math.min(0.85, Number(dcf.base_affo_margin ?? dcf.base_roe ?? 0.50)));
-      const targetM = Math.max(0.08, Math.min(0.85, mNew));
-      const ke = wNew;
-      const termG = Math.min(tNew, market === 'IN' ? 0.055 : 0.025);
-      const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
-      const growthExcess = Math.max(0, gNew - termG);
-      const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
-      const fadeExp = 1.0 + 0.35 * fadeBlend;
-      const gSched = stepFracs.map((f) => gNew - (gNew - termG) * Math.pow(f, fadeExp));
-      const mSched = Array.from({ length: years }, (_, i) => baseM + (targetM - baseM) * (i / Math.max(1, years - 1)));
+    const baseG = appliedGrowth / 100;
+    const baseM = appliedMargin / 100;
+    const baseW = Math.max(0.04, appliedWacc / 100);
+    const baseT = Math.max(0.005, appliedTgr / 100);
+    const baseSimPrice = computeRawSimPrice(baseG, baseM, baseW, baseT);
 
-      let curRev = lastRev;
-      let pvNdcf = 0;
-      let lastAffo = 0;
-      for (let i = 0; i < years; i++) {
-        curRev = curRev * (1 + gSched[i]);
-        const affoYr = curRev * mSched[i];
-        const gNext = i + 1 < years ? gSched[i + 1] : termG;
-        const retB = Math.min(0.25, Math.max(0.05, Math.max(0, gNext - 0.70 * termG) / 0.12));
-        pvNdcf += (affoYr * (1 - retB)) / Math.pow(1 + ke, i + 0.5);
-        if (i === years - 1) lastAffo = affoYr;
-      }
-
-      let tv = 0;
-      const spread = ke - termG;
-      if (ke > termG) {
-        const effTermG = spread < 0.020 ? ke - 0.020 : termG;
-        const effSpread = spread < 0.020 ? 0.020 : spread;
-        const termRet = Math.min(0.25, Math.max(0.05, Math.max(0, 0.30 * effTermG) / 0.12));
-        const termNdcf = lastAffo * (1 + effTermG) * (1 - termRet);
-        tv = termNdcf / effSpread;
-      }
-      const pvTv = tv / Math.pow(1 + ke, years - 0.5);
-      const eqVal = pvNdcf + pvTv;
-      const simPrice = Math.max(0, eqVal / shares);
-
-      return {
-        isDirty: true,
-        price: simPrice,
-        upside: (simPrice / currentPrice) - 1,
-      };
-    }
-
-    if (isEquityModel) {
-      // Bank / Insurer / Corporate DDM Engine mirroring bank_engine.py & insurance_engine.py
-      const hist = data.historicals || {};
-      const diag = data.diagnostics || {};
-      const niHist = hist.net_income || [];
-      const validNi = niHist.filter((x) => x > 0);
-      const baseNi = Number(
-        dcf.base_net_income ?? (validNi.length > 0 ? validNi[validNi.length - 1] : (hist.revenue?.[hist.revenue.length - 1] || 1e9) * 0.15)
-      );
-
-      const bveHist = hist.book_value || [];
-      const validBve = bveHist.filter((x) => x > 0);
-      const baseBve = Number(dcf.base_bve ?? (validBve.length > 0 ? validBve[validBve.length - 1] : baseNi / 0.14));
-
-      const currRoe = Number(dcf.base_roe ?? diag.current_ebit_margin ?? hist.avg_roe ?? 0.14);
-      const targetRoe = Math.max(0.05, Math.min(0.35, mNew));
-      let baseRoe = Math.max(0.05, Math.min(0.35, currRoe));
-      if (!isInsurance && baseRoe < targetRoe * 0.90) baseRoe = targetRoe;
-
-      const ke = wNew;
-      const termG = Math.min(tNew, market === 'IN' ? 0.055 : 0.025);
-      const stG = isInsurance ? gNew : Math.max(-0.05, Math.min(0.35, gNew));
-
-      const stepFracs = years > 1 ? Array.from({ length: years }, (_, i) => i / (years - 1)) : [0];
-      const growthExcess = Math.max(0, stG - termG);
-      const fadeBlend = Math.min(1, Math.max(0, (growthExcess - 0.03) / 0.06));
-      const fadeExp = 1.0 + 0.35 * fadeBlend;
-      const gSched = stepFracs.map((f) => stG - (stG - termG) * Math.pow(f, fadeExp));
-
-      const roeSched = Array.from({ length: years }, (_, i) => baseRoe + (targetRoe - baseRoe) * (i / Math.max(1, years - 1)));
-
-      let curNi = baseNi;
-      let curBve = baseBve;
-      let pvFcfe = 0;
-      let lastNi = 0;
-
-      for (let i = 0; i < years; i++) {
-        const yrG = gSched[i];
-        const yrGNext = i + 1 < years ? gSched[i + 1] : termG;
-        const roe = roeSched[i];
-        curNi = curNi * (1 + yrG);
-
-        const marginalRoe = Math.max(roe, targetRoe, yrG * 0.95);
-        const retentionB = marginalRoe > 0 ? Math.min(0.85, Math.max(0.05, yrGNext / marginalRoe)) : 0.50;
-        const reinvested = curNi * retentionB;
-        const fcfe = curNi * (1 - retentionB);
-        curBve += reinvested;
-
-        pvFcfe += fcfe / Math.pow(1 + ke, i + 0.5);
-        if (i === years - 1) lastNi = curNi;
-      }
-
-      const spread = ke - termG;
-      let tv = 0;
-      if (spread < 0.020) {
-        const effTermG = Math.max(0.01, ke - 0.020);
-        const termRoe = roeSched[years - 1];
-        const termRet = termRoe > 0 ? Math.min(0.95, Math.max(0.05, effTermG / termRoe)) : 0.50;
-        const termNi = lastNi * (1 + effTermG);
-        const termFcfe = termNi * (1 - termRet);
-        tv = termFcfe / 0.020;
-      } else {
-        const termRoe = roeSched[years - 1];
-        const termRet = termRoe > 0 ? Math.min(0.95, Math.max(0.05, termG / termRoe)) : 0.50;
-        const termNi = lastNi * (1 + termG);
-        const termFcfe = termNi * (1 - termRet);
-        tv = termFcfe / spread;
-      }
-
-      const pvTv = tv / Math.pow(1 + ke, years - 0.5);
-      const eqVal = pvFcfe + pvTv;
-      const simPrice = Math.max(0, eqVal / shares);
-
-      return {
-        isDirty: true,
-        price: simPrice,
-        upside: (simPrice / currentPrice) - 1,
-      };
-    }
-
-    // Standard FCFF Engine mirroring dcf_engine.py
-    const hist = data.historicals || {};
-    const diag = data.diagnostics || {};
-    const revHist = hist.revenue || [];
-    const lastRev = hist.last_revenue || (revHist.length > 0 ? revHist[revHist.length - 1] : (dcf.projected_revenue?.[0] / (1 + (diag.default_growth || 0.10))) || 1);
-    const taxRate = dcf.tax_rate ?? (market === 'IN' ? 0.2517 : 0.21);
-    const nwcRatio = dcf.normalized_nwc_to_revenue || 0;
-
-    const baseRev = dcf.projected_revenue || [];
-    const baseDna = dcf.projected_dna || [];
-    const baseCapex = dcf.projected_capex || [];
-    const isExtractive = Boolean(dcf.is_extractive || diag.is_extractive);
-    const isCyclical = Boolean(dcf.is_cyclical || diag.is_cyclical);
-
-    let gSched;
-    if (!isExtractive && !isCyclical && gNew > tNew + 0.10) {
-      gSched = Array.from({ length: years }, (_, i) => {
-        const step = i / years;
-        return gNew - (gNew - tNew) * Math.pow(step, 1.35);
-      });
-    } else {
-      gSched = Array.from({ length: years }, (_, i) => gNew + (tNew - gNew) * (i / Math.max(1, years - 1)));
-    }
-
-    const currM = diag.current_ebit_margin;
-    let mSched;
-    if (currM != null && Math.abs(currM - mNew) > 0.005) {
-      mSched = Array.from({ length: years }, (_, i) => currM + (mNew - currM) * ((i + 1) / years));
-    } else {
-      mSched = Array.from({ length: years }, () => mNew);
-    }
-
-    const dnaPct = (baseRev[0] && baseDna[0]) ? baseDna[0] / baseRev[0] : (hist.avg_dna_pct || 0.04);
-    const capexPcts = Array.from({ length: years }, (_, i) => {
-      return (baseRev[i] && baseCapex[i]) ? baseCapex[i] / baseRev[i] : (hist.avg_capex_pct || 0.06);
-    });
-
-    let curRev = lastRev;
-    let pvUfcf = 0;
-    const projRev = [];
-    for (let yr = 0; yr < years; yr++) {
-      const nextRev = curRev * (1 + gSched[yr]);
-      const marginVal = mSched[yr];
-      const nopat = nextRev * marginVal * (1 - taxRate);
-      const dnaAdd = nextRev * dnaPct;
-      const capexSub = nextRev * capexPcts[yr];
-      const deltaNwc = nwcRatio * (nextRev - curRev);
-      const ufcf = nopat + dnaAdd - capexSub - deltaNwc;
-
-      pvUfcf += ufcf / Math.pow(1 + wNew, yr + 0.5);
-      projRev.push(nextRev);
-      curRev = nextRev;
-    }
-
-    const maxGAllowed = isExtractive ? 0.025 : (market === 'IN' ? 0.050 : 0.025);
-    const clampedT = Math.min(tNew, maxGAllowed);
-    const minSpread = 0.025;
-    const effT = (wNew - clampedT < minSpread) ? Math.max(0.01, wNew - minSpread) : clampedT;
-
-    // Terminal Reinvestment Rate: scale backend calibrated rate proportionally with terminal growth
-    const baseTgr = dcf.terminal_growth || (market === 'IN' ? 0.050 : 0.025);
-    const baseReinv = dcf.terminal_reinv_rate ?? 0.30;
-    const termReinvRate = Math.min(0.80, Math.max(0.06, baseReinv * (effT / Math.max(0.01, baseTgr))));
-
-    const termNopat = projRev[years - 1] * (1 + effT) * mSched[years - 1] * (1 - taxRate);
-    const termUfcf = termNopat * (1 - termReinvRate);
-
-    // Institutional Exit Multiple Cross-Check for Cyclicals/Extractives
-    const benchMult = dcf.benchmark_exit_multiple || 10.0;
-    const termEbitda = projRev[years - 1] * (1 + effT) * (mSched[years - 1] + dnaPct);
-    const exitTv = termEbitda > 0 ? termEbitda * benchMult : 0;
-
-    const spread = wNew - effT;
-    const gordonTv = termUfcf / Math.max(0.005, spread);
-    let tv = gordonTv;
-    if (isExtractive && exitTv > 0 && gordonTv > exitTv) {
-      tv = 0.35 * gordonTv + 0.65 * exitTv;
-    } else if (isCyclical && exitTv > 0 && gordonTv > exitTv) {
-      tv = 0.45 * gordonTv + 0.55 * exitTv;
-    }
-
-    // Mid-year discount factor for TV matches backend discount_factors[-1] = (1 + w)^4.5
-    const pvTv = tv / Math.pow(1 + wNew, years - 0.5);
-    const simEv = pvUfcf + pvTv;
-
-    const totalDebt = data.wacc?.total_debt || 0;
-    const totalCash = data.wacc?.total_cash ?? data.company?.total_cash ?? 0;
-    const minority = data.dcf_result?.minority_interest || data.wacc?.minority_interest_claim || 0;
-    const preferred = data.dcf_result?.preferred_stock || data.wacc?.preferred_stock_claim || 0;
-    const simEq = Math.max(0, simEv - totalDebt + totalCash - minority - preferred);
-    const simPrice = Math.max(0, simEq / shares);
+    // Calibrate against backend baseline so 0% slider delta equals dcf.implied_price with zero jump
+    const simPrice = (baseSimPrice > 1e-6 && dcf.implied_price > 0)
+      ? Math.max(0, dcf.implied_price * (rawSimPrice / baseSimPrice))
+      : Math.max(0, dcf.implied_price + (rawSimPrice - baseSimPrice));
 
     return {
       isDirty: true,
       price: simPrice,
       upside: (simPrice / currentPrice) - 1,
     };
-  }, [growth, margin, wacc, tgr, appliedGrowth, appliedMargin, appliedWacc, appliedTgr, data, currentPrice, isEquityModel]);
+  }, [growth, margin, wacc, tgr, appliedGrowth, appliedMargin, appliedWacc, appliedTgr, data, currentPrice, isEquityModel, isReit, isInsurance]);
 
   return (
     <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 border border-[#f4eedf]/10 shadow-xl space-y-4 sm:space-y-5 overflow-hidden">

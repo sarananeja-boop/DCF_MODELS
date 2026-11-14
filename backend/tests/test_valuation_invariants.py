@@ -122,3 +122,44 @@ def test_bank_ddm_cost_of_equity_and_valuation_invariants():
     )
     assert hi_ke["implied_price"] < base["implied_price"]
     assert math.isclose(base["equity_value"], base["pv_ufcf"] + base["pv_terminal_value"], rel_tol=1e-9)
+
+
+@pytest.mark.parametrize("ticker,market", [("DUOL", "US"), ("CESC.NS", "IN"), ("HDFCBANK.NS", "IN")])
+def test_api_analyze_override_monotonicity_no_discontinuity(ticker, market):
+    """Ensure /api/analyze slider overrides match baseline at 0-delta and move monotonically."""
+    from fastapi.testclient import TestClient
+    from main import app
+
+    client = TestClient(app)
+    base = client.post("/api/analyze", json={"ticker": ticker, "market": market, "monte_carlo_iterations": 100}).json()
+    p0 = base["dcf_result"]["implied_price"]
+    diag = base["diagnostics"]
+    g0 = diag["default_growth"]
+    m0 = diag["default_margin"]
+    w0 = diag["default_wacc"]
+    tg0 = base["macro"]["terminal_growth"]
+
+    def run_ovr(g=g0, m=m0, w=w0, tg=tg0):
+        resp = client.post(
+            "/api/analyze",
+            json={
+                "ticker": ticker,
+                "market": market,
+                "monte_carlo_iterations": 100,
+                "overrides": {
+                    "revenue_growth": g,
+                    "ebit_margin": m,
+                    "wacc": w,
+                    "terminal_growth": tg,
+                    "projection_years": 5,
+                },
+            },
+        )
+        assert resp.status_code == 200
+        return resp.json()["dcf_result"]["implied_price"]
+
+    assert math.isclose(run_ovr(), p0, rel_tol=1e-9)
+    assert run_ovr(g=g0 - 0.001) < p0 < run_ovr(g=g0 + 0.001)
+    assert run_ovr(m=m0 - 0.001) < p0 < run_ovr(m=m0 + 0.001)
+    assert run_ovr(w=w0 + 0.001) < p0 < run_ovr(w=w0 - 0.001)
+    assert run_ovr(tg=tg0 - 0.001) < p0 <= run_ovr(tg=tg0 + 0.001)

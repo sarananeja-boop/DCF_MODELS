@@ -1063,7 +1063,7 @@ def analyze(req: AnalyzeRequest):
                 )
                 if overrides.ebit_margin is not None:
                     target_margin = overrides.ebit_margin
-                    current_margin = latest_margin if abs(latest_margin - target_margin) > 0.005 else None
+                    current_margin = fcff_default_current_margin
                 else:
                     target_margin = fcff_default_margin
                     current_margin = fcff_default_current_margin
