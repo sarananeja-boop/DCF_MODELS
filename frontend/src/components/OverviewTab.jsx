@@ -183,14 +183,11 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
   const benchMult = validation?.benchmark_exit_multiple ?? diagnostics?.benchmark_exit_multiple ?? 10;
   const maxMult = Math.max(mktMult, modMult, benchMult, 1) * 1.15;
 
-  // Validation Gate, Reconciliations & Scenarios
+  // Validation Gate & Scenarios
   const validationGate = data.validation_gate || validation || {};
   const valStatus = validationGate?.validation_status || (validation?.status ? String(validation.status) : null);
-  const recons = data.accounting_reconciliations || validationGate?.reconciliations || null;
-  const reconChecks = Array.isArray(recons?.checks) ? recons.checks : [];
   const scenariosObj = data.scenarios && typeof data.scenarios === 'object' ? data.scenarios : null;
   const isUnsupported = Boolean(valStatus === 'UNSUPPORTED_MODEL' || data.model_suitability?.supported === false);
-  const isGateBlocked = Boolean(validationGate?.is_blocked || verdict?.is_blocked || isUnsupported);
 
   // Distress & Stressed DCF Diagnostics
   const isDistressed = Boolean(
@@ -1041,95 +1038,54 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
       </div>
 
       {/* =================================================================== */}
-      {/* ROW 2B: SCENARIO CROSS-CHECKS & ACCOUNTING RECONCILIATIONS          */}
+      {/* ROW 2B: SCENARIO CROSS-CHECKS                                       */}
       {/* =================================================================== */}
-      {(scenariosObj || reconChecks.length > 0) && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {scenariosObj && (
-            <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg space-y-3">
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#f4eedf]/10">
-                <h3 className="font-display font-bold text-base text-[#f4eedf]">
-                  Scenario &amp; Cross-Check Summary
-                </h3>
-                <span className="text-[11px] font-semibold text-[#8ab4f8]">
-                  Live Parameterized Sensitivity
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-[#a6b0c3] border-b border-[#f4eedf]/10 text-left">
-                      <th className="py-1.5 pr-2 font-semibold">Scenario</th>
-                      <th className="py-1.5 px-2 font-semibold text-right">Implied Price</th>
-                      <th className="py-1.5 px-2 font-semibold text-right">Δ vs Base</th>
-                      <th className="py-1.5 pl-2 font-semibold">Key Driver</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f4eedf]/6">
-                    {Object.entries(scenariosObj).map(([sKey, sc]) => {
-                      if (!sc || typeof sc !== 'object') return null;
-                      const isApp = sc.applicable !== false && sc.implied_price != null;
-                      return (
-                        <tr key={sKey}>
-                          <td className="py-2 pr-2 font-semibold text-[#f4eedf]">{sc.label || sKey}</td>
-                          <td className="py-2 px-2 text-right font-display font-bold tabular-nums text-[#e3b23c]">
-                            {isApp ? `${symbol}${formatNumber(sc.implied_price)}` : 'N/A'}
-                          </td>
-                          <td className={`py-2 px-2 text-right font-display font-semibold tabular-nums ${
-                            !isApp || sc.delta_vs_base_pct == null ? 'text-[#a6b0c3]' : sc.delta_vs_base_pct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
-                          }`}>
-                            {isApp && sc.delta_vs_base_pct != null ? `${sc.delta_vs_base_pct >= 0 ? '+' : ''}${sc.delta_vs_base_pct.toFixed(1)}%` : '—'}
-                          </td>
-                          <td className="py-2 pl-2 text-[#a6b0c3] text-[11px] truncate max-w-[220px]" title={sc.key_driver || sc.note}>
-                            {sc.key_driver || sc.note || '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+      {scenariosObj && (
+        <div className="grid grid-cols-1 gap-4">
+          <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-[#f4eedf]/10">
+              <h3 className="font-display font-bold text-base text-[#f4eedf]">
+                Scenario &amp; Cross-Check Summary
+              </h3>
+              <span className="text-[11px] font-semibold text-[#8ab4f8]">
+                Live Parameterized Sensitivity
+              </span>
             </div>
-          )}
-
-          {reconChecks.length > 0 && (
-            <div className="bg-[#141b26] rounded-2xl p-5 border border-[#f4eedf]/10 shadow-lg space-y-3">
-              <div className="flex items-center justify-between pb-2.5 border-b border-[#f4eedf]/10">
-                <h3 className="font-display font-bold text-base text-[#f4eedf]">
-                  Statutory Accounting Reconciliations
-                </h3>
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${
-                  isGateBlocked
-                    ? 'bg-[#e07a5f]/15 border-[#e07a5f]/35 text-[#e07a5f]'
-                    : 'bg-[#34b38a]/15 border-[#34b38a]/35 text-[#34b38a]'
-                }`}>
-                  {recons?.passed_count ?? reconChecks.filter(c => c.status === 'PASS').length}/{reconChecks.length} Passed · {valStatus || 'CHECKED'}
-                </span>
-              </div>
-              <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-                {reconChecks.map((chk) => {
-                  const st = chk.status || 'INFO';
-                  const badgeCls =
-                    st === 'PASS'
-                      ? 'bg-[#34b38a]/15 text-[#34b38a] border-[#34b38a]/30'
-                      : st === 'WARN'
-                      ? 'bg-[#e3b23c]/15 text-[#e3b23c] border-[#e3b23c]/30'
-                      : 'bg-[#e07a5f]/15 text-[#e07a5f] border-[#e07a5f]/30';
-                  return (
-                    <div key={chk.id} className="flex items-start justify-between gap-2.5 px-2.5 py-1.5 rounded-lg bg-[#0d121a] border border-[#f4eedf]/6 text-xs">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-[#f4eedf] text-[11.5px] truncate">{chk.name}</div>
-                        <div className="text-[10.5px] text-[#a6b0c3] truncate" title={chk.details}>{chk.details}</div>
-                      </div>
-                      <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${badgeCls}`}>
-                        {st}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[#a6b0c3] border-b border-[#f4eedf]/10 text-left">
+                    <th className="py-1.5 pr-2 font-semibold">Scenario</th>
+                    <th className="py-1.5 px-2 font-semibold text-right">Implied Price</th>
+                    <th className="py-1.5 px-2 font-semibold text-right">Δ vs Base</th>
+                    <th className="py-1.5 pl-2 font-semibold">Key Driver</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f4eedf]/6">
+                  {Object.entries(scenariosObj).map(([sKey, sc]) => {
+                    if (!sc || typeof sc !== 'object') return null;
+                    const isApp = sc.applicable !== false && sc.implied_price != null;
+                    return (
+                      <tr key={sKey}>
+                        <td className="py-2 pr-2 font-semibold text-[#f4eedf]">{sc.label || sKey}</td>
+                        <td className="py-2 px-2 text-right font-display font-bold tabular-nums text-[#e3b23c]">
+                          {isApp ? `${symbol}${formatNumber(sc.implied_price)}` : 'N/A'}
+                        </td>
+                        <td className={`py-2 px-2 text-right font-display font-semibold tabular-nums ${
+                          !isApp || sc.delta_vs_base_pct == null ? 'text-[#a6b0c3]' : sc.delta_vs_base_pct >= 0 ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                        }`}>
+                          {isApp && sc.delta_vs_base_pct != null ? `${sc.delta_vs_base_pct >= 0 ? '+' : ''}${sc.delta_vs_base_pct.toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="py-2 pl-2 text-[#a6b0c3] text-[11px] truncate max-w-[320px]" title={sc.key_driver || sc.note}>
+                          {sc.key_driver || sc.note || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </div>
       )}
 

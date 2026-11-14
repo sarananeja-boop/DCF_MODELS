@@ -172,19 +172,21 @@ export default function App() {
     if (
       sessionStorage.getItem('vl_analysisData_v2') ||
       sessionStorage.getItem('vl_analysisData_v3') ||
-      sessionStorage.getItem('vl_analysisData_v4')
+      sessionStorage.getItem('vl_analysisData_v4') ||
+      sessionStorage.getItem('vl_analysisData_v5')
     ) {
       sessionStorage.removeItem('vl_analysisData_v2');
       sessionStorage.removeItem('vl_analysisData_v3');
       sessionStorage.removeItem('vl_analysisData_v4');
+      sessionStorage.removeItem('vl_analysisData_v5');
       sessionStorage.removeItem('vl_overrides');
     }
-    const saved = sessionStorage.getItem('vl_analysisData_v5');
+    const saved = sessionStorage.getItem('vl_analysisData_v6');
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
-        sessionStorage.removeItem('vl_analysisData_v5');
+        sessionStorage.removeItem('vl_analysisData_v6');
         return null;
       }
       return parsed;
@@ -241,8 +243,8 @@ export default function App() {
   const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData_v5', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData_v5');
+    if (analysisData) sessionStorage.setItem('vl_analysisData_v6', JSON.stringify(analysisData));
+    else sessionStorage.removeItem('vl_analysisData_v6');
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
@@ -514,6 +516,9 @@ export default function App() {
     sessionStorage.removeItem('vl_analysisData');
     sessionStorage.removeItem('vl_analysisData_v2');
     sessionStorage.removeItem('vl_analysisData_v3');
+    sessionStorage.removeItem('vl_analysisData_v4');
+    sessionStorage.removeItem('vl_analysisData_v5');
+    sessionStorage.removeItem('vl_analysisData_v6');
     sessionStorage.removeItem('vl_ticker');
     sessionStorage.removeItem('vl_valuationMethod');
     sessionStorage.removeItem('vl_overrides');
@@ -585,8 +590,6 @@ export default function App() {
     analysisData?.model_suitability?.supported === false ||
     analysisData?.company?.model_suitability?.supported === false
   );
-  const wsIsBlocked = Boolean(wsValidationGate?.is_blocked || analysisData?.verdict?.is_blocked || wsIsUnsupported);
-  const wsRecons = analysisData?.accounting_reconciliations || wsValidationGate?.reconciliations || null;
 
   const tabs = wsIsUnsupported
     ? [{ id: 'overview', label: 'Validation Gate Notice', icon: <FiActivity className="w-4 h-4" /> }]
@@ -2623,18 +2626,6 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[#a6b0c3] font-normal shrink-0">
-                  {wsValStatus && (
-                    <span className={`px-3 py-1 rounded-lg border text-[11px] font-bold ${
-                      wsIsBlocked
-                        ? 'bg-[#e07a5f]/15 border-[#e07a5f]/40 text-[#e07a5f]'
-                        : wsValStatus === 'VALIDATED'
-                        ? 'bg-[#34b38a]/15 border-[#34b38a]/40 text-[#34b38a]'
-                        : 'bg-[#e3b23c]/15 border-[#e3b23c]/40 text-[#e3b23c]'
-                    }`}>
-                      {wsValStatus}
-                      {wsRecons?.checks?.length ? ` (${wsRecons.passed_count}/${wsRecons.checks.length})` : ''}
-                    </span>
-                  )}
                   <span className="px-3 py-1 rounded-lg bg-[#141b26] border border-white/[0.08] text-[11px] font-medium text-[#f4eedf]">
                     Framework: <strong className="text-[#e3b23c]">
                       {wsIsUnsupported
@@ -2654,20 +2645,6 @@ export default function App() {
                   </span>
                 </div>
               </div>
-
-              {/* Fail-Closed Validation Gate Alert Banner */}
-              {wsIsBlocked && (
-                <div className="px-4 py-3.5 rounded-xl bg-[#e07a5f]/10 border border-[#e07a5f]/40 text-[#f4eedf] text-xs space-y-1">
-                  <div className="font-display font-bold uppercase tracking-wider text-[11px] text-[#e07a5f]">
-                    Fail-Closed Validation Gate Active — {wsValStatus || 'BLOCKED'}
-                  </div>
-                  <p className="text-[#f4eedf]/90 leading-relaxed">
-                    {(wsValidationGate?.gates_failed && wsValidationGate.gates_failed.length > 0)
-                      ? wsValidationGate.gates_failed.join(' · ')
-                      : (analysisData?.verdict?.description || 'Valuation blocked pending sector methodology or statutory reconciliation fix.')}
-                  </p>
-                </div>
-              )}
 
               {/* VALUATION METHOD SWITCHER & COMPARATIVE STATS BAR */}
               {analysisData.method_comparison && (
@@ -2865,9 +2842,7 @@ export default function App() {
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 relative flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#e3b23c] truncate">
-                      {wsIsBlocked
-                        ? (wsHasFairValue ? 'Unverified Fair Value (Warning)' : 'Unverified / Blocked Fair Value')
-                        : wsIsReit
+                      {wsIsReit
                         ? 'REIT AFFO / NDCF Fair Value'
                         : wsIsInsurance
                         ? 'Actuarial Equity Fair Value'
@@ -2884,16 +2859,16 @@ export default function App() {
                     )}
                   </div>
                   <div className="font-display text-3xl sm:text-4xl xl:text-[40px] font-bold text-[#e3b23c] tabular-nums leading-tight my-1 truncate">
-                    {wsHasFairValue ? `${wsSymbol}${wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'BLOCKED'}
+                    {wsHasFairValue ? `${wsSymbol}${wsFairValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}
                   </div>
                   <div className={`flex flex-wrap items-center text-xs font-bold tabular-nums gap-1 ${
-                    wsIsBlocked ? 'text-[#e3b23c]' : wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
+                    wsIsUndervalued ? 'text-[#34b38a]' : 'text-[#e07a5f]'
                   }`}>
                     {wsIsUndervalued ? <FiTrendingUp className="text-sm shrink-0" /> : <FiTrendingDown className="text-sm shrink-0" />}
                     <span className="truncate">
                       {wsHasFairValue
-                        ? `${wsIsUndervalued ? '▲' : '▼'} ${Math.abs(wsUpsidePct).toFixed(1)}% ${wsIsUndervalued ? 'Upside (Undervalued)' : `Downside (Above ${wsIsEquityModel ? 'DDM' : 'DCF'})`}${wsIsBlocked ? ` · ${wsValStatus || 'Check Warnings'}` : ''}`
-                        : (wsValStatus || 'Gate Failed')}
+                        ? `${wsIsUndervalued ? '▲' : '▼'} ${Math.abs(wsUpsidePct).toFixed(1)}% ${wsIsUndervalued ? 'Upside (Undervalued)' : `Downside (Above ${wsIsEquityModel ? 'DDM' : 'DCF'})`}`
+                        : 'N/A'}
                     </span>
                   </div>
                 </div>
@@ -2939,6 +2914,40 @@ export default function App() {
                 </div>
 
                 {/* Card 4: Verdict & Multiple Signal */}
+                {(() => {
+                  const rawVerdict = String(analysisData.verdict?.verdict || '');
+                  const isLegacyGateVerdict = rawVerdict.includes('BLOCKED') || rawVerdict.includes('UNVERIFIED');
+                  let displayVerdict = rawVerdict || 'N/A';
+                  let displayVerdictDesc = analysisData.verdict?.description || 'Probability-weighted valuation signal';
+                  if (isLegacyGateVerdict) {
+                    const mcStats = analysisData.monte_carlo?.stats || {};
+                    const p5 = Number(mcStats.p5);
+                    const p25 = Number(mcStats.p25);
+                    const p75 = Number(mcStats.p75);
+                    const p95 = Number(mcStats.p95);
+                    if (Number.isFinite(p5) && Number.isFinite(p95) && wsCurrentPrice > 0) {
+                      if (wsCurrentPrice < p5) {
+                        displayVerdict = 'STRONGLY BULLISH';
+                        displayVerdictDesc = 'Trades below the 5th-percentile downside estimate.';
+                      } else if (wsCurrentPrice > p95) {
+                        displayVerdict = 'STRONGLY BEARISH';
+                        displayVerdictDesc = 'Trades above the 95th-percentile upside estimate.';
+                      } else if (Number.isFinite(p25) && wsCurrentPrice < p25) {
+                        displayVerdict = 'BULLISH';
+                        displayVerdictDesc = 'Trades below the 25th percentile of outcomes.';
+                      } else if (Number.isFinite(p75) && wsCurrentPrice > p75) {
+                        displayVerdict = 'BEARISH';
+                        displayVerdictDesc = 'Trades above the 75th percentile of outcomes.';
+                      } else {
+                        displayVerdict = 'NEUTRAL';
+                        displayVerdictDesc = 'Trades within the interquartile range of simulated outcomes.';
+                      }
+                    } else {
+                      displayVerdict = wsIsUndervalued ? 'BULLISH' : 'BEARISH';
+                      displayVerdictDesc = 'Probability-weighted valuation signal';
+                    }
+                  }
+                  return (
                 <div className="bg-[#141b26] rounded-2xl p-4 sm:p-5 shadow-lg border border-[#f4eedf]/10 flex flex-col justify-between overflow-hidden">
                   <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#a6b0c3] truncate">
@@ -2952,22 +2961,22 @@ export default function App() {
                     </span>
                   </div>
                   <div className={`font-display ${
-                    (analysisData.verdict?.verdict || '').length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
+                    displayVerdict.length > 14 ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'
                   } font-bold leading-tight my-1 tracking-tight truncate ${
-                    wsIsBlocked || analysisData.verdict?.verdict?.includes('BLOCKED') || analysisData.verdict?.verdict?.includes('UNSUPPORTED')
-                      ? 'text-[#e07a5f]'
-                      : analysisData.verdict?.verdict?.includes('BULLISH') || analysisData.verdict?.verdict?.includes('BUY')
+                    displayVerdict.includes('BULLISH') || displayVerdict.includes('BUY')
                       ? 'text-[#34b38a]'
-                      : analysisData.verdict?.verdict?.includes('BEARISH') || analysisData.verdict?.verdict?.includes('SELL')
+                      : displayVerdict.includes('BEARISH') || displayVerdict.includes('SELL')
                       ? 'text-[#e07a5f]'
                       : 'text-[#e3b23c]'
                   }`}>
-                    {analysisData.verdict?.verdict || 'N/A'}
+                    {displayVerdict}
                   </div>
-                  <div className="text-xs text-[#a6b0c3] leading-snug line-clamp-2" title={analysisData.verdict?.description}>
-                    {analysisData.verdict?.description || 'Probability-weighted valuation signal'}
+                  <div className="text-xs text-[#a6b0c3] leading-snug line-clamp-2" title={displayVerdictDesc}>
+                    {displayVerdictDesc}
                   </div>
                 </div>
+                  );
+                })()}
 
               </div>
               )}

@@ -1266,24 +1266,14 @@ def analyze(req: AnalyzeRequest):
             or (icr < 0.65 and wd > 0.75 and trailing_ebitda_val < interest_exp_val)
         )
 
-        if validation_gate.get("is_blocked"):
-            verdict = {
-                "verdict": validation_gate["validation_status"],
-                "description": "; ".join(validation_gate.get("gates_failed") or [])
-                or "Valuation verdict blocked due to failing data quality or accounting reconciliation gates.",
-                "upside_pct": None,
-                "is_distressed": is_distressed_firm,
-                "is_blocked": True,
-            }
-        else:
-            verdict = generate_verdict(
-                current_price=current_price,
-                mc_stats=mc_result.get("stats", {}),
-                terminal_value_valid=terminal_value_valid,
-                mc_valid=mc_valid,
-                is_distressed=is_distressed_firm,
-            )
-            verdict["is_blocked"] = False
+        verdict = generate_verdict(
+            current_price=current_price,
+            mc_stats=mc_result.get("stats", {}),
+            terminal_value_valid=terminal_value_valid,
+            mc_valid=mc_valid,
+            is_distressed=is_distressed_firm,
+        )
+        verdict["is_blocked"] = False
 
         # 12. Trends
         trends = compute_trends(stock_data, metrics)

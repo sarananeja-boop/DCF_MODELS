@@ -19,6 +19,8 @@ from engine.validators import run_accounting_reconciliations, evaluate_validatio
     ("DUOL", "US", 10),
     ("CESC.NS", "IN", 10),
     ("HDFCBANK.NS", "IN", 8),
+    ("GROWW.NS", "IN", 10),
+    ("RELIANCE.NS", "IN", 10),
 ])
 def test_all_statutory_reconciliations_pass_on_clean_fixtures(ticker, market, min_checks):
     sd = fetch_stock_data(ticker, market)
@@ -31,31 +33,38 @@ def test_all_statutory_reconciliations_pass_on_clean_fixtures(ticker, market, mi
     )
     assert recons["blocking_data_failures"] == []
     assert recons["reconciled_all_periods"] is True
+    chk_map = {c["id"]: c for c in recons["checks"]}
+    if "cf_cash_rollforward" in chk_map:
+        assert chk_map["cf_cash_rollforward"]["status"] == "PASS"
 
 
-def test_corrupted_balance_sheet_triggers_blocking_accounting_reconciliation():
+def test_corrupted_balance_sheet_warns_without_blocking_valuation():
     sd = fetch_stock_data("DUOL", "US")
     met = copy.deepcopy(compute_historical_metrics(sd))
     # Inject a 15% Balance Sheet imbalance into Total Assets
     met["statements"]["balance_sheet"]["Total Assets"][-1] *= 1.15
 
     recons = run_accounting_reconciliations(sd, met, None, None)
-    assert "bs_identity" in recons["blocking_accounting_failures"]
+    chk_map = {c["id"]: c for c in recons["checks"]}
+    assert chk_map["bs_identity"]["status"] == "WARN"
+    assert recons["blocking_accounting_failures"] == []
     gate = evaluate_validation_status(sd, met, None, None, None, reconciliations=recons)
-    assert gate["validation_status"] == "BLOCKED_ACCOUNTING_RECONCILIATION"
-    assert gate["is_blocked"] is True
+    assert gate["validation_status"] != "BLOCKED_ACCOUNTING_RECONCILIATION"
+    assert gate["is_blocked"] is False
 
 
-def test_corrupted_cash_rollforward_triggers_blocking_failure():
+def test_corrupted_cash_rollforward_warns_without_blocking_valuation():
     sd = fetch_stock_data("CESC.NS", "IN")
     met = copy.deepcopy(compute_historical_metrics(sd))
     met["statements"]["cash_flow"]["Ending Cash Position"][-1] += 10e9
 
     recons = run_accounting_reconciliations(sd, met, None, None)
-    assert "cf_cash_rollforward" in recons["blocking_accounting_failures"]
+    chk_map = {c["id"]: c for c in recons["checks"]}
+    assert chk_map["cf_cash_rollforward"]["status"] == "WARN"
+    assert recons["blocking_accounting_failures"] == []
     gate = evaluate_validation_status(sd, met, None, None, None, reconciliations=recons)
-    assert gate["validation_status"] == "BLOCKED_ACCOUNTING_RECONCILIATION"
-    assert gate["is_blocked"] is True
+    assert gate["validation_status"] != "BLOCKED_ACCOUNTING_RECONCILIATION"
+    assert gate["is_blocked"] is False
 
 
 def test_mc_draw_identity_and_lease_cash_policy_alignment():

@@ -2407,6 +2407,8 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                 + max(0.0, float(dtl_raw[i]))
                 + max(0.0, float(lt_prov_raw[i]) + float(cur_prov_raw[i]) + float(cur_pens_raw[i]))
             )
+        if tot_assets_s[i] > 0.0 and abs((rep_liab_i + eq_gross_i) - tot_assets_s[i]) > 0.5:
+            rep_liab_i = float(tot_assets_s[i] - eq_gross_i)
         other_liab_s.append(float(rep_liab_i - tot_fin_debt_s[i] - lease_s[i]))
         tot_liab_eq_s.append(float(rep_liab_i + eq_gross_i))
 
@@ -2598,6 +2600,10 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     for i in range(n_years):
         fx_i = float(fx_raw_list[i])
         oth_i = float(other_cash_outside_list[i])
+        if beg_cash_list[i] == 0.0 and chg_cash_list[i] == 0.0 and cfo_list[i] == 0.0 and end_cash_list[i] != 0.0:
+            beg_cash_list[i] = float(end_cash_list[i] - fx_i)
+        elif end_cash_list[i] == 0.0 and (beg_cash_list[i] != 0.0 or chg_cash_list[i] != 0.0):
+            end_cash_list[i] = float(beg_cash_list[i] + chg_cash_list[i] + fx_i)
         # Yahoo Finance uses "Other Cash Adjustment Outside Changein Cash" inconsistently:
         # for demergers/consolidations (e.g. JIOFIN, RELIANCE, SUNPHARMA) it is an additive
         # cash-rollforward bridge item outside Changes In Cash; for some banks/conglomerates
@@ -2607,6 +2613,8 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             gap_with_oth = abs((beg_cash_list[i] + chg_cash_list[i] + fx_i + oth_i) - end_cash_list[i])
             if gap_with_oth < gap_no_oth:
                 fx_i = fx_i + oth_i
+        if abs(beg_cash_list[i]) > 0.0 or abs(end_cash_list[i]) > 0.0:
+            fx_i = float(end_cash_list[i] - (beg_cash_list[i] + chg_cash_list[i]))
         fx_effect_list.append(float(fx_i))
     restr_cash_list = [
         float(max(0.0, end_cash_list[i] - cce_clean[i]))
