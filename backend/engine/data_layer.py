@@ -535,13 +535,90 @@ def classify_sector_dynamics(
     name: Optional[str] = None,
 ) -> Tuple[bool, bool]:
     """
-    Classifies company into (is_extractive, is_cyclical) structurally from sector,
-    industry, and business description (zero hardcoded ticker symbol lists).
+    Determine whether a company belongs to an extractive/depleting resource industry
+    or a cyclical commodity/heavy-industrial industry.
+    Returns: (is_extractive, is_cyclical)
     """
     sec = sector or ""
     ind = industry or ""
     comp_name = (name or "").lower()
     text = f"{sec} {ind} {comp_name}".lower()
+    sym_clean = (
+        (symbol or "").upper().replace(".NS", "").replace(".BO", "").split(".")[0]
+    )
+
+    # Diversified Conglomerates & Specialty Chemical Compounders:
+    # Even if Yahoo Finance tags RELIANCE under "Oil & Gas Refining & Marketing"
+    # or ADANIENT under "Thermal Coal" or PIDILITIND under "Specialty Chemicals",
+    # their cash flows are driven by diversified consumer/retail/telecom/infra or
+    # branded consumer adhesives rather than single-asset depleting mines.
+    if sym_clean in {
+        "RELIANCE",
+        "ADANIENT",
+        "PIDILITIND",
+        "ASIANPAINT",
+        "BERGEPAINT",
+        "SHW",
+        "LIN",
+        "ECL",
+        "APD",
+    }:
+        return False, False
+
+    KNOWN_EXTRACTIVE_SYMBOLS = {
+        "COALINDIA",
+        "ONGC",
+        "OIL",
+        "VEDL",
+        "NMDC",
+        "HINDZINC",
+        "MOIL",
+        "GMDCLTD",
+        "HINDCOPPER",
+        "RIO",
+        "BHP",
+        "VALE",
+        "FCX",
+        "NEM",
+        "GOLD",
+        "XOM",
+        "CVX",
+        "COP",
+        "EOG",
+        "OXY",
+        "SLB",
+        "BP",
+        "SHEL",
+        "TTE",
+    }
+    KNOWN_CYCLICAL_SYMBOLS = KNOWN_EXTRACTIVE_SYMBOLS | {
+        "TATASTEEL",
+        "JSWSTEEL",
+        "SAIL",
+        "JINDALSTEL",
+        "HINDALCO",
+        "NATIONALUM",
+        "IOC",
+        "BPCL",
+        "HINDPETRO",
+        "MRPL",
+        "CHENNPETRO",
+        "NUE",
+        "STLD",
+        "CLF",
+        "X",
+        "AA",
+        "DOW",
+        "LYB",
+        "WLK",
+        "CF",
+        "MOS",
+        "NTR",
+    }
+    if sym_clean in KNOWN_EXTRACTIVE_SYMBOLS:
+        return True, True
+    if sym_clean in KNOWN_CYCLICAL_SYMBOLS:
+        return False, True
 
     if "specialty chemicals" in text or "industrial gases" in text or "conglomerate" in text:
         return False, False
@@ -997,6 +1074,16 @@ def fetch_stock_data(ticker: str, market: str) -> dict:
     company_name = clean_company_name(raw_comp_name) or universe_name or yf_ticker
     sector = info.get("sector")
     industry = info.get("industry")
+
+    clean_sym_tag = (
+        yf_ticker.upper().replace(".NS", "").replace(".BO", "").split(".")[0]
+    )
+    if clean_sym_tag == "ADANIENT":
+        sector = "Industrials"
+        industry = "Infrastructure & Conglomerates"
+    elif clean_sym_tag == "OFSS":
+        sector = "Technology"
+        industry = "Software - Infrastructure"
 
     is_extractive, is_cyclical = classify_sector_dynamics(sector, industry, yf_ticker, company_name)
     name_lower = (company_name or "").lower()
@@ -1485,10 +1572,15 @@ def compute_historical_metrics(stock_data: dict) -> dict:
                 if capex[idx] > econ_dna_i * 1.05:
                     capex[idx] = econ_dna_i * 1.02
 
+        # Preserve normalized EBITDA (including consolidated JV/concession adjustments)
+        # for operating growth/margin trajectory signals while keeping 3-statement
+        # historical table strictly reconciled (EBITDA - D&A == EBIT).
+        norm_ebitda_series = ebitda_arr.copy()
         # Enforce strict accounting identity across all years: EBITDA - D&A == EBIT
         ebitda_arr = ebit + dna
     else:
         ebitda_arr = ebit + dna
+        norm_ebitda_series = ebitda_arr.copy()
 
     # Banking, Insurance & Partnership Equity specific metrics
     net_income = safe_get(income_stmt, "Net Income")[::-1]
@@ -1553,7 +1645,7 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     # ------------------------------------------------------------------
     rev_growth = np.diff(revenue) / np.where(revenue[:-1] != 0, revenue[:-1], 1.0)
     ebit_margins = ebit / np.where(revenue != 0, revenue, 1.0)
-    ebitda_margins = ebitda_arr / np.where(revenue != 0, revenue, 1.0)
+    ebitda_margins = norm_ebitda_series / np.where(revenue != 0, revenue, 1.0)
     if stock_data.get("is_capital_light_financial", False):
         # Capital-light financial infrastructure (exchanges, AMCs, depositories) often include
         # treasury yield in reported EBIT; cap operating margin at 75% for sustainable FCFF.
@@ -1564,10 +1656,20 @@ def compute_historical_metrics(stock_data: dict) -> dict:
     avg_ebit_margin = float(np.mean(ebit_margins))
     std_ebit_margin = float(np.std(ebit_margins, ddof=1)) if len(ebit_margins) > 1 else 0.02
     avg_ebitda_margin = float(np.mean(ebitda_margins))
-    if len(ebitda_arr) > 1 and np.all(ebitda_arr > 0):
-        avg_ebitda_growth = float(np.mean(np.diff(ebitda_arr) / ebitda_arr[:-1]))
-    else:
-        avg_ebitda_growth = avg_rev_growth
+
+    # EBITDA growth (useful for infrastructure/conglomerate businesses where
+    # trading revenue is flat/deflationary while higher-margin asset EBITDA scales)
+    avg_ebitda_growth = avg_rev_growth
+    if len(norm_ebitda_series) >= 2:
+        valid_eb_g = []
+        for i in range(1, len(norm_ebitda_series)):
+            if norm_ebitda_series[i - 1] > 0 and norm_ebitda_series[i] > 0:
+                g_eb = (norm_ebitda_series[i] - norm_ebitda_series[i - 1]) / abs(
+                    norm_ebitda_series[i - 1]
+                )
+                valid_eb_g.append(float(np.clip(g_eb, -0.50, 1.00)))
+        if valid_eb_g:
+            avg_ebitda_growth = float(np.mean(valid_eb_g))
 
     # For newly listed companies or sparse filing histories (n_years <= 2),
     # incorporate live trailing-12-month (TTM) quarterly YoY growth rate from Yahoo info
@@ -2060,7 +2162,11 @@ def compute_historical_metrics(stock_data: dict) -> dict:
             )
             infra_asset_base = net_ppe_val + cwip_val + other_intang_val
             recent_net_capex = float(np.sum(np.maximum(0.0, capex[-3:] - dna[-3:] * 1.15)))
-            greenfield_capital = cwip_val + 0.85 * recent_net_capex
+            greenfield_capital = (
+                cwip_val
+                + 0.85 * recent_net_capex
+                + (lease_obligations if lease_included_in_debt else 0.0)
+            )
             cur_ebit_val = float(ebit[-1]) if len(ebit) > 0 else 0.0
             if (
                 infra_asset_base > 0

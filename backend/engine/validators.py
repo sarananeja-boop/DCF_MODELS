@@ -315,9 +315,10 @@ def generate_verdict(
     def is_invalid(val):
         return val is None or math.isnan(val) or math.isinf(val) or val < 0.0
 
-    # Point 7: Change verdict and label for high distress / equity wipeout names
-    # Equity in a distressed firm behaves like an option; truncated DCF is unreliable
-    distressed_firm = is_distressed or (zero_price_pct > 0.40) or (median is not None and median <= 0.0 and mc_valid)
+    # Trigger distressed outlook only when base DCF equity is wiped out or MC median <= 0
+    distressed_firm = is_distressed or (
+        median is not None and median <= 0.0 and mc_valid
+    )
     if distressed_firm:
         distressed_upside = -100.0 if (is_invalid(median) or median == 0.0) else float(((median / current_price) - 1) * 100 if current_price > 0 else 0.0)
         return {

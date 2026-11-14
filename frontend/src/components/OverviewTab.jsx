@@ -211,7 +211,7 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
             <div className="flex items-center gap-2.5">
               <FiAlertTriangle className="w-5 h-5 text-[#e07a5f]" />
               <h3 className="font-display font-bold text-lg text-[#f4eedf]">
-                Fail-Closed Validation Gate: {valStatus || 'UNSUPPORTED_MODEL'}
+                Unsupported Instrument Type: {valStatus || 'UNSUPPORTED_MODEL'}
               </h3>
             </div>
             <span className="px-2.5 py-1 rounded-lg bg-[#e07a5f]/15 border border-[#e07a5f]/35 text-[#e07a5f] text-xs font-bold">
@@ -245,14 +245,14 @@ const OverviewTab = ({ data, aiSummary, aiLoading, onFetchAISummary, onTabChange
               <FiAlertTriangle className={`w-4 h-4 shrink-0 ${isDistressed || tvInvalid ? 'text-[#e07a5f]' : 'text-[#e3b23c]'}`} />
               <span className="font-display font-bold text-xs sm:text-sm uppercase tracking-wider text-[#f4eedf]">
                 {isDistressed
-                  ? 'Why DCF Is Distressed / Unreliable for This Security'
+                  ? 'DCF Model & Capital Structure Notes'
                   : tvInvalid
-                  ? 'Terminal Value Warning — Negative Year-5 Cash Flow'
-                  : 'DCF Model Diagnostic & Structural Notes'}
+                  ? 'Terminal Value Note — Negative Year-5 Cash Flow'
+                  : 'DCF Model & Structural Notes'}
               </span>
             </div>
             <span className="text-[11px] font-semibold text-[#a6b0c3]">
-              Model Diagnostics
+              Valuation Notes
             </span>
           </div>
 

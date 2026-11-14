@@ -163,3 +163,11 @@ def test_api_analyze_override_monotonicity_no_discontinuity(ticker, market):
     assert run_ovr(m=m0 - 0.001) < p0 < run_ovr(m=m0 + 0.001)
     assert run_ovr(w=w0 + 0.001) < p0 < run_ovr(w=w0 - 0.001)
     assert run_ovr(tg=tg0 - 0.001) < p0 <= run_ovr(tg=tg0 + 0.001)
+
+
+def test_adanient_and_conglomerate_sector_classification():
+    from engine.data_layer import classify_sector_dynamics
+
+    assert classify_sector_dynamics("Energy", "Thermal Coal", "ADANIENT.NS", "Adani Enterprises Limited") == (False, False)
+    assert classify_sector_dynamics("Energy", "Oil & Gas Refining & Marketing", "RELIANCE.NS", "Reliance Industries Limited") == (False, False)
+    assert classify_sector_dynamics("Basic Materials", "Coal", "COALINDIA.NS", "Coal India Limited") == (True, True)

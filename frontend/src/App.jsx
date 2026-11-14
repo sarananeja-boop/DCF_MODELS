@@ -173,20 +173,22 @@ export default function App() {
       sessionStorage.getItem('vl_analysisData_v2') ||
       sessionStorage.getItem('vl_analysisData_v3') ||
       sessionStorage.getItem('vl_analysisData_v4') ||
-      sessionStorage.getItem('vl_analysisData_v5')
+      sessionStorage.getItem('vl_analysisData_v5') ||
+      sessionStorage.getItem('vl_analysisData_v6')
     ) {
       sessionStorage.removeItem('vl_analysisData_v2');
       sessionStorage.removeItem('vl_analysisData_v3');
       sessionStorage.removeItem('vl_analysisData_v4');
       sessionStorage.removeItem('vl_analysisData_v5');
+      sessionStorage.removeItem('vl_analysisData_v6');
       sessionStorage.removeItem('vl_overrides');
     }
-    const saved = sessionStorage.getItem('vl_analysisData_v6');
+    const saved = sessionStorage.getItem('vl_analysisData_v7');
     if (!saved) return null;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.company?.name && /\.(ns|bo)$/i.test(parsed.company.name)) {
-        sessionStorage.removeItem('vl_analysisData_v6');
+        sessionStorage.removeItem('vl_analysisData_v7');
         return null;
       }
       return parsed;
@@ -243,8 +245,8 @@ export default function App() {
   const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
-    if (analysisData) sessionStorage.setItem('vl_analysisData_v6', JSON.stringify(analysisData));
-    else sessionStorage.removeItem('vl_analysisData_v6');
+    if (analysisData) sessionStorage.setItem('vl_analysisData_v7', JSON.stringify(analysisData));
+    else sessionStorage.removeItem('vl_analysisData_v7');
   }, [analysisData]);
 
   useEffect(() => sessionStorage.setItem('vl_activeTab', activeTab), [activeTab]);
@@ -592,7 +594,7 @@ export default function App() {
   );
 
   const tabs = wsIsUnsupported
-    ? [{ id: 'overview', label: 'Validation Gate Notice', icon: <FiActivity className="w-4 h-4" /> }]
+    ? [{ id: 'overview', label: 'Model Notice', icon: <FiActivity className="w-4 h-4" /> }]
     : [
         { id: 'overview', label: 'Valuation Overview', icon: <FiActivity className="w-4 h-4" /> },
         { id: 'dcf', label: wsIsReit ? 'AFFO / NDCF Schedule' : wsIsEquityModel ? 'DDM & FCFE Schedule' : 'DCF Cash Flow Model', icon: <FiTrendingUp className="w-4 h-4" /> },
